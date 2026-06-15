@@ -24,11 +24,10 @@ for (int i = 0; i < args.Length - 1; i++)
         toDate = t;
 }
 
-// Load secrets: dotnet user-secrets first, then environment variables, then .env fallback
+// Load secrets: dotnet user-secrets first, then environment variables
 var config = new ConfigurationBuilder()
     .AddUserSecrets<Program>()
     .AddEnvironmentVariables()
-    .AddDotEnvFile()
     .Build();
 
 string apiKey = config["ANTHROPIC_API_KEY"]
@@ -185,25 +184,3 @@ static string? FindFileInAncestors(string fileNameOrRelPath)
     return null;
 }
 
-// ---------------------------------------------------------------------------
-// Minimal .env reader — lets the Python project's .env work as a fallback
-// ---------------------------------------------------------------------------
-static class DotEnvExtensions
-{
-    public static IConfigurationBuilder AddDotEnvFile(this IConfigurationBuilder builder)
-    {
-        // Look for .env one level up (root of the repo alongside the Python project)
-        string envPath = Path.Combine(Directory.GetCurrentDirectory(), "..", ".env");
-        if (!File.Exists(envPath)) return builder;
-
-        var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var line in File.ReadAllLines(envPath))
-        {
-            if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith('#')) continue;
-            int eq = line.IndexOf('=');
-            if (eq < 0) continue;
-            dict[line[..eq].Trim()] = line[(eq + 1)..].Trim();
-        }
-        return builder.AddInMemoryCollection(dict);
-    }
-}
