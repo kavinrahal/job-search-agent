@@ -1,4 +1,4 @@
-namespace JobSearchAgent.Data;
+namespace JobSearch.Data;
 
 public class RawEmailRecord
 {
@@ -8,6 +8,6 @@ public class RawEmailRecord
     public string FromAddress { get; set; } = "";
     public string Subject { get; set; } = "";
     public string BodyText { get; set; } = "";
-    public DateTime ReceivedAt { get; set; }       // stored as UTC
-    public DateTime? ProcessedAt { get; set; }     // stored as UTC
+    public DateTime ReceivedAt { get; set; }
+    public DateTime? ProcessedAt { get; set; }
 }

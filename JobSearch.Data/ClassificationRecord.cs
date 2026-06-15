@@ -1,4 +1,4 @@
-namespace JobSearchAgent.Data;
+namespace JobSearch.Data;
 
 public class ClassificationRecord
 {

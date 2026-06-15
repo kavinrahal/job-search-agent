@@ -1,5 +1,5 @@
+using JobSearch.Data;
 using JobSearchAgent.Agents;
-using JobSearchAgent.Data;
 using JobSearchAgent.Models;
 
 namespace JobSearchAgent.Storage;

@@ -1,12 +1,11 @@
+using JobSearch.Data;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Resolve the SQLite path — walk up from CWD if the configured path doesn't exist
-string configuredPath = builder.Configuration["Database:SqlitePath"] ?? "job_search.db";
-string dbPath = ResolveDbPath(configuredPath);
-
-builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlite($"Data Source={dbPath}"));
+builder.Services.AddDbContext<AppDbContext>(o =>
+    o.UseNpgsql(AppDbContext.GetConnectionString(
+        builder.Configuration.GetConnectionString("DefaultConnection"))));
 
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.WithOrigins("http://localhost:5173", "http://localhost:3000")
@@ -16,27 +15,11 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 var app = builder.Build();
 app.UseCors();
 
-// Ensure schema is current — EnsureCreated only works on a new DB,
-// so we also run CREATE TABLE IF NOT EXISTS for tables added after initial creation.
+// Run EF migrations on startup — creates tables on first run, applies new migrations after deploys
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.EnsureCreatedAsync();
-    await db.Database.ExecuteSqlRawAsync("""
-        CREATE TABLE IF NOT EXISTS "Classifications" (
-            "Id"           INTEGER NOT NULL CONSTRAINT "PK_Classifications" PRIMARY KEY AUTOINCREMENT,
-            "MessageId"    TEXT    NOT NULL,
-            "IsJobRelated" INTEGER NOT NULL,
-            "Category"     TEXT    NOT NULL,
-            "Confidence"   REAL    NOT NULL,
-            "Company"      TEXT    NOT NULL,
-            "RoleTitle"    TEXT    NOT NULL,
-            "ClassifiedAt" TEXT    NOT NULL
-        )
-        """);
-    await db.Database.ExecuteSqlRawAsync("""
-        CREATE UNIQUE INDEX IF NOT EXISTS "IX_Classifications_MessageId" ON "Classifications" ("MessageId")
-        """);
+    await db.Database.MigrateAsync();
 }
 
 // ---------------------------------------------------------------------------
@@ -112,77 +95,3 @@ app.MapGet("/api/emails", (
 });
 
 app.Run();
-
-// ---------------------------------------------------------------------------
-static string ResolveDbPath(string _)
-{
-    const string dbFile = "job_search.db";
-
-    // Find repo root by walking up from the exe until we find .gitignore
-    string? repoRoot = null;
-    var dir = new DirectoryInfo(AppContext.BaseDirectory);
-    while (dir is not null)
-    {
-        if (File.Exists(Path.Combine(dir.FullName, ".gitignore")))
-        {
-            repoRoot = dir.FullName;
-            break;
-        }
-        dir = dir.Parent;
-    }
-
-    if (repoRoot is not null)
-    {
-        // Prefer existing file at repo root, then legacy location inside JobSearchAgent/
-        string atRoot  = Path.Combine(repoRoot, dbFile);
-        string atAgent = Path.Combine(repoRoot, "JobSearchAgent", dbFile);
-        if (File.Exists(atRoot))  { Console.WriteLine($"[DB] {atRoot}");  return atRoot; }
-        if (File.Exists(atAgent)) { Console.WriteLine($"[DB] {atAgent}"); return atAgent; }
-        Console.WriteLine($"[DB] {atRoot} (new)");
-        return atRoot;
-    }
-
-    // Fallback: CWD
-    string fallback = Path.Combine(Directory.GetCurrentDirectory(), dbFile);
-    Console.WriteLine($"[DB] {fallback} (fallback)");
-    return fallback;
-}
-
-// ---------------------------------------------------------------------------
-// Minimal read-only DbContext — shares the same schema as JobSearchAgent
-// ---------------------------------------------------------------------------
-class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
-{
-    public DbSet<RawEmailRecord> RawEmails { get; set; }
-    public DbSet<ClassificationRecord> Classifications { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder builder)
-    {
-        builder.Entity<RawEmailRecord>().HasIndex(e => e.MessageId).IsUnique();
-        builder.Entity<ClassificationRecord>().HasIndex(c => c.MessageId).IsUnique();
-    }
-}
-
-class RawEmailRecord
-{
-    public int Id { get; set; }
-    public string MessageId { get; set; } = "";
-    public string ThreadId { get; set; } = "";
-    public string FromAddress { get; set; } = "";
-    public string Subject { get; set; } = "";
-    public string BodyText { get; set; } = "";
-    public DateTime ReceivedAt { get; set; }
-    public DateTime? ProcessedAt { get; set; }
-}
-
-class ClassificationRecord
-{
-    public int Id { get; set; }
-    public string MessageId { get; set; } = "";
-    public bool IsJobRelated { get; set; }
-    public string Category { get; set; } = "";
-    public double Confidence { get; set; }
-    public string Company { get; set; } = "";
-    public string RoleTitle { get; set; } = "";
-    public DateTime ClassifiedAt { get; set; }
-}

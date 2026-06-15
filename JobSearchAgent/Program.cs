@@ -1,5 +1,5 @@
+using JobSearch.Data;
 using JobSearchAgent.Agents;
-using JobSearchAgent.Data;
 using JobSearchAgent.Integrations;
 using JobSearchAgent.Models;
 using JobSearchAgent.Storage;
@@ -34,35 +34,36 @@ string apiKey = config["ANTHROPIC_API_KEY"]
     ?? throw new InvalidOperationException(
         "ANTHROPIC_API_KEY not set. Run: dotnet user-secrets set ANTHROPIC_API_KEY <key>");
 
-string credentialsFile = config["GMAIL_CREDENTIALS_PATH"] ?? "credentials.json";
-string credentialsPath = FindFileInAncestors(credentialsFile)
-    ?? throw new FileNotFoundException(
-        $"Could not find '{credentialsFile}' in any ancestor directory. " +
-        "Place credentials.json in the repo root or set GMAIL_CREDENTIALS_PATH to its absolute path.");
-string tokenStorePath = Path.GetDirectoryName(credentialsPath)!;
+// Init database — connection string from user-secrets / DATABASE_URL env var / local default
+string connStr = AppDbContext.GetConnectionString(config.GetConnectionString("DefaultConnection"));
+var dbOptions = new DbContextOptionsBuilder<AppDbContext>()
+    .UseNpgsql(connStr)
+    .Options;
+await using var db = new AppDbContext(dbOptions);
+await db.Database.MigrateAsync();
 
-// Init database
-await using var db = new AppDbContext();
-await db.Database.EnsureCreatedAsync();
-await db.Database.ExecuteSqlRawAsync("""
-    CREATE TABLE IF NOT EXISTS "Classifications" (
-        "Id"           INTEGER NOT NULL CONSTRAINT "PK_Classifications" PRIMARY KEY AUTOINCREMENT,
-        "MessageId"    TEXT    NOT NULL,
-        "IsJobRelated" INTEGER NOT NULL,
-        "Category"     TEXT    NOT NULL,
-        "Confidence"   REAL    NOT NULL,
-        "Company"      TEXT    NOT NULL,
-        "RoleTitle"    TEXT    NOT NULL,
-        "ClassifiedAt" TEXT    NOT NULL
-    )
-    """);
-await db.Database.ExecuteSqlRawAsync("""
-    CREATE UNIQUE INDEX IF NOT EXISTS "IX_Classifications_MessageId" ON "Classifications" ("MessageId")
-    """);
+// Auth Gmail — headless if secrets are present, browser flow as first-time fallback
+var clientId     = config["GMAIL_CLIENT_ID"];
+var clientSecret = config["GMAIL_CLIENT_SECRET"];
+var refreshToken = config["GMAIL_REFRESH_TOKEN"];
 
-// Auth Gmail
-var gmail = await GmailClient.CreateAsync(credentialsPath, tokenStorePath);
-Console.WriteLine("Gmail authenticated.");
+GmailClient gmail;
+if (clientId is not null && clientSecret is not null && refreshToken is not null)
+{
+    gmail = await GmailClient.CreateAsync(clientId, clientSecret, refreshToken);
+    Console.WriteLine("Gmail authenticated.");
+}
+else
+{
+    string credentialsFile = config["GMAIL_CREDENTIALS_PATH"] ?? "credentials.json";
+    string credentialsPath = FindFileInAncestors(credentialsFile)
+        ?? throw new FileNotFoundException(
+            $"Could not find '{credentialsFile}'. Set GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN in user-secrets, " +
+            "or place credentials.json in the repo root for first-time browser auth.");
+    string tokenStorePath = Path.GetDirectoryName(credentialsPath)!;
+    gmail = await GmailClient.CreateWithBrowserFlowAsync(credentialsPath, tokenStorePath);
+    Console.WriteLine("Gmail authenticated (browser flow).");
+}
 
 // Determine fetch window
 DateTimeOffset? since;
@@ -106,7 +107,7 @@ else
 {
     // Newly fetched emails newer than the checkpoint
     var fresh = since.HasValue ? emails.Where(e => e.ReceivedAt > since.Value).ToList() : emails;
-    // Plus any stored emails that were never classified (e.g. stored before classification was added)
+    // Plus any stored emails that were never classified
     var unclassified = EmailRepository.GetUnclassified(db);
     var seen = new HashSet<string>(fresh.Select(e => e.MessageId));
     emailsToClassify = fresh.Concat(unclassified.Where(e => !seen.Contains(e.MessageId))).ToList();
@@ -165,8 +166,6 @@ else
 
 // ---------------------------------------------------------------------------
 // Walk up ancestor directories to find a file by name or relative path.
-// Works regardless of whether the app is launched via 'dotnet run', the
-// debugger (CWD = bin/Debug/net9.0), or a published binary.
 // ---------------------------------------------------------------------------
 static string? FindFileInAncestors(string fileNameOrRelPath)
 {
@@ -183,4 +182,3 @@ static string? FindFileInAncestors(string fileNameOrRelPath)
     }
     return null;
 }
-

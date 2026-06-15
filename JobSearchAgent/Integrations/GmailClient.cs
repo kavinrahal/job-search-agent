@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Google.Apis.Auth.OAuth2;
+using Google.Apis.Auth.OAuth2.Flows;
+using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Gmail.v1;
 using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Services;
@@ -15,7 +17,33 @@ public class GmailClient
 
     private GmailClient(GmailService service) => _service = service;
 
-    public static async Task<GmailClient> CreateAsync(string credentialsPath, string tokenStorePath)
+    // Headless auth using a stored refresh token — works on Railway with no browser.
+    public static Task<GmailClient> CreateAsync(
+        string clientId, string clientSecret, string refreshToken)
+    {
+        var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
+        {
+            ClientSecrets = new ClientSecrets { ClientId = clientId, ClientSecret = clientSecret },
+            Scopes = [GmailService.Scope.GmailReadonly],
+        });
+
+        var credential = new UserCredential(flow, "user", new TokenResponse
+        {
+            RefreshToken = refreshToken,
+        });
+
+        var service = new GmailService(new BaseClientService.Initializer
+        {
+            HttpClientInitializer = credential,
+            ApplicationName = "JobSearchAgent",
+        });
+
+        return Task.FromResult(new GmailClient(service));
+    }
+
+    // Browser OAuth flow — only needed on first-time local setup before secrets are extracted.
+    public static async Task<GmailClient> CreateWithBrowserFlowAsync(
+        string credentialsPath, string tokenStorePath)
     {
         await using var stream = File.OpenRead(credentialsPath);
         var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
@@ -90,7 +118,6 @@ public class GmailClient
 
     private static string DecodeBase64Url(string data)
     {
-        // Gmail uses URL-safe base64; convert to standard and pad
         string standard = data.Replace('-', '+').Replace('_', '/');
         int padding = (4 - standard.Length % 4) % 4;
         standard += new string('=', padding);
@@ -113,7 +140,6 @@ public class GmailClient
 
         if (payload.Parts != null)
         {
-            // Prefer an immediate text/plain child before recursing
             foreach (var part in payload.Parts)
             {
                 if (part.MimeType == "text/plain")
@@ -122,7 +148,6 @@ public class GmailClient
                     if (!string.IsNullOrEmpty(data)) return DecodeBase64Url(data);
                 }
             }
-            // Recurse into nested multipart nodes
             foreach (var part in payload.Parts)
             {
                 string result = ExtractBody(part);
