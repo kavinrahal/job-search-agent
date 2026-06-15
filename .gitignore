@@ -1,0 +1,45 @@
+# Secrets - never commit
+credentials.json
+token.json
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# DB
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+
+# Google OAuth token (stored by FileDataStore)
+Google.Apis.Auth.OAuth2.Responses.TokenResponse-*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.user
+*.suo
+.vs/
+
+# C#
+JobSearchAgent/bin/
+JobSearchAgent/obj/
+JobSearchAgent/*.csproj.user
+JobSearch.Api/bin/
+JobSearch.Api/obj/
+
+# Node
+node_modules/
+JobSearch.Web/dist/

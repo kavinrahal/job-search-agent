@@ -1,0 +1,15 @@
+{
+  "name": "job-search",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently --names API,WEB,AGENT --prefix-colors cyan,magenta,yellow \"dotnet run --project JobSearch.Api\" \"npm run dev --prefix JobSearch.Web\" \"dotnet run --project JobSearchAgent\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "concurrently": "^10.0.3"
+  }
+}
