@@ -136,6 +136,31 @@ var tracking = ApplicationTracker.ProcessClassifications(db, results);
 if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
     Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
 
+// Send any pending Telegram notifications (including ones queued by earlier runs that failed to send)
+var botToken = config["TELEGRAM_BOT_TOKEN"];
+var chatId   = config["TELEGRAM_CHAT_ID"];
+
+if (botToken is not null && chatId is not null)
+{
+    var pending = db.Notifications.Where(n => n.SentAt == null).ToList();
+    if (pending.Count > 0)
+    {
+        using var telegram = new TelegramNotifier(botToken, chatId);
+        var sentAt = DateTime.UtcNow;
+        int sent = 0;
+        foreach (var notification in pending)
+        {
+            if (await telegram.SendAsync(notification.Message))
+            {
+                notification.SentAt = sentAt;
+                sent++;
+            }
+        }
+        db.SaveChanges();
+        Console.WriteLine($"Telegram: {sent}/{pending.Count} notification(s) sent.");
+    }
+}
+
 if (jobRelated.Count > 0)
 {
     var categoryLabels = new Dictionary<string, string>
