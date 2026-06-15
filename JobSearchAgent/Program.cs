@@ -132,6 +132,10 @@ int notRelevantCount = results.Count - jobRelated.Count;
 Console.WriteLine();
 Console.WriteLine($"Results: {jobRelated.Count} job-related, {notRelevantCount} not relevant.");
 
+var tracking = ApplicationTracker.ProcessClassifications(db, results);
+if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
+    Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
+
 if (jobRelated.Count > 0)
 {
     var categoryLabels = new Dictionary<string, string>
