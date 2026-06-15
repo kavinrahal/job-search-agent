@@ -1,0 +1,30 @@
+namespace JobSearch.Data;
+
+public class Application
+{
+    public int Id { get; set; }
+    public string Company { get; set; } = "";
+    public string RoleTitle { get; set; } = "";
+    public string? JobUrl { get; set; }
+    public string Status { get; set; } = ApplicationStatus.Applied;
+    public DateTime AppliedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public string? Notes { get; set; }
+
+    public List<ApplicationEvent> Events { get; set; } = [];
+    public List<Notification> Notifications { get; set; } = [];
+}
+
+// Status values for Application.Status — stored as strings so the DB is readable.
+public static class ApplicationStatus
+{
+    public const string Applied       = "Applied";
+    public const string Acknowledged  = "Acknowledged";
+    public const string Screening     = "Screening";
+    public const string Interviewing  = "Interviewing";
+    public const string FinalRound    = "FinalRound";
+    public const string Offer         = "Offer";
+    public const string Rejected      = "Rejected";
+    public const string Ghosted       = "Ghosted";
+    public const string Withdrawn     = "Withdrawn";
+}

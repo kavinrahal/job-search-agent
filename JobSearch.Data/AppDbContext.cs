@@ -9,6 +9,10 @@ public class AppDbContext : DbContext
 
     public DbSet<RawEmailRecord> RawEmails { get; set; }
     public DbSet<ClassificationRecord> Classifications { get; set; }
+    public DbSet<Application> Applications { get; set; }
+    public DbSet<ApplicationEvent> ApplicationEvents { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
+    public DbSet<SystemHealth> SystemHealth { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
@@ -46,5 +50,27 @@ public class AppDbContext : DbContext
         builder.Entity<ClassificationRecord>()
             .HasIndex(c => c.MessageId)
             .IsUnique();
+
+        builder.Entity<Application>(e =>
+        {
+            e.HasIndex(a => new { a.Company, a.RoleTitle });
+            e.HasMany(a => a.Events)
+             .WithOne(ev => ev.Application)
+             .HasForeignKey(ev => ev.ApplicationId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(a => a.Notifications)
+             .WithOne(n => n.Application)
+             .HasForeignKey(n => n.ApplicationId)
+             .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<ApplicationEvent>()
+            .HasIndex(e => e.ApplicationId);
+
+        builder.Entity<Notification>()
+            .HasIndex(n => n.SentAt);  // fast query for pending notifications
+
+        builder.Entity<SystemHealth>()
+            .HasIndex(h => h.CheckedAt);
     }
 }
