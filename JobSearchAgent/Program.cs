@@ -34,6 +34,8 @@ string apiKey = config["ANTHROPIC_API_KEY"]
     ?? throw new InvalidOperationException(
         "ANTHROPIC_API_KEY not set. Run: dotnet user-secrets set ANTHROPIC_API_KEY <key>");
 
+var runStart = DateTime.UtcNow;
+
 // Init database — connection string from user-secrets / DATABASE_URL env var / local default
 string connStr = AppDbContext.GetConnectionString(config.GetConnectionString("DefaultConnection"));
 var dbOptions = new DbContextOptionsBuilder<AppDbContext>()
@@ -118,6 +120,15 @@ Console.WriteLine($"Fetched {emails.Count} — classifying {emailsToClassify.Cou
 if (emailsToClassify.Count == 0)
 {
     Console.WriteLine("Nothing to classify.");
+    db.SystemHealth.Add(new JobSearch.Data.SystemHealth
+    {
+        CheckedAt = DateTime.UtcNow,
+        EmailsFetched = emails.Count,
+        EmailsClassified = 0,
+        NewApplications = 0,
+        DurationMs = (int)(DateTime.UtcNow - runStart).TotalMilliseconds,
+    });
+    db.SaveChanges();
     return;
 }
 
@@ -192,6 +203,16 @@ else
 {
     Console.WriteLine("No job-search emails found in this window.");
 }
+
+db.SystemHealth.Add(new JobSearch.Data.SystemHealth
+{
+    CheckedAt = DateTime.UtcNow,
+    EmailsFetched = emails.Count,
+    EmailsClassified = emailsToClassify.Count,
+    NewApplications = tracking.Created,
+    DurationMs = (int)(DateTime.UtcNow - runStart).TotalMilliseconds,
+});
+db.SaveChanges();
 
 // ---------------------------------------------------------------------------
 // Walk up ancestor directories to find a file by name or relative path.

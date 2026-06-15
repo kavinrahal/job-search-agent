@@ -15,7 +15,6 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 var app = builder.Build();
 app.UseCors();
 
-// Run EF migrations on startup — creates tables on first run, applies new migrations after deploys
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -32,12 +31,22 @@ app.MapGet("/api/summary", (AppDbContext db) =>
         .Select(g => new { Category = g.Key, Count = g.Count() })
         .ToList();
 
+    var appsByStatus = db.Applications
+        .GroupBy(a => a.Status)
+        .Select(g => new { Status = g.Key, Count = g.Count() })
+        .ToList();
+
     return Results.Ok(new
     {
         total = db.RawEmails.Count(),
         classified = db.Classifications.Count(),
         jobRelated = db.Classifications.Count(c => c.IsJobRelated),
         byCategory = categories.ToDictionary(x => x.Category, x => x.Count),
+        applications = new
+        {
+            total = db.Applications.Count(),
+            byStatus = appsByStatus.ToDictionary(x => x.Status, x => x.Count),
+        },
     });
 });
 
@@ -92,6 +101,151 @@ app.MapGet("/api/emails", (
         .ToList();
 
     return Results.Ok(new { items, total, page, pageSize });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/applications?status=...&page=1&pageSize=25
+// ---------------------------------------------------------------------------
+app.MapGet("/api/applications", (
+    AppDbContext db,
+    string? status = null,
+    int page = 1,
+    int pageSize = 25) =>
+{
+    var query = db.Applications.AsQueryable();
+
+    if (status is not null)
+        query = query.Where(a => a.Status == status);
+
+    int total = query.Count();
+
+    var items = query
+        .OrderByDescending(a => a.UpdatedAt)
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .Select(a => new
+        {
+            id = a.Id,
+            company = a.Company,
+            roleTitle = a.RoleTitle,
+            jobUrl = a.JobUrl,
+            status = a.Status,
+            appliedAt = a.AppliedAt,
+            updatedAt = a.UpdatedAt,
+            notes = a.Notes,
+        })
+        .ToList();
+
+    return Results.Ok(new { items, total, page, pageSize });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/applications/{id}/events
+// ---------------------------------------------------------------------------
+app.MapGet("/api/applications/{id}/events", (int id, AppDbContext db) =>
+{
+    var app = db.Applications.Find(id);
+    if (app is null) return Results.NotFound();
+
+    var events = db.ApplicationEvents
+        .Where(e => e.ApplicationId == id)
+        .OrderBy(e => e.OccurredAt)
+        .Select(e => new
+        {
+            id = e.Id,
+            eventType = e.EventType,
+            fromStatus = e.FromStatus,
+            toStatus = e.ToStatus,
+            summary = e.Summary,
+            occurredAt = e.OccurredAt,
+        })
+        .ToList();
+
+    return Results.Ok(new
+    {
+        application = new
+        {
+            id = app.Id,
+            company = app.Company,
+            roleTitle = app.RoleTitle,
+            status = app.Status,
+            appliedAt = app.AppliedAt,
+            updatedAt = app.UpdatedAt,
+            notes = app.Notes,
+        },
+        events,
+    });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/activity?limit=20
+// ---------------------------------------------------------------------------
+app.MapGet("/api/activity", (AppDbContext db, int limit = 20) =>
+{
+    var items = db.ApplicationEvents
+        .Join(db.Applications,
+            e => e.ApplicationId,
+            a => a.Id,
+            (e, a) => new { Event = e, App = a })
+        .OrderByDescending(x => x.Event.OccurredAt)
+        .Take(limit)
+        .Select(x => new
+        {
+            applicationId = x.App.Id,
+            company = x.App.Company,
+            roleTitle = x.App.RoleTitle,
+            eventType = x.Event.EventType,
+            fromStatus = x.Event.FromStatus,
+            toStatus = x.Event.ToStatus,
+            summary = x.Event.Summary,
+            occurredAt = x.Event.OccurredAt,
+        })
+        .ToList();
+
+    return Results.Ok(items);
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/health  — dead man's switch for UptimeRobot
+// ---------------------------------------------------------------------------
+app.MapGet("/api/health", (AppDbContext db) =>
+{
+    var last = db.SystemHealth
+        .OrderByDescending(h => h.CheckedAt)
+        .FirstOrDefault();
+
+    var now = DateTime.UtcNow;
+    string status;
+    double? ageMinutes = null;
+
+    if (last is null)
+    {
+        status = "unknown";
+    }
+    else
+    {
+        ageMinutes = (now - last.CheckedAt).TotalMinutes;
+        status = ageMinutes <= 20 ? "ok" : "stale";
+    }
+
+    var result = new
+    {
+        status,
+        lastRunAt = last?.CheckedAt,
+        lastRunAgeMinutes = ageMinutes.HasValue ? Math.Round(ageMinutes.Value, 1) : (double?)null,
+        emailsFetched = last?.EmailsFetched,
+        emailsClassified = last?.EmailsClassified,
+        newApplications = last?.NewApplications,
+        durationMs = last?.DurationMs,
+        lastError = last?.Error,
+        totalApplications = db.Applications.Count(),
+        pendingNotifications = db.Notifications.Count(n => n.SentAt == null),
+    };
+
+    // Return 503 when stale so UptimeRobot triggers an alert
+    return status == "stale"
+        ? Results.Json(result, statusCode: 503)
+        : Results.Ok(result);
 });
 
 app.Run();
