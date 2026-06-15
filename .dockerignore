@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+node_modules/
+JobSearch.Web/dist/
+*.db
+*.db-shm
+*.db-wal
+.env
+credentials.json
+token.json
+Google.Apis.Auth.OAuth2.Responses.TokenResponse-*
+.vs/
+.vscode/
+.idea/

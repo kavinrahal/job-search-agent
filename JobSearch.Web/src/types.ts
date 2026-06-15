@@ -3,6 +3,10 @@ export interface Summary {
   classified: number;
   jobRelated: number;
   byCategory: Record<string, number>;
+  applications: {
+    total: number;
+    byStatus: Record<string, number>;
+  };
 }
 
 export interface EmailItem {
@@ -22,4 +26,60 @@ export interface EmailsResponse {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export interface Application {
+  id: number;
+  company: string;
+  roleTitle: string;
+  jobUrl: string | null;
+  status: string;
+  appliedAt: string;
+  updatedAt: string;
+  notes: string | null;
+}
+
+export interface ApplicationsResponse {
+  items: Application[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ApplicationEvent {
+  id: number;
+  eventType: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  summary: string;
+  occurredAt: string;
+}
+
+export interface ApplicationWithEvents {
+  application: Application;
+  events: ApplicationEvent[];
+}
+
+export interface ActivityItem {
+  applicationId: number;
+  company: string;
+  roleTitle: string;
+  eventType: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  summary: string;
+  occurredAt: string;
+}
+
+export interface HealthStatus {
+  status: "ok" | "stale" | "unknown";
+  lastRunAt: string | null;
+  lastRunAgeMinutes: number | null;
+  emailsFetched: number | null;
+  emailsClassified: number | null;
+  newApplications: number | null;
+  durationMs: number | null;
+  lastError: string | null;
+  totalApplications: number;
+  pendingNotifications: number;
 }

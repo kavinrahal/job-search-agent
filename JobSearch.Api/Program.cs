@@ -3,12 +3,22 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Railway sets PORT; fall back to 5000 for local dev
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+builder.WebHost.UseUrls($"http://+:{port}");
+
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(AppDbContext.GetConnectionString(
         builder.Configuration.GetConnectionString("DefaultConnection"))));
 
+// CORS_ORIGINS env var for production (comma-separated); localhost defaults for dev
+var corsOrigins = (Environment.GetEnvironmentVariable("CORS_ORIGINS") ?? "")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries);
+if (corsOrigins.Length == 0)
+    corsOrigins = ["http://localhost:5173", "http://localhost:3000"];
+
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.WithOrigins("http://localhost:5173", "http://localhost:3000")
+    p.WithOrigins(corsOrigins)
      .AllowAnyHeader()
      .AllowAnyMethod()));
 

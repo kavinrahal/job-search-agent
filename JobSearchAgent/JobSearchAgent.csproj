@@ -21,4 +21,12 @@
     <ProjectReference Include="..\JobSearch.Data\JobSearch.Data.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Bundle skills/ into the publish output so Docker can find them -->
+    <Content Include="..\skills\**"
+             Link="skills\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToPublishDirectory="Always"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
