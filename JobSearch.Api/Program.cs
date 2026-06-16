@@ -79,10 +79,10 @@ app.MapGet("/api/emails", (
         select new { Email = e, Classification = c };
 
     if (from is not null && DateTime.TryParse(from, out var fromDate))
-        query = query.Where(x => x.Email.ReceivedAt >= fromDate);
+        query = query.Where(x => x.Email.ReceivedAt >= DateTime.SpecifyKind(fromDate, DateTimeKind.Utc));
 
     if (to is not null && DateTime.TryParse(to, out var toDate))
-        query = query.Where(x => x.Email.ReceivedAt <= toDate);
+        query = query.Where(x => x.Email.ReceivedAt <= DateTime.SpecifyKind(toDate, DateTimeKind.Utc));
 
     if (category is not null)
         query = query.Where(x => x.Classification != null && x.Classification.Category == category);
