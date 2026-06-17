@@ -7,9 +7,9 @@ import type {
   HealthStatus,
 } from "./types";
 
-// VITE_API_URL is set in Vercel to the Railway API base URL (e.g. https://api.railway.app).
+// VITE_API_URL is set in production to the Railway dashboard URL.
 // In local dev it's unset and Vite's proxy forwards /api to localhost:5000.
-const BASE = (import.meta.env.VITE_API_URL ?? "") + "/api";
+const BASE = (import.meta.env.VITE_API_URL ?? "") + "/api/v1";
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
@@ -66,4 +66,13 @@ export async function fetchHealth(): Promise<HealthStatus> {
   // 503 means stale — still parse the body
   if (!res.ok && res.status !== 503) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
+}
+
+export async function fetchMe(): Promise<{ email: string }> {
+  return get("/auth/me");
+}
+
+export async function logout(): Promise<void> {
+  const res = await fetch(`${BASE}/auth/logout`, { method: "POST" });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 }

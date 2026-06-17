@@ -1,9 +1,21 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+# Stage 1: build the React SPA
+FROM node:22-slim AS web-build
+WORKDIR /app
+COPY JobSearch.Web/package*.json ./
+RUN npm ci
+COPY JobSearch.Web/ ./
+RUN npm run build
+
+# Stage 2: build the .NET API
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS api-build
 WORKDIR /src
 COPY . .
+# Merge React output into wwwroot before publish so dotnet includes it
+COPY --from=web-build /app/dist ./JobSearch.Api/wwwroot/
 RUN dotnet publish JobSearch.Api/JobSearch.Api.csproj -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+# Stage 3: runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY --from=api-build /app/publish .
 ENTRYPOINT ["dotnet", "JobSearch.Api.dll"]
