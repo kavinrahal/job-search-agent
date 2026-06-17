@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { fetchApplications, fetchApplicationEvents } from "../api";
 import type { Application, ApplicationWithEvents } from "../types";
 
@@ -100,9 +101,14 @@ function ApplicationCard({ app }: { app: Application }) {
 }
 
 export function ApplicationsPage() {
+  const [searchParams] = useSearchParams();
+  const initialStatus = searchParams.get("status") ?? "All";
+
   const [apps, setApps] = useState<Application[]>([]);
   const [total, setTotal] = useState(0);
-  const [activeTab, setActiveTab] = useState("All");
+  const [activeTab, setActiveTab] = useState(
+    STATUS_TABS.includes(initialStatus) ? initialStatus : "All"
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

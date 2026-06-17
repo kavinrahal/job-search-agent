@@ -26,17 +26,31 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const PAGE_SIZE = 25;
 
-export function EmailTable({ refreshKey = 0 }: { refreshKey?: number }) {
+interface EmailTableProps {
+  refreshKey?: number;
+  category: string;
+  jobRelatedOnly: boolean;
+  onCategoryChange: (cat: string) => void;
+  onJobRelatedChange: (val: boolean) => void;
+}
+
+export function EmailTable({
+  refreshKey = 0,
+  category,
+  jobRelatedOnly,
+  onCategoryChange,
+  onJobRelatedChange,
+}: EmailTableProps) {
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [category, setCategory] = useState("");
-  const [jobRelatedOnly, setJobRelatedOnly] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+
+  // Reset to page 1 whenever any filter changes.
+  useEffect(() => { setPage(1); }, [category, jobRelatedOnly, from, to]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,12 +78,13 @@ export function EmailTable({ refreshKey = 0 }: { refreshKey?: number }) {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   function resetFilters() {
-    setCategory("");
-    setJobRelatedOnly(false);
+    onCategoryChange("");
+    onJobRelatedChange(false);
     setFrom("");
     setTo("");
-    setPage(1);
   }
+
+  const hasActiveFilter = category || jobRelatedOnly || from || to;
 
   return (
     <div className="space-y-4">
@@ -79,7 +94,7 @@ export function EmailTable({ refreshKey = 0 }: { refreshKey?: number }) {
           Category
           <select
             value={category}
-            onChange={e => { setCategory(e.target.value); setPage(1); }}
+            onChange={e => onCategoryChange(e.target.value)}
             className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
           >
             <option value="">All</option>
@@ -94,7 +109,7 @@ export function EmailTable({ refreshKey = 0 }: { refreshKey?: number }) {
           <input
             type="date"
             value={from}
-            onChange={e => { setFrom(e.target.value); setPage(1); }}
+            onChange={e => setFrom(e.target.value)}
             className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
           />
         </label>
@@ -104,7 +119,7 @@ export function EmailTable({ refreshKey = 0 }: { refreshKey?: number }) {
           <input
             type="date"
             value={to}
-            onChange={e => { setTo(e.target.value); setPage(1); }}
+            onChange={e => setTo(e.target.value)}
             className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
           />
         </label>
@@ -113,18 +128,20 @@ export function EmailTable({ refreshKey = 0 }: { refreshKey?: number }) {
           <input
             type="checkbox"
             checked={jobRelatedOnly}
-            onChange={e => { setJobRelatedOnly(e.target.checked); setPage(1); }}
+            onChange={e => onJobRelatedChange(e.target.checked)}
             className="rounded"
           />
           Job-related only
         </label>
 
-        <button
-          onClick={resetFilters}
-          className="ml-auto rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-50"
-        >
-          Reset
-        </button>
+        {hasActiveFilter && (
+          <button
+            onClick={resetFilters}
+            className="ml-auto rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-50"
+          >
+            Reset
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -171,11 +188,13 @@ export function EmailTable({ refreshKey = 0 }: { refreshKey?: number }) {
                   <td className="px-4 py-3 text-gray-500">{email.company ?? "—"}</td>
                   <td className="px-4 py-3">
                     {email.category ? (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${CATEGORY_COLORS[email.category] ?? "bg-gray-100 text-gray-600"}`}
+                      <button
+                        onClick={() => onCategoryChange(email.category!)}
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-75 ${CATEGORY_COLORS[email.category] ?? "bg-gray-100 text-gray-600"}`}
+                        title={`Filter by ${CATEGORY_LABELS[email.category] ?? email.category}`}
                       >
                         {CATEGORY_LABELS[email.category] ?? email.category}
-                      </span>
+                      </button>
                     ) : (
                       <span className="text-gray-300">—</span>
                     )}
