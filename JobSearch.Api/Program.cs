@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -77,6 +78,16 @@ builder.Services.AddAuthentication(o =>
 
 builder.Services.AddAuthorization();
 
+// Trust X-Forwarded-Proto from Railway's load balancer regardless of its IP.
+// KnownNetworks/KnownProxies must be cleared — the default (loopback-only) blocks
+// cloud proxy headers, causing OAuth redirect_uris to be built with http://.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownNetworks.Clear();
+    o.KnownProxies.Clear();
+});
+
 if (!isDev)
 {
     builder.Services.AddHsts(o =>
@@ -91,14 +102,8 @@ if (!isDev)
 // ---------------------------------------------------------------------------
 var app = builder.Build();
 
-// Railway (and most cloud platforms) terminate TLS at their load balancer and forward
-// requests to the container over plain HTTP. Without this, ASP.NET Core sees http://
-// and constructs OAuth redirect_uris with the wrong scheme, causing redirect_uri_mismatch.
-app.UseForwardedHeaders(new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-    KnownNetworks = { new Microsoft.AspNetCore.HttpOverrides.IPNetwork(System.Net.IPAddress.Parse("10.0.0.0"), 8) },
-});
+// Must be first — rewrites scheme/IP from X-Forwarded-* before anything reads them.
+app.UseForwardedHeaders();
 
 if (!isDev)
 {
