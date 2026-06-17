@@ -3,6 +3,7 @@ using JobSearch.Data;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -89,6 +90,15 @@ if (!isDev)
 // Pipeline
 // ---------------------------------------------------------------------------
 var app = builder.Build();
+
+// Railway (and most cloud platforms) terminate TLS at their load balancer and forward
+// requests to the container over plain HTTP. Without this, ASP.NET Core sees http://
+// and constructs OAuth redirect_uris with the wrong scheme, causing redirect_uri_mismatch.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    KnownNetworks = { new Microsoft.AspNetCore.HttpOverrides.IPNetwork(System.Net.IPAddress.Parse("10.0.0.0"), 8) },
+});
 
 if (!isDev)
 {
