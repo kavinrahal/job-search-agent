@@ -118,6 +118,39 @@ else
 
 Console.WriteLine($"Fetched {emails.Count} — classifying {emailsToClassify.Count}...");
 
+var botToken = config["TELEGRAM_BOT_TOKEN"];
+var chatId   = config["TELEGRAM_CHAT_ID"];
+
+// ---------------------------------------------------------------------------
+// Job discovery — always runs, even when there are no new emails to classify
+// ---------------------------------------------------------------------------
+var adzunaAppId  = config["ADZUNA_APP_ID"];
+var adzunaAppKey = config["ADZUNA_APP_KEY"];
+
+if (!testMode)
+{
+    Console.WriteLine();
+    if (adzunaAppId is null || adzunaAppKey is null)
+    {
+        Console.WriteLine("Job discovery: skipped (ADZUNA_APP_ID / ADZUNA_APP_KEY not set).");
+    }
+    else
+    {
+        using var discoveryTelegram = botToken is not null && chatId is not null
+            ? new TelegramNotifier(botToken, chatId)
+            : null;
+
+        var discovery = new JobDiscoveryWorker(
+            db,
+            new AdzunaFetcher(adzunaAppId, adzunaAppKey),
+            new PostingEvaluator(apiKey),
+            discoveryTelegram);
+
+        var (discovered, evaluated, notified) = await discovery.RunAsync();
+        Console.WriteLine($"Job discovery: {discovered} new, {evaluated} evaluated, {notified} notified.");
+    }
+}
+
 if (emailsToClassify.Count == 0)
 {
     Console.WriteLine("Nothing to classify.");
@@ -148,10 +181,6 @@ var tracking = ApplicationTracker.ProcessClassifications(db, results);
 if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
     Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
 
-// Send any pending Telegram notifications (including ones queued by earlier runs that failed to send)
-var botToken = config["TELEGRAM_BOT_TOKEN"];
-var chatId   = config["TELEGRAM_CHAT_ID"];
-
 if (botToken is not null && chatId is not null)
 {
     var pending = db.Notifications.Where(n => n.SentAt == null).ToList();
@@ -170,36 +199,6 @@ if (botToken is not null && chatId is not null)
         }
         db.SaveChanges();
         Console.WriteLine($"Telegram: {sent}/{pending.Count} notification(s) sent.");
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Job discovery — poll Adzuna, evaluate new postings, notify on matches
-// ---------------------------------------------------------------------------
-var adzunaAppId  = config["ADZUNA_APP_ID"];
-var adzunaAppKey = config["ADZUNA_APP_KEY"];
-
-if (!testMode)
-{
-    Console.WriteLine();
-    if (adzunaAppId is null || adzunaAppKey is null)
-    {
-        Console.WriteLine("Job discovery: skipped (ADZUNA_APP_ID / ADZUNA_APP_KEY not set).");
-    }
-    else
-    {
-        using var discoveryTelegram = botToken is not null && chatId is not null
-            ? new TelegramNotifier(botToken, chatId)
-            : null;
-
-        var discovery = new JobDiscoveryWorker(
-            db,
-            new AdzunaFetcher(adzunaAppId, adzunaAppKey),
-            new PostingEvaluator(apiKey),
-            discoveryTelegram);
-
-        var (discovered, evaluated, notified) = await discovery.RunAsync();
-        Console.WriteLine($"Job discovery: {discovered} new, {evaluated} evaluated, {notified} notified.");
     }
 }
 
