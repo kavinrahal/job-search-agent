@@ -142,7 +142,11 @@ if (!testMode)
 
         var discovery = new JobDiscoveryWorker(
             db,
-            new AdzunaFetcher(adzunaAppId, adzunaAppKey),
+            [
+                new AdzunaFetcher(adzunaAppId, adzunaAppKey),
+                new GreenhouseFetcher(),
+                new LeverFetcher(),
+            ],
             new PostingEvaluator(apiKey),
             discoveryTelegram);
 

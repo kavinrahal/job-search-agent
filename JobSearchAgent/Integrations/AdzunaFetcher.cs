@@ -4,19 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace JobSearchAgent.Integrations;
 
-public class AdzunaFeedItem
-{
-    public string Title { get; init; } = "";
-    public string Company { get; init; } = "";
-    public string Url { get; init; } = "";
-    public string Description { get; init; } = "";
-    public string Location { get; init; } = "";
-    public double? SalaryMin { get; init; }
-    public double? SalaryMax { get; init; }
-    public DateTime PublishedAt { get; init; }
-}
-
-public class AdzunaFetcher
+public class AdzunaFetcher : IJobFetcher
 {
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
     private readonly string _appId;
@@ -37,10 +25,10 @@ public class AdzunaFetcher
         _appKey = appKey;
     }
 
-    public async Task<List<AdzunaFeedItem>> FetchAllAsync()
+    public async Task<List<JobFeedItem>> FetchAllAsync()
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var results = new List<AdzunaFeedItem>();
+        var results = new List<JobFeedItem>();
 
         foreach (var keyword in Keywords)
         {
@@ -61,7 +49,7 @@ public class AdzunaFetcher
         return results;
     }
 
-    private async Task<List<AdzunaFeedItem>> FetchKeywordAsync(string keyword)
+    private async Task<List<JobFeedItem>> FetchKeywordAsync(string keyword)
     {
         var url = "https://api.adzuna.com/v1/api/jobs/au/search/1" +
             $"?app_id={Uri.EscapeDataString(_appId)}" +
@@ -82,7 +70,7 @@ public class AdzunaFetcher
 
         return [.. response.Results
             .Where(j => !string.IsNullOrEmpty(j.RedirectUrl))
-            .Select(j => new AdzunaFeedItem
+            .Select(j => new JobFeedItem
             {
                 Title       = j.Title,
                 Company     = j.Company?.DisplayName ?? "",
@@ -92,12 +80,10 @@ public class AdzunaFetcher
                 SalaryMin   = j.SalaryMin,
                 SalaryMax   = j.SalaryMax,
                 PublishedAt = j.Created,
+                Source      = "adzuna",
             })];
     }
 
-    // ---------------------------------------------------------------------------
-    // Internal deserialization types
-    // ---------------------------------------------------------------------------
     private record AdzunaResponse(
         [property: JsonPropertyName("results")] List<AdzunaJob> Results,
         [property: JsonPropertyName("count")]   int Count

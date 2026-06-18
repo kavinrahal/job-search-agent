@@ -12,26 +12,33 @@ public class JobDiscoveryWorker
     private const int MaxAgeDays = 14;
 
     private readonly AppDbContext _db;
-    private readonly AdzunaFetcher _adzuna;
+    private readonly IEnumerable<IJobFetcher> _fetchers;
     private readonly PostingEvaluator _evaluator;
     private readonly TelegramNotifier? _telegram;
 
     public JobDiscoveryWorker(
         AppDbContext db,
-        AdzunaFetcher adzuna,
+        IEnumerable<IJobFetcher> fetchers,
         PostingEvaluator evaluator,
         TelegramNotifier? telegram)
     {
         _db = db;
-        _adzuna = adzuna;
+        _fetchers = fetchers;
         _evaluator = evaluator;
         _telegram = telegram;
     }
 
     public async Task<(int Discovered, int Evaluated, int Notified)> RunAsync()
     {
-        Console.WriteLine("Job discovery: fetching Adzuna listings...");
-        var feedItems = await _adzuna.FetchAllAsync();
+        Console.WriteLine("Job discovery: fetching from all sources...");
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var feedItems = new List<JobFeedItem>();
+        foreach (var fetcher in _fetchers)
+        {
+            var items = await fetcher.FetchAllAsync();
+            foreach (var item in items.Where(i => seen.Add(i.Url)))
+                feedItems.Add(item);
+        }
 
         var cutoff = DateTime.UtcNow.AddDays(-MaxAgeDays);
         var recent = feedItems.Where(i => i.PublishedAt >= cutoff).ToList();
@@ -62,7 +69,7 @@ public class JobDiscoveryWorker
             var record = new DiscoveredPosting
             {
                 Url = item.Url,
-                Source = "adzuna",
+                Source = item.Source,
                 Title = item.Title,
                 Company = item.Company,
                 DiscoveredAt = DateTime.UtcNow,
@@ -113,7 +120,7 @@ public class JobDiscoveryWorker
         return (newItems.Count, evaluated, notified);
     }
 
-    private static string FormatPostingText(AdzunaFeedItem item)
+    private static string FormatPostingText(JobFeedItem item)
     {
         string salary = item.SalaryMin.HasValue && item.SalaryMax.HasValue
             ? $"${item.SalaryMin:N0} – ${item.SalaryMax:N0} AUD"
