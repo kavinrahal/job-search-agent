@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -72,7 +73,10 @@ public class AdzunaFetcher
             $"&sort_by=date" +
             $"&content-type=application%2Fjson";
 
-        var json = await _http.GetStringAsync(url);
+        using var response = await _http.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        var json = Encoding.UTF8.GetString(bytes);
         var response = JsonSerializer.Deserialize<AdzunaResponse>(json)
             ?? throw new InvalidOperationException("Empty response from Adzuna");
 
