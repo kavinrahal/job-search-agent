@@ -60,6 +60,8 @@ public class JoraFetcher : IJobFetcher
 
         var bytes = await response.Content.ReadAsByteArrayAsync();
         var xml = System.Text.Encoding.UTF8.GetString(bytes);
+        // Jora RSS contains bare & in URLs/text — escape any that aren't already part of a valid entity
+        xml = Regex.Replace(xml, @"&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#[0-9]+|#x[0-9a-fA-F]+);)", "&amp;");
         var doc = XDocument.Parse(xml);
 
         XNamespace? dc = doc.Root?.Attributes()
