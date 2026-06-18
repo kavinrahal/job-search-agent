@@ -144,7 +144,6 @@ if (!testMode)
             db,
             [
                 new AdzunaFetcher(adzunaAppId, adzunaAppKey),
-                new JoraFetcher(),
                 new GreenhouseFetcher(),
                 new LeverFetcher(),
             ],
