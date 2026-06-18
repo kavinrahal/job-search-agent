@@ -4,10 +4,12 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
 import { ActivityPage } from "./pages/ActivityPage";
 import { HealthPage } from "./pages/HealthPage";
+import { DiscoveriesPage } from "./pages/DiscoveriesPage";
 import { fetchMe, logout } from "./api";
 
 const NAV_LINKS = [
   { to: "/",             label: "Dashboard"    },
+  { to: "/discover",     label: "Discover"     },
   { to: "/applications", label: "Applications" },
   { to: "/activity",     label: "Activity"     },
   { to: "/health",       label: "Health"       },
@@ -80,6 +82,7 @@ export default function App() {
         <main className="mx-auto max-w-7xl px-6 py-8">
           <Routes>
             <Route path="/"             element={<DashboardPage />} />
+            <Route path="/discover"     element={<DiscoveriesPage />} />
             <Route path="/applications" element={<ApplicationsPage />} />
             <Route path="/activity"     element={<ActivityPage />} />
             <Route path="/health"       element={<HealthPage />} />

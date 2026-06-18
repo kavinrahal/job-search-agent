@@ -197,6 +197,64 @@ app.MapGet("/api/v1/auth/denied", () =>
 // ---------------------------------------------------------------------------
 var api = app.MapGroup("/api/v1").RequireAuthorization();
 
+// GET /api/v1/discoveries
+api.MapGet("/discoveries", (AppDbContext db, string? recommendation = null, int page = 1, int pageSize = 25) =>
+{
+    var validRecs = new HashSet<string> { "strong_match", "good_match", "weak_match", "discard" };
+    if (recommendation is not null && !validRecs.Contains(recommendation))
+        return Results.BadRequest(new { error = "Invalid recommendation value" });
+
+    var query = db.DiscoveredPostings.AsQueryable();
+
+    query = recommendation is not null
+        ? query.Where(d => d.Recommendation == recommendation)
+        : query.Where(d => d.Recommendation != null && d.Recommendation != "error");
+
+    int total = query.Count();
+
+    var raw = query
+        .OrderByDescending(d => d.DiscoveredAt)
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .ToList();
+
+    var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+    var items = raw.Select(d =>
+    {
+        PostingEvaluation? ev = d.EvaluationJson is not null
+            ? JsonSerializer.Deserialize<PostingEvaluation>(d.EvaluationJson, opts)
+            : null;
+        return new
+        {
+            id                   = d.Id,
+            url                  = d.Url,
+            source               = d.Source,
+            title                = d.Title,
+            company              = d.Company,
+            recommendation       = d.Recommendation,
+            disqualifierHit      = d.DisqualifierHit,
+            discoveredAt         = d.DiscoveredAt,
+            evaluatedAt          = d.EvaluatedAt,
+            notificationSent     = d.NotificationSent,
+            locationMatch        = ev?.LocationMatch,
+            locationDetail       = ev?.LocationDetail,
+            experienceMatch      = ev?.ExperienceMatch,
+            experienceDetail     = ev?.ExperienceDetail,
+            backendMatch         = ev?.BackendMatch,
+            backendTechnologies  = ev?.BackendTechnologies ?? Array.Empty<string>(),
+            frontendMatch        = ev?.FrontendMatch,
+            salaryAssessment     = ev?.SalaryAssessment,
+            salaryDetail         = ev?.SalaryDetail,
+            companyAssessment    = ev?.CompanyAssessment,
+            roleTypeMatch        = ev?.RoleTypeMatch,
+            orangeFlags          = ev?.OrangeFlags ?? Array.Empty<string>(),
+            rationale            = ev?.Rationale,
+        };
+    }).ToList();
+
+    return Results.Ok(new { items, total, page, pageSize });
+});
+
 // GET /api/v1/summary
 api.MapGet("/summary", (AppDbContext db) =>
 {

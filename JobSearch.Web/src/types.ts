@@ -71,6 +71,39 @@ export interface ActivityItem {
   occurredAt: string;
 }
 
+export interface DiscoveredPosting {
+  id: number;
+  url: string;
+  source: string;
+  title: string;
+  company: string;
+  recommendation: string | null;
+  disqualifierHit: string | null;
+  discoveredAt: string;
+  evaluatedAt: string | null;
+  notificationSent: boolean;
+  locationMatch: string | null;
+  locationDetail: string | null;
+  experienceMatch: string | null;
+  experienceDetail: string | null;
+  backendMatch: string | null;
+  backendTechnologies: string[];
+  frontendMatch: string | null;
+  salaryAssessment: string | null;
+  salaryDetail: string | null;
+  companyAssessment: string | null;
+  roleTypeMatch: string | null;
+  orangeFlags: string[];
+  rationale: string | null;
+}
+
+export interface DiscoveriesResponse {
+  items: DiscoveredPosting[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface HealthStatus {
   status: "ok" | "stale" | "unknown";
   lastRunAt: string | null;

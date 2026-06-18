@@ -4,6 +4,7 @@ import type {
   ApplicationsResponse,
   ApplicationWithEvents,
   ActivityItem,
+  DiscoveriesResponse,
   HealthStatus,
 } from "./types";
 
@@ -66,6 +67,18 @@ export async function fetchHealth(): Promise<HealthStatus> {
   // 503 means stale — still parse the body
   if (!res.ok && res.status !== 503) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
+}
+
+export async function fetchDiscoveries(params: {
+  recommendation?: string;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<DiscoveriesResponse> {
+  const q = new URLSearchParams();
+  if (params.recommendation) q.set("recommendation", params.recommendation);
+  if (params.page) q.set("page", String(params.page));
+  if (params.pageSize) q.set("pageSize", String(params.pageSize));
+  return get(`/discoveries?${q}`);
 }
 
 export async function fetchMe(): Promise<{ email: string }> {
