@@ -174,24 +174,33 @@ if (botToken is not null && chatId is not null)
 }
 
 // ---------------------------------------------------------------------------
-// Job discovery — poll Seek RSS, evaluate new postings, notify on matches
+// Job discovery — poll Adzuna, evaluate new postings, notify on matches
 // ---------------------------------------------------------------------------
+var adzunaAppId  = config["ADZUNA_APP_ID"];
+var adzunaAppKey = config["ADZUNA_APP_KEY"];
+
 if (!testMode)
 {
     Console.WriteLine();
-    using var discoveryTelegram = botToken is not null && chatId is not null
-        ? new TelegramNotifier(botToken, chatId)
-        : null;
+    if (adzunaAppId is null || adzunaAppKey is null)
+    {
+        Console.WriteLine("Job discovery: skipped (ADZUNA_APP_ID / ADZUNA_APP_KEY not set).");
+    }
+    else
+    {
+        using var discoveryTelegram = botToken is not null && chatId is not null
+            ? new TelegramNotifier(botToken, chatId)
+            : null;
 
-    var discovery = new JobDiscoveryWorker(
-        db,
-        new SeekRssFetcher(),
-        new JobPostingFetcher(),
-        new PostingEvaluator(apiKey),
-        discoveryTelegram);
+        var discovery = new JobDiscoveryWorker(
+            db,
+            new AdzunaFetcher(adzunaAppId, adzunaAppKey),
+            new PostingEvaluator(apiKey),
+            discoveryTelegram);
 
-    var (discovered, evaluated, notified) = await discovery.RunAsync();
-    Console.WriteLine($"Job discovery: {discovered} new, {evaluated} evaluated, {notified} notified.");
+        var (discovered, evaluated, notified) = await discovery.RunAsync();
+        Console.WriteLine($"Job discovery: {discovered} new, {evaluated} evaluated, {notified} notified.");
+    }
 }
 
 if (jobRelated.Count > 0)

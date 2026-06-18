@@ -12,29 +12,26 @@ public class JobDiscoveryWorker
     private const int MaxAgeDays = 14;
 
     private readonly AppDbContext _db;
-    private readonly SeekRssFetcher _seek;
-    private readonly JobPostingFetcher _fetcher;
+    private readonly AdzunaFetcher _adzuna;
     private readonly PostingEvaluator _evaluator;
     private readonly TelegramNotifier? _telegram;
 
     public JobDiscoveryWorker(
         AppDbContext db,
-        SeekRssFetcher seek,
-        JobPostingFetcher fetcher,
+        AdzunaFetcher adzuna,
         PostingEvaluator evaluator,
         TelegramNotifier? telegram)
     {
         _db = db;
-        _seek = seek;
-        _fetcher = fetcher;
+        _adzuna = adzuna;
         _evaluator = evaluator;
         _telegram = telegram;
     }
 
     public async Task<(int Discovered, int Evaluated, int Notified)> RunAsync()
     {
-        Console.WriteLine("Job discovery: fetching Seek RSS feeds...");
-        var feedItems = await _seek.FetchAllAsync();
+        Console.WriteLine("Job discovery: fetching Adzuna listings...");
+        var feedItems = await _adzuna.FetchAllAsync();
 
         var cutoff = DateTime.UtcNow.AddDays(-MaxAgeDays);
         var recent = feedItems.Where(i => i.PublishedAt >= cutoff).ToList();
@@ -65,8 +62,9 @@ public class JobDiscoveryWorker
             var record = new DiscoveredPosting
             {
                 Url = item.Url,
-                Source = "seek",
+                Source = "adzuna",
                 Title = item.Title,
+                Company = item.Company,
                 DiscoveredAt = DateTime.UtcNow,
             };
             _db.DiscoveredPostings.Add(record);
@@ -76,7 +74,7 @@ public class JobDiscoveryWorker
             {
                 Console.WriteLine($"  [{evaluated + 1}/{newItems.Count}] {item.Title}");
 
-                var postingText = await _fetcher.FetchAsync(item.Url);
+                var postingText = FormatPostingText(item);
                 var eval = await _evaluator.EvaluateAsync(postingText, item.Url);
 
                 record.Company = eval.Company;
@@ -113,6 +111,24 @@ public class JobDiscoveryWorker
         }
 
         return (newItems.Count, evaluated, notified);
+    }
+
+    private static string FormatPostingText(AdzunaFeedItem item)
+    {
+        string salary = item.SalaryMin.HasValue && item.SalaryMax.HasValue
+            ? $"${item.SalaryMin:N0} – ${item.SalaryMax:N0} AUD"
+            : item.SalaryMin.HasValue
+                ? $"From ${item.SalaryMin:N0} AUD"
+                : "Not stated";
+
+        return $"""
+            Company: {item.Company}
+            Job Title: {item.Title}
+            Location: {item.Location}
+            Salary: {salary}
+
+            {item.Description}
+            """;
     }
 
     private static string FormatNotification(PostingEvaluation ev)
