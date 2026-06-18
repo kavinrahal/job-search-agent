@@ -10,7 +10,6 @@ const REC_TABS = [
   { value: "strong_match", label: "Strong Match" },
   { value: "good_match",   label: "Good Match"   },
   { value: "weak_match",   label: "Weak Match"   },
-  { value: "discard",      label: "Discard"      },
 ] as const;
 
 const REC_STYLES: Record<string, string> = {
@@ -236,7 +235,11 @@ export function DiscoveriesPage() {
       recommendation: activeTab || undefined,
       pageSize: 100,
     })
-      .then(res => { setPostings(res.items); setTotal(res.total); })
+      .then(res => {
+        const visible = res.items.filter(p => p.recommendation !== "discard");
+        setPostings(visible);
+        setTotal(res.total);
+      })
       .catch(e => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
   }, [activeTab]);
