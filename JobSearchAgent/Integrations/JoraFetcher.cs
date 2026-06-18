@@ -53,7 +53,7 @@ public class JoraFetcher : IJobFetcher
     private async Task<List<JobFeedItem>> FetchKeywordAsync(string keyword)
     {
         var url = $"https://au.jora.com/jobs?q={Uri.EscapeDataString(keyword)}" +
-                  $"&l=Melbourne+VIC&rss=1";
+                  $"&l=Melbourne&rss=1";
 
         using var response = await _http.GetAsync(url);
         response.EnsureSuccessStatusCode();
@@ -63,6 +63,8 @@ public class JoraFetcher : IJobFetcher
         // Jora RSS contains bare & in URLs/text — escape any that aren't already part of a valid entity
         xml = Regex.Replace(xml, @"&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#[0-9]+|#x[0-9a-fA-F]+);)", "&amp;");
         var doc = XDocument.Parse(xml);
+        var rawCount = doc.Descendants("item").Count();
+        Console.WriteLine($"[Jora] '{keyword}': {rawCount} raw items in feed");
 
         XNamespace? dc = doc.Root?.Attributes()
             .FirstOrDefault(a => a.Value == "http://purl.org/dc/elements/1.1/")
