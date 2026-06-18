@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<ApplicationEvent> ApplicationEvents { get; set; }
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<SystemHealth> SystemHealth { get; set; }
+    public DbSet<DiscoveredPosting> DiscoveredPostings { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
@@ -72,5 +73,12 @@ public class AppDbContext : DbContext
 
         builder.Entity<SystemHealth>()
             .HasIndex(h => h.CheckedAt);
+
+        builder.Entity<DiscoveredPosting>(e =>
+        {
+            e.HasIndex(d => d.Url).IsUnique();
+            e.HasIndex(d => d.DiscoveredAt);
+            e.HasIndex(d => d.Recommendation);
+        });
     }
 }

@@ -8,9 +8,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Anthropic" Version="12.29.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="9.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\skills\**"
+             Link="skills\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToPublishDirectory="Always"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

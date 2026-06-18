@@ -6,4 +6,5 @@ RUN dotnet publish JobSearchAgent/JobSearchAgent.csproj -c Release -o /app/publi
 FROM mcr.microsoft.com/dotnet/runtime:9.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
+COPY --from=build /src/skills /app/skills
 ENTRYPOINT ["dotnet", "JobSearchAgent.dll"]

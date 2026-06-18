@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Text.Json;
+using JobSearch.Api.Services;
 using JobSearch.Data;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -77,6 +79,23 @@ builder.Services.AddAuthentication(o =>
 });
 
 builder.Services.AddAuthorization();
+
+// ---------------------------------------------------------------------------
+// Job search services
+// ---------------------------------------------------------------------------
+var anthropicApiKey = builder.Configuration["ANTHROPIC_API_KEY"]
+    ?? throw new InvalidOperationException("ANTHROPIC_API_KEY not set");
+
+var telegramBotToken = builder.Configuration["TELEGRAM_BOT_TOKEN"]
+    ?? throw new InvalidOperationException("TELEGRAM_BOT_TOKEN not set");
+var telegramWebhookSecret = builder.Configuration["TELEGRAM_WEBHOOK_SECRET"]
+    ?? throw new InvalidOperationException("TELEGRAM_WEBHOOK_SECRET not set");
+var telegramChatId = builder.Configuration["TELEGRAM_CHAT_ID"]
+    ?? throw new InvalidOperationException("TELEGRAM_CHAT_ID not set");
+
+builder.Services.AddSingleton(_ => new JobPostingFetcher());
+builder.Services.AddSingleton(_ => new PostingEvaluator(anthropicApiKey));
+builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
 
 // Trust X-Forwarded-Proto from Railway's load balancer regardless of its IP.
 // KnownNetworks/KnownProxies must be cleared — the default (loopback-only) blocks
@@ -402,6 +421,142 @@ api.MapGet("/health", (AppDbContext db) =>
         ? Results.Json(result, statusCode: 503)
         : Results.Ok(result);
 }).AllowAnonymous(); // UptimeRobot hits this without a session
+
+// ---------------------------------------------------------------------------
+// Telegram webhook — unauthenticated but verified by secret token
+// ---------------------------------------------------------------------------
+app.MapPost("/api/v1/telegram/webhook", async (
+    HttpRequest request,
+    TelegramService telegram,
+    JobPostingFetcher fetcher,
+    PostingEvaluator evaluator) =>
+{
+    var secretHeader = request.Headers["X-Telegram-Bot-Api-Secret-Token"].FirstOrDefault() ?? "";
+    if (!telegram.VerifySecretToken(secretHeader))
+        return Results.Unauthorized();
+
+    JsonElement update;
+    try
+    {
+        update = await JsonSerializer.DeserializeAsync<JsonElement>(request.Body);
+    }
+    catch
+    {
+        return Results.Ok();
+    }
+
+    var (updateId, text) = telegram.ParseUpdate(update);
+
+    // Prevent duplicate processing — Telegram retries if we don't respond within 5 seconds.
+    if (!telegram.TryMarkProcessed(updateId))
+        return Results.Ok();
+
+    // Fire-and-forget: respond 200 immediately, process in background.
+    // All captured variables are Singletons or value types — no HttpContext captured.
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                await telegram.SendMessageAsync("Send me a job posting URL to evaluate.");
+                return;
+            }
+
+            var url = TelegramService.ExtractUrl(text);
+            if (url is null)
+            {
+                await telegram.SendMessageAsync(
+                    "No URL found in your message.\nSend me a LinkedIn, Seek, or other job posting URL.");
+                return;
+            }
+
+            await telegram.SendMessageAsync($"Fetching <code>{url}</code>...");
+
+            string postingText;
+            try
+            {
+                postingText = await fetcher.FetchAsync(url);
+            }
+            catch (Exception ex)
+            {
+                await telegram.SendMessageAsync($"Could not fetch that URL: {ex.Message}");
+                return;
+            }
+
+            await telegram.SendMessageAsync("Evaluating posting...");
+
+            var ev = await evaluator.EvaluateAsync(postingText, url);
+
+            await telegram.SendMessageAsync(FormatEvaluation(ev));
+        }
+        catch (Exception ex)
+        {
+            try { await telegram.SendMessageAsync($"Unexpected error: {ex.Message}"); } catch { }
+        }
+    });
+
+    return Results.Ok();
+}).AllowAnonymous();
+
+static string FormatEvaluation(PostingEvaluation ev)
+{
+    var rec = ev.Recommendation switch
+    {
+        "strong_match" => "STRONG MATCH",
+        "good_match"   => "GOOD MATCH",
+        "weak_match"   => "WEAK MATCH",
+        "discard"      => "DISCARD",
+        _              => ev.Recommendation.ToUpperInvariant(),
+    };
+
+    var lines = new System.Text.StringBuilder();
+    lines.AppendLine($"<b>{ev.Company} — {ev.RoleTitle}</b>");
+    lines.AppendLine($"<b>Recommendation: {rec}</b>");
+
+    if (ev.DisqualifierHit is not null)
+        lines.AppendLine($"Disqualifier: {ev.DisqualifierHit}");
+
+    lines.AppendLine();
+    lines.AppendLine("<b>Dimensions:</b>");
+    lines.AppendLine($"Sponsorship: {ev.SponsorshipVerdict}{(ev.SponsorshipEvidence is not null ? $" ({ev.SponsorshipEvidence})" : "")}");
+    lines.AppendLine($"Location: {ev.LocationDetail} ({ev.LocationMatch})");
+    lines.AppendLine($"Experience: {ev.ExperienceDetail} ({ev.ExperienceMatch})");
+
+    var backend = ev.BackendTechnologies.Length > 0
+        ? string.Join(", ", ev.BackendTechnologies)
+        : "not stated";
+    lines.AppendLine($"Backend: {backend} ({ev.BackendMatch})");
+
+    var frontend = ev.FrontendTechnologies.Length > 0
+        ? string.Join(", ", ev.FrontendTechnologies)
+        : "not stated";
+    lines.AppendLine($"Frontend: {frontend} ({ev.FrontendMatch})");
+
+    lines.AppendLine($"Salary: {ev.SalaryDetail ?? "not stated"} ({ev.SalaryAssessment})");
+    lines.AppendLine($"Company: {ev.CompanyAssessment}");
+    lines.AppendLine($"Role type: {ev.RoleTypeMatch}");
+
+    lines.AppendLine();
+    if (ev.OrangeFlags.Length > 0)
+    {
+        lines.AppendLine("<b>Orange flags:</b>");
+        foreach (var flag in ev.OrangeFlags)
+            lines.AppendLine($"• {flag}");
+    }
+    else
+    {
+        lines.AppendLine("<b>Orange flags:</b> none");
+    }
+
+    lines.AppendLine();
+    lines.AppendLine($"<b>Rationale:</b> {ev.Rationale}");
+
+    if (ev.SourceUrl is not null)
+        lines.AppendLine($"\n<a href=\"{ev.SourceUrl}\">View posting</a>");
+
+    return lines.ToString().TrimEnd();
+}
 
 // Unknown /api/* paths → 404 (prevents SPA fallback returning index.html for bad API calls)
 app.Map("/api/{**rest}", () => Results.NotFound());

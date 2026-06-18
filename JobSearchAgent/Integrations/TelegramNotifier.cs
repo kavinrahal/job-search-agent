@@ -14,15 +14,14 @@ public class TelegramNotifier : IDisposable
         _chatId = chatId;
     }
 
-    public async Task<bool> SendAsync(string message)
+    public async Task<bool> SendAsync(string message, string? parseMode = null)
     {
         try
         {
-            var response = await _http.PostAsJsonAsync($"{_baseUrl}/sendMessage", new
-            {
-                chat_id = _chatId,
-                text = message,
-            });
+            object payload = parseMode is not null
+                ? new { chat_id = _chatId, text = message, parse_mode = parseMode, disable_web_page_preview = true }
+                : (object)new { chat_id = _chatId, text = message };
+            var response = await _http.PostAsJsonAsync($"{_baseUrl}/sendMessage", payload);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex)

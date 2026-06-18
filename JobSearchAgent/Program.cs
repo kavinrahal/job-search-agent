@@ -3,6 +3,7 @@ using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
 using JobSearchAgent.Models;
 using JobSearchAgent.Storage;
+using JobSearchAgent.Workers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
@@ -170,6 +171,27 @@ if (botToken is not null && chatId is not null)
         db.SaveChanges();
         Console.WriteLine($"Telegram: {sent}/{pending.Count} notification(s) sent.");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Job discovery — poll Seek RSS, evaluate new postings, notify on matches
+// ---------------------------------------------------------------------------
+if (!testMode)
+{
+    Console.WriteLine();
+    using var discoveryTelegram = botToken is not null && chatId is not null
+        ? new TelegramNotifier(botToken, chatId)
+        : null;
+
+    var discovery = new JobDiscoveryWorker(
+        db,
+        new SeekRssFetcher(),
+        new JobPostingFetcher(),
+        new PostingEvaluator(apiKey),
+        discoveryTelegram);
+
+    var (discovered, evaluated, notified) = await discovery.RunAsync();
+    Console.WriteLine($"Job discovery: {discovered} new, {evaluated} evaluated, {notified} notified.");
 }
 
 if (jobRelated.Count > 0)

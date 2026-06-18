@@ -18,4 +18,5 @@ RUN dotnet publish JobSearch.Api/JobSearch.Api.csproj -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
 WORKDIR /app
 COPY --from=api-build /app/publish .
+COPY --from=api-build /src/skills /app/skills
 ENTRYPOINT ["dotnet", "JobSearch.Api.dll"]
