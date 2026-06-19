@@ -20,6 +20,10 @@ public class JobAlertProcessor
         @"https?://(?:www\.)?linkedin\.com/jobs/view/(\d+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex JoraPattern = new(
+        @"https?://au\.jora\.com/job/([A-Za-z0-9_-]+)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private readonly AppDbContext _db;
     private readonly JobPostingFetcher _fetcher;
     private readonly PostingEvaluator _evaluator;
@@ -54,6 +58,11 @@ public class JobAlertProcessor
             {
                 var canonical = $"https://www.linkedin.com/jobs/view/{m.Groups[1].Value}";
                 urls.TryAdd(canonical, "linkedin_alert");
+            }
+            foreach (Match m in JoraPattern.Matches(email.BodyText))
+            {
+                var canonical = $"https://au.jora.com/job/{m.Groups[1].Value}";
+                urls.TryAdd(canonical, "jora_alert");
             }
         }
 

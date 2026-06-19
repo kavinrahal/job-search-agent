@@ -49,7 +49,7 @@ An email that requires the candidate to take some action to progress.
 An automated digest or notification from a job board listing new job postings that match a saved search. The email is from the platform itself (Seek, LinkedIn, Indeed, etc.), not from a company or recruiter.
 - "New jobs matching your search: Software Engineer in Melbourne"
 - "5 new jobs for your saved search"
-- Seek, LinkedIn, or Indeed job alert digest emails
+- Seek, LinkedIn, Indeed, or Jora job alert digest emails
 
 ## Not Job-Search Related
 
