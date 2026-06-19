@@ -293,8 +293,8 @@ api.MapGet("/emails", (
     string? to = null) =>
 {
     var validCategories = new HashSet<string>
-        { "job_listing", "application_update", "recruiter_outreach", "interview_invite",
-          "offer", "rejection", "not_relevant", "other" };
+        { "application_confirmation", "rejection", "interview_invitation", "recruiter_outreach",
+          "scheduling_request", "offer", "follow_up_needed", "job_alert", "not_relevant" };
     if (category is not null && !validCategories.Contains(category))
         return Results.BadRequest(new { error = "Invalid category" });
 

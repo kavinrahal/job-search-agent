@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Anthropic;
 using Anthropic.Models.Messages;
+using JobSearch.Data;
 using JobSearchAgent.Models;
 
 namespace JobSearchAgent.Agents;
@@ -26,7 +27,7 @@ public class EmailClassifier
     {
         _client = new AnthropicClient { ApiKey = apiKey };
 
-        string categoriesText = LoadSkill("email_categories.md");
+        string categoriesText = SkillLoader.Load("email_categories.md");
         _systemPrompt = $"""
             You are an email classifier for a software engineer's active job search.
             Classify each email based on its full content and context, not on individual keywords.
@@ -160,16 +161,5 @@ public class EmailClassifier
         return [.. results.Where(r => r.HasValue).Select(r => r!.Value)];
     }
 
-    private static string LoadSkill(string filename)
-    {
-        // Walk up from the working directory to find the skills/ folder
-        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-        while (dir != null)
-        {
-            string path = Path.Combine(dir.FullName, "skills", filename);
-            if (File.Exists(path)) return File.ReadAllText(path);
-            dir = dir.Parent;
-        }
-        throw new FileNotFoundException($"skills/{filename} not found in any ancestor directory.");
-    }
+
 }

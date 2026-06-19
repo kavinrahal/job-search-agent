@@ -1,33 +1,9 @@
 using System.Text.Json;
 using Anthropic;
 using Anthropic.Models.Messages;
+using JobSearch.Data;
 
 namespace JobSearchAgent.Agents;
-
-public class PostingEvaluation
-{
-    public string Company { get; init; } = "";
-    public string RoleTitle { get; init; } = "";
-    public string? SourceUrl { get; init; }
-    public string Recommendation { get; init; } = "";
-    public string? DisqualifierHit { get; init; }
-    public string SponsorshipVerdict { get; init; } = "";
-    public string? SponsorshipEvidence { get; init; }
-    public string LocationMatch { get; init; } = "";
-    public string LocationDetail { get; init; } = "";
-    public string ExperienceMatch { get; init; } = "";
-    public string ExperienceDetail { get; init; } = "";
-    public string BackendMatch { get; init; } = "";
-    public string[] BackendTechnologies { get; init; } = [];
-    public string FrontendMatch { get; init; } = "";
-    public string[] FrontendTechnologies { get; init; } = [];
-    public string SalaryAssessment { get; init; } = "";
-    public string? SalaryDetail { get; init; }
-    public string CompanyAssessment { get; init; } = "";
-    public string RoleTypeMatch { get; init; } = "";
-    public string[] OrangeFlags { get; init; } = [];
-    public string Rationale { get; init; } = "";
-}
 
 public class PostingEvaluator
 {
@@ -41,8 +17,8 @@ public class PostingEvaluator
     {
         _client = new AnthropicClient { ApiKey = apiKey };
 
-        string skillText = LoadSkill("evaluate_posting.md");
-        string criteriaText = LoadSkill("context/job_criteria.yaml");
+        string skillText = SkillLoader.Load("evaluate_posting.md");
+        string criteriaText = SkillLoader.Load("context/job_criteria.yaml");
 
         _systemPrompt = $"""
             {skillText}
@@ -175,16 +151,4 @@ public class PostingEvaluator
             description,
             items = new { type = "string" },
         });
-
-    private static string LoadSkill(string filename)
-    {
-        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-        while (dir != null)
-        {
-            string path = Path.Combine(dir.FullName, "skills", filename);
-            if (File.Exists(path)) return File.ReadAllText(path);
-            dir = dir.Parent;
-        }
-        throw new FileNotFoundException($"skills/{filename} not found in any ancestor directory.");
-    }
 }

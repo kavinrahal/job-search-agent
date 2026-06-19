@@ -1,13 +1,10 @@
 using System.Text.RegularExpressions;
 
-namespace JobSearchAgent.Integrations;
+namespace JobSearch.Data;
 
 public class JobPostingFetcher
 {
-    private static readonly HttpClient _http = new()
-    {
-        Timeout = TimeSpan.FromSeconds(20),
-    };
+    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
 
     static JobPostingFetcher()
     {
@@ -30,18 +27,14 @@ public class JobPostingFetcher
         html = Regex.Replace(html,
             @"<(script|style|noscript)[^>]*>[\s\S]*?</(script|style|noscript)>",
             " ", RegexOptions.IgnoreCase);
-
         html = Regex.Replace(html, @"<!--[\s\S]*?-->", " ");
-
         html = Regex.Replace(html,
             @"<(br|p|div|li|h[1-6]|tr|td|th|section|article|header|footer)[^>]*>",
             "\n", RegexOptions.IgnoreCase);
-
         html = Regex.Replace(html, @"<[^>]+>", " ");
         html = System.Net.WebUtility.HtmlDecode(html);
         html = Regex.Replace(html, @"[ \t]{2,}", " ");
         html = Regex.Replace(html, @"\n{3,}", "\n\n");
-
         return html.Trim();
     }
 }
