@@ -185,6 +185,23 @@ var tracking = ApplicationTracker.ProcessClassifications(db, results);
 if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
     Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
 
+// Process job alert emails — extract job URLs, fetch, evaluate, notify
+var alertEmails = results
+    .Where(r => r.Classification.Category == "job_alert")
+    .Select(r => r.Email)
+    .ToList();
+
+if (alertEmails.Count > 0)
+{
+    Console.WriteLine($"Found {alertEmails.Count} job alert email(s), processing...");
+    using var alertTelegram = botToken is not null && chatId is not null
+        ? new TelegramNotifier(botToken, chatId) : null;
+    var alertProcessor = new JobAlertProcessor(
+        db, new JobPostingFetcher(), new PostingEvaluator(apiKey), alertTelegram);
+    var (found, evaluated, notified) = await alertProcessor.ProcessAsync(alertEmails);
+    Console.WriteLine($"Job alerts: {found} URLs, {evaluated} evaluated, {notified} notified.");
+}
+
 if (botToken is not null && chatId is not null)
 {
     var pending = db.Notifications.Where(n => n.SentAt == null).ToList();
@@ -217,6 +234,7 @@ if (jobRelated.Count > 0)
         ["scheduling_request"]       = "Scheduling request",
         ["offer"]                    = "Offer",
         ["follow_up_needed"]         = "Action needed",
+        ["job_alert"]                = "Job alert",
         ["not_relevant"]             = "Not relevant",
     };
 

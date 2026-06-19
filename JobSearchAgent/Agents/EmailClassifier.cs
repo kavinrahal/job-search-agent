@@ -55,7 +55,7 @@ public class EmailClassifier
                         {
                             "application_confirmation", "rejection", "interview_invitation",
                             "recruiter_outreach", "scheduling_request", "offer",
-                            "follow_up_needed", "not_relevant",
+                            "follow_up_needed", "job_alert", "not_relevant",
                         },
                     }),
                     ["confidence"] = JsonSerializer.SerializeToElement(new
