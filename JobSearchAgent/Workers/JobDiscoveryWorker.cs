@@ -11,19 +11,24 @@ public class JobDiscoveryWorker
     private const int MaxPerRun = 20;
     private const int MaxAgeDays = 14;
 
+    private const int FullFetchThreshold = 400; // chars — below this, attempt a full page fetch
+
     private readonly AppDbContext _db;
     private readonly IEnumerable<IJobFetcher> _fetchers;
+    private readonly JobPostingFetcher _pageFetcher;
     private readonly PostingEvaluator _evaluator;
     private readonly TelegramNotifier? _telegram;
 
     public JobDiscoveryWorker(
         AppDbContext db,
         IEnumerable<IJobFetcher> fetchers,
+        JobPostingFetcher pageFetcher,
         PostingEvaluator evaluator,
         TelegramNotifier? telegram)
     {
         _db = db;
         _fetchers = fetchers;
+        _pageFetcher = pageFetcher;
         _evaluator = evaluator;
         _telegram = telegram;
     }
@@ -81,7 +86,24 @@ public class JobDiscoveryWorker
             {
                 Console.WriteLine($"  [{evaluated + 1}/{newItems.Count}] {item.Title}");
 
-                var postingText = FormatPostingText(item);
+                string postingText;
+                if (item.Description.Length < FullFetchThreshold)
+                {
+                    try
+                    {
+                        postingText = await _pageFetcher.FetchAsync(item.Url);
+                        Console.WriteLine($"    (fetched full page — {postingText.Length} chars)");
+                    }
+                    catch
+                    {
+                        postingText = FormatPostingText(item);
+                        Console.WriteLine($"    (full fetch failed, using feed description)");
+                    }
+                }
+                else
+                {
+                    postingText = FormatPostingText(item);
+                }
                 var eval = await _evaluator.EvaluateAsync(postingText, item.Url);
 
                 record.Company = eval.Company;

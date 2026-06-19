@@ -147,6 +147,7 @@ if (!testMode)
                 new GreenhouseFetcher(),
                 new LeverFetcher(),
             ],
+            new JobPostingFetcher(),
             new PostingEvaluator(apiKey),
             discoveryTelegram);
 

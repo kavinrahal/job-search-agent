@@ -29,8 +29,13 @@ public class EmailClassifier
         string categoriesText = LoadSkill("email_categories.md");
         _systemPrompt = $"""
             You are an email classifier for a software engineer's active job search.
-            Determine whether each email is job-search related and assign the appropriate category.
-            Be conservative: only mark an email as job-related if it clearly relates to employment, applications, or recruitment.
+            Classify each email based on its full content and context, not on individual keywords.
+
+            Rules:
+            - Only mark an email as job-related if it clearly relates to employment, job applications, or recruitment.
+            - The word "offer" alone is not sufficient — it must be an employment offer from a hiring process the candidate is part of. Retail promotions, store discounts, and commercial marketing emails are not_relevant even if they use the word "offer".
+            - Read the sender and subject carefully. Emails from retailers, banks, newsletters, or subscription services are not_relevant regardless of wording.
+            - When in doubt, choose not_relevant.
 
             {categoriesText}
             """;

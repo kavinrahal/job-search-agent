@@ -33,10 +33,16 @@ A request to find or confirm a time for an upcoming call or interview.
 - Calendly, Greenhouse, or other scheduling tool invitations
 
 ### offer
-A formal or informal job offer, or notification that an offer is being prepared.
+A formal or informal **employment** offer from a company, or notification that an employment offer is being prepared. The email must come from a company or recruiter in the context of a hiring process that the candidate is involved in.
 - "We're pleased to offer you the position of..."
-- "We'd like to extend an offer"
-- Offer letter or contract attached
+- "We'd like to extend an offer of employment"
+- Offer letter or employment contract attached
+
+**NOT this category (mark as not_relevant):**
+- Retail discounts, store promotions, or sales ("special offer", "exclusive deal", "members offer")
+- Software or subscription offers
+- Any commercial or marketing email, regardless of the word "offer" appearing in it
+- Cold outreach from recruiters pitching a role (that is recruiter_outreach, not offer)
 
 ### follow_up_needed
 An email that requires the candidate to take some action to progress.
