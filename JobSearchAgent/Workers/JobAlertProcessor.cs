@@ -13,7 +13,7 @@ public class JobAlertProcessor
     private const int MaxPerRun = 30;
 
     private static readonly Regex SeekPattern = new(
-        @"https?://(?:www\.)?seek\.com\.au/job/(\d+)",
+        @"https?://(?:www\.seek\.com\.au|au\.seek\.com)/job/(\d+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex LinkedInPattern = new(
@@ -47,7 +47,7 @@ public class JobAlertProcessor
         {
             foreach (Match m in SeekPattern.Matches(email.BodyText))
             {
-                var canonical = $"https://www.seek.com.au/job/{m.Groups[1].Value}";
+                var canonical = $"https://au.seek.com/job/{m.Groups[1].Value}";
                 urls.TryAdd(canonical, "seek_alert");
             }
             foreach (Match m in LinkedInPattern.Matches(email.BodyText))
