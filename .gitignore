@@ -34,13 +34,9 @@ Thumbs.db
 .vs/
 
 # C#
-JobSearchAgent/bin/
-JobSearchAgent/obj/
-JobSearchAgent/*.csproj.user
-JobSearch.Api/bin/
-JobSearch.Api/obj/
-JobSearch.Data/bin/
-JobSearch.Data/obj/
+**/bin/
+**/obj/
+**/*.csproj.user
 
 # Node
 node_modules/
