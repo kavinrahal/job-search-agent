@@ -12,13 +12,18 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="9.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.5" />
+    <PackageReference Include="Roslynator.Analyzers" Version="4.15.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.27.0.140913">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\skills\**"
-             Link="skills\%(RecursiveDir)%(Filename)%(Extension)"
-             CopyToPublishDirectory="Always"
-             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\skills\**" Link="skills\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="Always" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

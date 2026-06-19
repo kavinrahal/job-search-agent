@@ -1,0 +1,11 @@
+rules: []
+# Run: semgrep --config=auto .
+# This file exists so Semgrep picks up the repo root correctly.
+# The auto config pulls OWASP, security, and correctness rules
+# for C# and TypeScript automatically.
+#
+# Useful one-off commands:
+#   semgrep --config=p/csharp .
+#   semgrep --config=p/typescript .
+#   semgrep --config=p/owasp-top-ten .
+#   semgrep --config=p/secrets .
