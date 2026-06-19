@@ -41,30 +41,25 @@ public class JobAlertProcessor
         _telegram = telegram;
     }
 
+    internal static Dictionary<string, string> ExtractJobUrls(IEnumerable<RawEmail> emails)
+    {
+        var urls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var email in emails)
+        {
+            foreach (Match m in SeekPattern.Matches(email.BodyText))
+                urls.TryAdd($"https://au.seek.com/job/{m.Groups[1].Value}", "seek_alert");
+            foreach (Match m in LinkedInPattern.Matches(email.BodyText))
+                urls.TryAdd($"https://www.linkedin.com/jobs/view/{m.Groups[1].Value}", "linkedin_alert");
+            foreach (Match m in JoraPattern.Matches(email.BodyText))
+                urls.TryAdd($"https://au.jora.com/job/{m.Groups[1].Value}", "jora_alert");
+        }
+        return urls;
+    }
+
     public async Task<(int Found, int Evaluated, int Notified)> ProcessAsync(
         IEnumerable<RawEmail> alertEmails)
     {
-        // Extract and normalise job URLs from all alert emails
-        var urls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var email in alertEmails)
-        {
-            foreach (Match m in SeekPattern.Matches(email.BodyText))
-            {
-                var canonical = $"https://au.seek.com/job/{m.Groups[1].Value}";
-                urls.TryAdd(canonical, "seek_alert");
-            }
-            foreach (Match m in LinkedInPattern.Matches(email.BodyText))
-            {
-                var canonical = $"https://www.linkedin.com/jobs/view/{m.Groups[1].Value}";
-                urls.TryAdd(canonical, "linkedin_alert");
-            }
-            foreach (Match m in JoraPattern.Matches(email.BodyText))
-            {
-                var canonical = $"https://au.jora.com/job/{m.Groups[1].Value}";
-                urls.TryAdd(canonical, "jora_alert");
-            }
-        }
+        var urls = ExtractJobUrls(alertEmails);
 
         if (urls.Count == 0)
         {
