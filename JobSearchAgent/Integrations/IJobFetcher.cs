@@ -1,3 +1,6 @@
+using System.Net;
+using System.Text.RegularExpressions;
+
 namespace JobSearchAgent.Integrations;
 
 public class JobFeedItem
@@ -16,4 +19,17 @@ public class JobFeedItem
 public interface IJobFetcher
 {
     Task<List<JobFeedItem>> FetchAllAsync();
+}
+
+internal static class JobFetcherUtils
+{
+    internal static readonly string[] AuLocationTokens =
+        ["melbourne", "vic", "victoria", "australia", "remote", "hybrid"];
+
+    internal static string StripHtml(string html)
+    {
+        var text = Regex.Replace(html, @"<[^>]+>", " ");
+        text = WebUtility.HtmlDecode(text);
+        return Regex.Replace(text, @"\s{2,}", " ").Trim();
+    }
 }

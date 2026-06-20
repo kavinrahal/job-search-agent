@@ -2,7 +2,6 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 
 namespace JobSearchAgent.Integrations;
 
@@ -21,9 +20,6 @@ public class LeverFetcher : IJobFetcher
         { "redbubble",    "Redbubble"    },
         { "squarespace",  "Squarespace"  },
     };
-
-    private static readonly string[] AuLocationTokens =
-        ["melbourne", "vic", "victoria", "australia", "remote", "hybrid"];
 
     public async Task<List<JobFeedItem>> FetchAllAsync()
     {
@@ -72,7 +68,7 @@ public class LeverFetcher : IJobFetcher
                 Url         = p.HostedUrl,
                 Description = !string.IsNullOrEmpty(p.DescriptionPlain)
                     ? p.DescriptionPlain
-                    : StripHtml(p.Description ?? ""),
+                    : JobFetcherUtils.StripHtml(p.Description ?? ""),
                 Location    = p.Categories?.Location ?? "",
                 PublishedAt = DateTimeOffset.FromUnixTimeMilliseconds(p.CreatedAt).UtcDateTime,
                 Source      = "lever",
@@ -83,14 +79,7 @@ public class LeverFetcher : IJobFetcher
     {
         if (string.IsNullOrWhiteSpace(location)) return true;
         var lower = location.ToLowerInvariant();
-        return AuLocationTokens.Any(lower.Contains);
-    }
-
-    private static string StripHtml(string html)
-    {
-        var text = Regex.Replace(html, @"<[^>]+>", " ");
-        text = WebUtility.HtmlDecode(text);
-        return Regex.Replace(text, @"\s{2,}", " ").Trim();
+        return JobFetcherUtils.AuLocationTokens.Any(lower.Contains);
     }
 
     private record LeverPosting(

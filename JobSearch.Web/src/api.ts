@@ -18,6 +18,14 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
+function qs(params: object): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params))
+    if (v != null && v !== false) q.set(k, String(v));
+  const s = q.toString();
+  return s ? "?" + s : "";
+}
+
 export async function fetchSummary(): Promise<Summary> {
   return get("/summary");
 }
@@ -32,14 +40,7 @@ export interface EmailsParams {
 }
 
 export async function fetchEmails(params: EmailsParams = {}): Promise<EmailsResponse> {
-  const q = new URLSearchParams();
-  if (params.page) q.set("page", String(params.page));
-  if (params.pageSize) q.set("pageSize", String(params.pageSize));
-  if (params.category) q.set("category", params.category);
-  if (params.jobRelatedOnly) q.set("jobRelatedOnly", "true");
-  if (params.from) q.set("from", params.from);
-  if (params.to) q.set("to", params.to);
-  return get(`/emails?${q}`);
+  return get(`/emails${qs(params)}`);
 }
 
 export async function fetchApplications(params: {
@@ -47,11 +48,7 @@ export async function fetchApplications(params: {
   page?: number;
   pageSize?: number;
 } = {}): Promise<ApplicationsResponse> {
-  const q = new URLSearchParams();
-  if (params.status) q.set("status", params.status);
-  if (params.page) q.set("page", String(params.page));
-  if (params.pageSize) q.set("pageSize", String(params.pageSize));
-  return get(`/applications?${q}`);
+  return get(`/applications${qs(params)}`);
 }
 
 export async function fetchApplicationEvents(id: number): Promise<ApplicationWithEvents> {
@@ -74,11 +71,7 @@ export async function fetchDiscoveries(params: {
   page?: number;
   pageSize?: number;
 } = {}): Promise<DiscoveriesResponse> {
-  const q = new URLSearchParams();
-  if (params.recommendation) q.set("recommendation", params.recommendation);
-  if (params.page) q.set("page", String(params.page));
-  if (params.pageSize) q.set("pageSize", String(params.pageSize));
-  return get(`/discoveries?${q}`);
+  return get(`/discoveries${qs(params)}`);
 }
 
 export async function fetchMe(): Promise<{ email: string }> {

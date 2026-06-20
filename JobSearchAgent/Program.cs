@@ -2,7 +2,6 @@ using JobSearch.Data;
 using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
 using JobSearchAgent.Models;
-using JobSearchAgent.Storage;
 using JobSearchAgent.Workers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -87,7 +86,8 @@ else if (days.HasValue)
 }
 else
 {
-    since = EmailRepository.GetLatestReceivedAt(db);
+    var latestRaw = db.RawEmails.OrderByDescending(r => r.ReceivedAt).Select(r => (DateTime?)r.ReceivedAt).FirstOrDefault();
+    since = latestRaw is DateTime d ? new DateTimeOffset(d, TimeSpan.Zero) : null;
     string label = since.HasValue
         ? since.Value.ToString("yyyy-MM-dd HH:mm UTC")
         : "last 24 hours";
@@ -98,7 +98,21 @@ var emails = await gmail.FetchEmailsSinceAsync(since, until: toDate);
 
 // Always upsert (idempotent)
 foreach (var email in emails)
-    EmailRepository.UpsertRawEmail(db, email);
+{
+    if (!db.RawEmails.Any(r => r.MessageId == email.MessageId))
+    {
+        db.RawEmails.Add(new RawEmailRecord
+        {
+            MessageId   = email.MessageId,
+            ThreadId    = email.ThreadId,
+            FromAddress = email.FromAddress,
+            Subject     = email.Subject,
+            BodyText    = email.BodyText,
+            ReceivedAt  = email.ReceivedAt.UtcDateTime,
+        });
+        db.SaveChanges();
+    }
+}
 
 // Determine what to classify
 List<RawEmail> emailsToClassify;
@@ -111,7 +125,13 @@ else
     // Newly fetched emails newer than the checkpoint
     var fresh = since.HasValue ? emails.Where(e => e.ReceivedAt > since.Value).ToList() : emails;
     // Plus any stored emails that were never classified
-    var unclassified = EmailRepository.GetUnclassified(db);
+    var unclassified = db.RawEmails
+        .Where(r => !db.Classifications.Any(c => c.MessageId == r.MessageId))
+        .AsEnumerable()
+        .Select(r => new RawEmail(
+            r.MessageId, r.ThreadId, r.FromAddress, r.Subject, r.BodyText,
+            new DateTimeOffset(r.ReceivedAt, TimeSpan.Zero)))
+        .ToList();
     var seen = new HashSet<string>(fresh.Select(e => e.MessageId));
     emailsToClassify = fresh.Concat(unclassified.Where(e => !seen.Contains(e.MessageId))).ToList();
 }
@@ -174,7 +194,34 @@ if (emailsToClassify.Count == 0)
 var classifier = new EmailClassifier(apiKey);
 var results = await classifier.ClassifyBatchAsync(emailsToClassify);
 
-EmailRepository.SaveClassifications(db, results.Select(r => (r.Email.MessageId, r.Classification)));
+var now = DateTime.UtcNow;
+foreach (var (email, clf) in results)
+{
+    var existing = db.Classifications.FirstOrDefault(c => c.MessageId == email.MessageId);
+    if (existing is not null)
+    {
+        existing.IsJobRelated = clf.IsJobRelated;
+        existing.Category     = clf.Category;
+        existing.Confidence   = clf.Confidence;
+        existing.Company      = clf.Company;
+        existing.RoleTitle    = clf.RoleTitle;
+        existing.ClassifiedAt = now;
+    }
+    else
+    {
+        db.Classifications.Add(new ClassificationRecord
+        {
+            MessageId    = email.MessageId,
+            IsJobRelated = clf.IsJobRelated,
+            Category     = clf.Category,
+            Confidence   = clf.Confidence,
+            Company      = clf.Company,
+            RoleTitle    = clf.RoleTitle,
+            ClassifiedAt = now,
+        });
+    }
+}
+db.SaveChanges();
 
 var jobRelated = results.Where(r => r.Classification.IsJobRelated).ToList();
 int notRelevantCount = results.Count - jobRelated.Count;

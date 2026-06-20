@@ -546,7 +546,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
 
             var ev = await evaluator.EvaluateAsync(postingText, url);
 
-            await telegram.SendMessageAsync(FormatEvaluation(ev));
+            await telegram.SendMessageAsync(EvalFormatter.Format(ev));
         }
         catch (Exception ex)
         {
@@ -556,65 +556,6 @@ app.MapPost("/api/v1/telegram/webhook", async (
 
     return Results.Ok();
 }).AllowAnonymous();
-
-static string FormatEvaluation(PostingEvaluation ev)
-{
-    var rec = ev.Recommendation switch
-    {
-        "strong_match" => "STRONG MATCH",
-        "good_match"   => "GOOD MATCH",
-        "weak_match"   => "WEAK MATCH",
-        "discard"      => "DISCARD",
-        _              => ev.Recommendation.ToUpperInvariant(),
-    };
-
-    var lines = new System.Text.StringBuilder();
-    lines.AppendLine($"<b>{ev.Company} — {ev.RoleTitle}</b>");
-    lines.AppendLine($"<b>Recommendation: {rec}</b>");
-
-    if (ev.DisqualifierHit is not null)
-        lines.AppendLine($"Disqualifier: {ev.DisqualifierHit}");
-
-    lines.AppendLine();
-    lines.AppendLine("<b>Dimensions:</b>");
-    lines.AppendLine($"Sponsorship: {ev.SponsorshipVerdict}{(ev.SponsorshipEvidence is not null ? $" ({ev.SponsorshipEvidence})" : "")}");
-    lines.AppendLine($"Location: {ev.LocationDetail} ({ev.LocationMatch})");
-    lines.AppendLine($"Experience: {ev.ExperienceDetail} ({ev.ExperienceMatch})");
-
-    var backend = ev.BackendTechnologies.Length > 0
-        ? string.Join(", ", ev.BackendTechnologies)
-        : "not stated";
-    lines.AppendLine($"Backend: {backend} ({ev.BackendMatch})");
-
-    var frontend = ev.FrontendTechnologies.Length > 0
-        ? string.Join(", ", ev.FrontendTechnologies)
-        : "not stated";
-    lines.AppendLine($"Frontend: {frontend} ({ev.FrontendMatch})");
-
-    lines.AppendLine($"Salary: {ev.SalaryDetail ?? "not stated"} ({ev.SalaryAssessment})");
-    lines.AppendLine($"Company: {ev.CompanyAssessment}");
-    lines.AppendLine($"Role type: {ev.RoleTypeMatch}");
-
-    lines.AppendLine();
-    if (ev.OrangeFlags.Length > 0)
-    {
-        lines.AppendLine("<b>Orange flags:</b>");
-        foreach (var flag in ev.OrangeFlags)
-            lines.AppendLine($"• {flag}");
-    }
-    else
-    {
-        lines.AppendLine("<b>Orange flags:</b> none");
-    }
-
-    lines.AppendLine();
-    lines.AppendLine($"<b>Rationale:</b> {ev.Rationale}");
-
-    if (ev.SourceUrl is not null)
-        lines.AppendLine($"\n<a href=\"{ev.SourceUrl}\">View posting</a>");
-
-    return lines.ToString().TrimEnd();
-}
 
 // Unknown /api/* paths → 404 (prevents SPA fallback returning index.html for bad API calls)
 app.Map("/api/{**rest}", () => Results.NotFound());

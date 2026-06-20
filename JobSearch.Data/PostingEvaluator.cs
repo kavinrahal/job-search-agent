@@ -1,9 +1,8 @@
 using System.Text.Json;
 using Anthropic;
 using Anthropic.Models.Messages;
-using JobSearch.Data;
 
-namespace JobSearchAgent.Agents;
+namespace JobSearch.Data;
 
 public class PostingEvaluator
 {

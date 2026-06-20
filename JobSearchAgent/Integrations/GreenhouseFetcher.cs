@@ -2,7 +2,6 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 
 namespace JobSearchAgent.Integrations;
 
@@ -26,9 +25,6 @@ public class GreenhouseFetcher : IJobFetcher
         { "octopusdeploy", "Octopus Deploy" },
         { "realestate",    "REA Group"      },
     };
-
-    private static readonly string[] AuLocationTokens =
-        ["melbourne", "vic", "victoria", "australia", "remote", "hybrid"];
 
     public async Task<List<JobFeedItem>> FetchAllAsync()
     {
@@ -75,7 +71,7 @@ public class GreenhouseFetcher : IJobFetcher
                 Title       = j.Title,
                 Company     = displayName,
                 Url         = j.AbsoluteUrl,
-                Description = StripHtml(j.Content ?? ""),
+                Description = JobFetcherUtils.StripHtml(j.Content ?? ""),
                 Location    = j.Location?.Name ?? "",
                 PublishedAt = j.UpdatedAt,
                 Source      = "greenhouse",
@@ -86,14 +82,7 @@ public class GreenhouseFetcher : IJobFetcher
     {
         if (string.IsNullOrWhiteSpace(location)) return true;
         var lower = location.ToLowerInvariant();
-        return AuLocationTokens.Any(lower.Contains);
-    }
-
-    private static string StripHtml(string html)
-    {
-        var text = Regex.Replace(html, @"<[^>]+>", " ");
-        text = WebUtility.HtmlDecode(text);
-        return Regex.Replace(text, @"\s{2,}", " ").Trim();
+        return JobFetcherUtils.AuLocationTokens.Any(lower.Contains);
     }
 
     private record GreenhouseResponse(

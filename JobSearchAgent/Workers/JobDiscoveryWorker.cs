@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using JobSearch.Data;
 using JobSearchAgent.Agents;
@@ -120,7 +119,7 @@ public class JobDiscoveryWorker
                 if (_telegram is not null &&
                     (eval.Recommendation is "strong_match" or "good_match"))
                 {
-                    if (await _telegram.SendAsync(FormatNotification(eval), "HTML"))
+                    if (await _telegram.SendAsync(EvalFormatter.Format(eval), "HTML"))
                     {
                         record.NotificationSent = true;
                         _db.SaveChanges();
@@ -160,54 +159,4 @@ public class JobDiscoveryWorker
             """;
     }
 
-    private static string FormatNotification(PostingEvaluation ev)
-    {
-        var rec = ev.Recommendation switch
-        {
-            "strong_match" => "STRONG MATCH",
-            "good_match"   => "GOOD MATCH",
-            _              => ev.Recommendation.ToUpperInvariant(),
-        };
-
-        var sb = new StringBuilder();
-        sb.AppendLine($"<b>{ev.Company} — {ev.RoleTitle}</b>");
-        sb.AppendLine($"<b>Recommendation: {rec}</b>");
-        sb.AppendLine();
-        sb.AppendLine("<b>Dimensions:</b>");
-        sb.AppendLine($"Sponsorship: {ev.SponsorshipVerdict}");
-        sb.AppendLine($"Location: {ev.LocationDetail} ({ev.LocationMatch})");
-        sb.AppendLine($"Experience: {ev.ExperienceDetail} ({ev.ExperienceMatch})");
-
-        var backend = ev.BackendTechnologies.Length > 0
-            ? string.Join(", ", ev.BackendTechnologies)
-            : "not stated";
-        sb.AppendLine($"Backend: {backend} ({ev.BackendMatch})");
-
-        var frontend = ev.FrontendTechnologies.Length > 0
-            ? string.Join(", ", ev.FrontendTechnologies)
-            : "not stated";
-        sb.AppendLine($"Frontend: {frontend} ({ev.FrontendMatch})");
-
-        sb.AppendLine($"Salary: {ev.SalaryDetail ?? "not stated"} ({ev.SalaryAssessment})");
-        sb.AppendLine();
-
-        if (ev.OrangeFlags.Length > 0)
-        {
-            sb.AppendLine("<b>Orange flags:</b>");
-            foreach (var flag in ev.OrangeFlags)
-                sb.AppendLine($"• {flag}");
-        }
-        else
-        {
-            sb.AppendLine("<b>Orange flags:</b> none");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine($"<b>Rationale:</b> {ev.Rationale}");
-
-        if (ev.SourceUrl is not null)
-            sb.Append($"\n<a href=\"{ev.SourceUrl}\">View posting</a>");
-
-        return sb.ToString().TrimEnd();
-    }
 }

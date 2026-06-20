@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using JobSearch.Data;
@@ -116,7 +115,7 @@ public class JobAlertProcessor
                 if (_telegram is not null &&
                     eval.Recommendation is "strong_match" or "good_match")
                 {
-                    if (await _telegram.SendAsync(FormatNotification(eval), "HTML"))
+                    if (await _telegram.SendAsync(EvalFormatter.Format(eval, "via job alert"), "HTML"))
                     {
                         record.NotificationSent = true;
                         _db.SaveChanges();
@@ -138,42 +137,4 @@ public class JobAlertProcessor
         return (urls.Count, evaluated, notified);
     }
 
-    private static string FormatNotification(PostingEvaluation ev)
-    {
-        var rec = ev.Recommendation switch
-        {
-            "strong_match" => "STRONG MATCH",
-            "good_match"   => "GOOD MATCH",
-            _              => ev.Recommendation?.ToUpperInvariant() ?? "",
-        };
-
-        var sb = new StringBuilder();
-        sb.AppendLine($"<b>{ev.Company} — {ev.RoleTitle}</b>");
-        sb.AppendLine($"<b>{rec}</b> (via job alert)");
-        sb.AppendLine();
-        sb.AppendLine($"Location: {ev.LocationDetail} ({ev.LocationMatch})");
-        sb.AppendLine($"Experience: {ev.ExperienceDetail} ({ev.ExperienceMatch})");
-
-        var backend = ev.BackendTechnologies.Length > 0
-            ? string.Join(", ", ev.BackendTechnologies) : "not stated";
-        sb.AppendLine($"Backend: {backend} ({ev.BackendMatch})");
-
-        sb.AppendLine($"Salary: {ev.SalaryDetail ?? "not stated"} ({ev.SalaryAssessment})");
-
-        if (ev.OrangeFlags.Length > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("<b>Orange flags:</b>");
-            foreach (var flag in ev.OrangeFlags)
-                sb.AppendLine($"• {flag}");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine($"<b>Rationale:</b> {ev.Rationale}");
-
-        if (ev.SourceUrl is not null)
-            sb.Append($"\n<a href=\"{ev.SourceUrl}\">View posting</a>");
-
-        return sb.ToString().TrimEnd();
-    }
 }
