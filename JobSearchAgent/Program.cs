@@ -179,6 +179,8 @@ if (!testMode)
 if (emailsToClassify.Count == 0)
 {
     Console.WriteLine("Nothing to classify.");
+    if (!testMode)
+        await RunAlertProcessing();
     db.SystemHealth.Add(new JobSearch.Data.SystemHealth
     {
         CheckedAt = DateTime.UtcNow,
@@ -233,22 +235,10 @@ var tracking = ApplicationTracker.ProcessClassifications(db, results);
 if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
     Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
 
-// Process job alert emails — extract job URLs, fetch, evaluate, notify
-var alertEmails = results
-    .Where(r => r.Classification.Category == "job_alert")
-    .Select(r => r.Email)
-    .ToList();
-
-if (alertEmails.Count > 0)
-{
-    Console.WriteLine($"Found {alertEmails.Count} job alert email(s), processing...");
-    using var alertTelegram = botToken is not null && chatId is not null
-        ? new TelegramNotifier(botToken, chatId) : null;
-    var alertProcessor = new JobAlertProcessor(
-        db, new JobPostingFetcher(), new PostingEvaluator(apiKey), alertTelegram);
-    var (found, evaluated, notified) = await alertProcessor.ProcessAsync(alertEmails);
-    Console.WriteLine($"Job alerts: {found} URLs, {evaluated} evaluated, {notified} notified.");
-}
+// Process job alert emails — query all stored alerts so previously-classified
+// ones are retried each run (dedup in JobAlertProcessor handles already-done URLs).
+if (!testMode)
+    await RunAlertProcessing();
 
 if (botToken is not null && chatId is not null)
 {
@@ -313,6 +303,36 @@ db.SystemHealth.Add(new JobSearch.Data.SystemHealth
     DurationMs = (int)(DateTime.UtcNow - runStart).TotalMilliseconds,
 });
 db.SaveChanges();
+
+// ---------------------------------------------------------------------------
+// Load all stored job_alert emails from DB and run the alert processor.
+// Running from DB (not just current-batch results) means previously-classified
+// alert emails are retried each run — dedup in JobAlertProcessor skips done URLs.
+// ---------------------------------------------------------------------------
+async Task RunAlertProcessing()
+{
+    var alertMessageIds = db.Classifications
+        .Where(c => c.Category == "job_alert" && c.IsJobRelated)
+        .Select(c => c.MessageId)
+        .ToHashSet();
+    if (alertMessageIds.Count == 0) return;
+
+    var allAlertEmails = db.RawEmails
+        .Where(r => alertMessageIds.Contains(r.MessageId))
+        .AsEnumerable()
+        .Select(r => new RawEmail(
+            r.MessageId, r.ThreadId, r.FromAddress, r.Subject, r.BodyText,
+            new DateTimeOffset(r.ReceivedAt, TimeSpan.Zero)))
+        .ToList();
+
+    Console.WriteLine();
+    using var alertTelegram = botToken is not null && chatId is not null
+        ? new TelegramNotifier(botToken, chatId) : null;
+    var alertProcessor = new JobAlertProcessor(
+        db, new JobPostingFetcher(), new PostingEvaluator(apiKey), alertTelegram);
+    var (found, evaluated, notified) = await alertProcessor.ProcessAsync(allAlertEmails);
+    Console.WriteLine($"Job alerts: {found} URLs found, {evaluated} evaluated, {notified} notified.");
+}
 
 // ---------------------------------------------------------------------------
 // Walk up ancestor directories to find a file by name or relative path.

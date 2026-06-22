@@ -66,8 +66,10 @@ public class JobAlertProcessor
             return (0, 0, 0);
         }
 
-        // Deduplicate against already-stored postings
+        // Deduplicate against already-stored postings. Exclude "error" records so
+        // transient failures (403, timeout) are retried on the next run.
         var existingUrls = _db.DiscoveredPostings
+            .Where(d => d.Recommendation != "error")
             .Select(d => d.Url)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -84,14 +86,17 @@ public class JobAlertProcessor
 
         foreach (var (url, source) in newUrls)
         {
-            var record = new DiscoveredPosting
+            var record = _db.DiscoveredPostings.FirstOrDefault(d => d.Url == url);
+            if (record is null)
             {
-                Url = url,
-                Source = source,
-                Title = "",
-                DiscoveredAt = DateTime.UtcNow,
-            };
-            _db.DiscoveredPostings.Add(record);
+                record = new DiscoveredPosting { Url = url, Source = source, Title = "", DiscoveredAt = DateTime.UtcNow };
+                _db.DiscoveredPostings.Add(record);
+            }
+            else
+            {
+                record.Recommendation = null;
+                record.EvaluatedAt = null;
+            }
             _db.SaveChanges();
 
             try

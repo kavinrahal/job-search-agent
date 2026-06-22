@@ -49,6 +49,7 @@ public class JobDiscoveryWorker
         Console.WriteLine($"Job discovery: {feedItems.Count} total, {recent.Count} within {MaxAgeDays} days.");
 
         var existingUrls = _db.DiscoveredPostings
+            .Where(d => d.Recommendation != "error")
             .Select(d => d.Url)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -70,15 +71,17 @@ public class JobDiscoveryWorker
         foreach (var item in newItems)
         {
             // Insert immediately so a concurrent/retry run won't re-evaluate the same URL.
-            var record = new DiscoveredPosting
+            var record = _db.DiscoveredPostings.FirstOrDefault(d => d.Url == item.Url);
+            if (record is null)
             {
-                Url = item.Url,
-                Source = item.Source,
-                Title = item.Title,
-                Company = item.Company,
-                DiscoveredAt = DateTime.UtcNow,
-            };
-            _db.DiscoveredPostings.Add(record);
+                record = new DiscoveredPosting { Url = item.Url, Source = item.Source, Title = item.Title, Company = item.Company, DiscoveredAt = DateTime.UtcNow };
+                _db.DiscoveredPostings.Add(record);
+            }
+            else
+            {
+                record.Recommendation = null;
+                record.EvaluatedAt = null;
+            }
             _db.SaveChanges();
 
             try
