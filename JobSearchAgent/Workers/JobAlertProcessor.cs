@@ -122,9 +122,9 @@ public class JobAlertProcessor
                 {
                     postingText = await _fetcher.FetchAsync(url);
                 }
-                catch (Exception fetchEx) when (IsNetworkLevelError(fetchEx) && fallbackContext.ContainsKey(url))
+                catch (Exception fetchEx) when (fallbackContext.ContainsKey(url))
                 {
-                    Console.WriteLine($"    (page unreachable, evaluating from email alert content)");
+                    Console.WriteLine($"    (fetch failed: {fetchEx.Message} — evaluating from email alert content)");
                     postingText = $"Source URL: {url}\n\n[Job page could not be fetched. Evaluate based on the email alert content below.]\n\n{fallbackContext[url]}";
                 }
 
@@ -166,9 +166,5 @@ public class JobAlertProcessor
         return (urls.Count, evaluated, notified);
     }
 
-    // DNS failure or connection refused — not a 4xx from the server.
-    private static bool IsNetworkLevelError(Exception ex) =>
-        ex.InnerException is System.Net.Sockets.SocketException ||
-        (ex is HttpRequestException hre && hre.StatusCode is null);
 
 }

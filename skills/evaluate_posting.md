@@ -26,54 +26,47 @@ Key rules for disqualifiers:
 
 ### Step 2 — Dimension scoring
 
-Evaluate each dimension. Use only what the posting actually says — do not infer favourably or unfavourably beyond what is written.
+Evaluate dimensions in this priority order. Backend stack and experience drive the recommendation. Location is neutral between Melbourne and Sydney. Company and culture signals are the lowest priority — note them in the rationale as FYI, do not let them push the recommendation down.
 
-**Location:**
-- `preferred`: Melbourne, VIC or AU-based remote
-- `acceptable`: Sydney or stated hybrid/remote for AU
-- `weak`: on-site Sydney, or location unclear
+**Priority 1 — Backend stack** (highest weight):
+- `strong`: C#, .NET, ASP.NET Core
+- `good`: Java, Spring Boot
+- `acceptable`: Python, Node.js, TypeScript server-side — but only flag as a longshot if the posting is clearly prescriptive about the stack with no flexibility. If wording is ambiguous or the role signals openness to other OOP backgrounds, treat as acceptable without a flag.
+- `excluded`: PHP as primary
+- Name the specific technologies from the posting in your output
 
-**Experience:**
+**Priority 2 — Experience:**
 - Evaluate the years required *and* the scope described (see `scope_over_title` in criteria)
 - `ideal`: up to 4 years required
 - `acceptable`: 4-5 years required
 - `excluded`: 5+ years required
 - When a range is stated (e.g. "3-6 years"), use the midpoint
 
-**Backend stack:**
-- `strong`: C#, .NET, ASP.NET Core
-- `good`: Java, Spring Boot
-- `acceptable`: Python, Node.js, TypeScript server-side
-- `excluded`: PHP as primary
-- Name the specific technologies from the posting in your output
+**Priority 3 — Location:**
+- `preferred`: Melbourne, Sydney, or AU-based remote — all equally weighted
+- `acceptable`: stated hybrid/remote for AU
+- `weak`: location unclear, or role requires relocation outside AU
 
-**Frontend stack:**
+**Priority 4 — Frontend stack:**
 - `strong`: React, TypeScript
 - `good`: Angular, Vue.js, Next.js
 - `acceptable`: other modern JS frameworks
 
-**Salary:**
+**Priority 5 — Salary:**
 - `target`: $120k-$140k AUD
 - `acceptable`: $100k-$120k
 - `flagged_low`: below $100k (surface, do not auto-discard)
-- `flagged_high`: above $140k (flag as potential level mismatch)
-- `missing`: not stated
+- `flagged_high`: above $160k (flag as potential level mismatch)
+- `missing`: record as missing — do not flag as orange
 
-**Company:**
-- `preferred`: product company with clear PMF, scale-up, mid-sized (50-500)
-- `acceptable`: startup with PMF, enterprise with clear product scope
-- `weaker`: agency, consultancy, pre-revenue startup
-- `excluded`: gambling industry
-
-**Role type:**
-- `preferred`: product engineering, full-stack with backend ownership
-- `acceptable`: platform/infra with product impact, long-term embedded consultancy
-- `weaker`: maintenance-focused, rotating agency
-- `excluded`: cold-calling required, legacy only
+**Priority 6 — Company and role type (lowest — FYI only):**
+- Record `company_assessment` and `role_type_match` as normal output fields
+- Company stability, culture signals, agency/consultancy, equity emphasis — mention these in the rationale as FYI context
+- Do not include any company or culture signal in `orange_flags[]`
 
 ### Step 3 — Collect orange flags
 
-Review the orange flags list in `job_criteria.yaml`. List every flag that is active for this posting. Do not omit flags even if the overall recommendation is strong_match. An empty list is valid if none apply.
+Review the `orange_flags` list in `job_criteria.yaml`. Only items listed there go into `orange_flags[]`. Company/culture signals belong in the rationale, not here. An empty list is valid and expected for many postings.
 
 ### Step 4 — Recommendation
 

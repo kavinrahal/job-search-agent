@@ -70,17 +70,11 @@ hard_disqualifiers:
 # ---------------------------------------------------------------------------
 location:
   preferred:
-    city: Melbourne
-    state: VIC
-    notes: Life is set up here. Default preference.
-
-  acceptable:
+    - city: Melbourne
+      state: VIC
     - city: Sydney
       state: NSW
-      condition: >
-        Accepted if the opportunity is meaningfully better — roughly $10-15k salary
-        premium over a comparable Melbourne role, or a significantly stronger company
-        or role scope. Equal offers go Melbourne.
+    notes: Both cities are equally weighted. No salary premium required for Sydney.
 
   remote:
     accepted: true
@@ -92,7 +86,7 @@ location:
 
   on_site:
     melbourne: acceptable
-    sydney: weaker than hybrid or remote in Sydney
+    sydney: acceptable
 
 # ---------------------------------------------------------------------------
 # VISA SPONSORSHIP
@@ -156,18 +150,18 @@ salary:
     flag_below: 100_000
     acceptable_minimum: 100_000
     target_range: [120_000, 140_000]
-    flag_above: 140_000
+    flag_above: 160_000
 
   flag_reasons:
     below_100k: >
       Significant flag. Surface it — do not auto-discard, but note it clearly.
       Only worth pursuing if other factors (company quality, role scope, growth) strongly compensate.
-    above_140k: >
+    above_160k: >
       Flag as potential level mismatch. May indicate role is actually senior,
       or company is struggling to hire. Worth understanding before applying.
     missing: >
-      Note the absence but do not disqualify. Australian listings are increasingly
-      including salary; absence is a mild negative signal, not a disqualifier.
+      Do not flag as orange. Note the absence in salary_assessment as "missing" — that is sufficient.
+      Many Australian listings omit salary. Absence is not a signal either way.
 
 # ---------------------------------------------------------------------------
 # TECHNICAL STACK
@@ -191,8 +185,10 @@ stack:
     acceptable:
       technologies: [Python, Node.js, TypeScript server-side]
       notes: >
-        Worth applying to, but flag as a longshot. Most employers at this level
-        will preference direct commercial experience. Include this flag in evaluation output.
+        Worth applying to. Flag as a longshot only when the posting is clearly
+        prescriptive (e.g. "5+ years Python, no other stack considered"). If the
+        posting is ambiguous or signals openness to other OOP backgrounds, treat
+        it as acceptable without an orange flag — transferable skills apply.
     excluded: [PHP, Laravel, Symfony]
 
   frontend:
@@ -315,20 +311,26 @@ team:
 # ---------------------------------------------------------------------------
 # ORANGE FLAGS
 # Surface in evaluation output alongside recommendation — never silent.
+# These are the only things that should appear in orange_flags[].
+# Company/culture signals (stability, agency, equity, culture descriptors)
+# belong in the rationale as FYI context, not as orange flags.
 # ---------------------------------------------------------------------------
 orange_flags:
-  - Sydney location where a comparable Melbourne option exists
   - Salary below $100k
-  - Salary above $140k for a stated mid-level role
-  - Salary not listed
+  - Salary above $160k for a stated mid-level role (potential level mismatch)
   - Required experience 4-5 years (upper boundary of acceptable range)
-  - Backend stack is Python or Node.js (longshot match — flag explicitly)
-  - Pre-Series A funding stage
-  - Agency or consultancy placement
-  - Ambiguous company financial health or stability signals
+  - Backend stack is Python or Node.js with no flexibility indicated in the posting
   - On-call mentioned without explicit compensation
-  - Heavy equity compensation without salary transparency
-  - No engineering culture description beyond generic phrases
+
+# ---------------------------------------------------------------------------
+# FYI CONTEXT (mention in rationale, not as orange flags)
+# ---------------------------------------------------------------------------
+fyi_context:
+  - Company financial health signals (pre-revenue, pre-Series A, buzzword-heavy)
+  - Agency or consultancy placement
+  - Heavy equity emphasis without salary transparency
+  - Culture descriptors that are generic or concerning (rockstar, wear many hats, fast-paced only)
+  - Any company/culture signal worth noting but not a blocker
 
 # ---------------------------------------------------------------------------
 # EVALUATION OUTPUT STRUCTURE
