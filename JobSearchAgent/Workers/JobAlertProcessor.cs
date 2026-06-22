@@ -58,12 +58,26 @@ public class JobAlertProcessor
     public async Task<(int Found, int Evaluated, int Notified)> ProcessAsync(
         IEnumerable<RawEmail> alertEmails)
     {
-        var urls = ExtractJobUrls(alertEmails);
+        var emailList = alertEmails.ToList();
+        var urls = ExtractJobUrls(emailList);
 
         if (urls.Count == 0)
         {
             Console.WriteLine("Job alerts: no job URLs found in alert emails.");
             return (0, 0, 0);
+        }
+
+        // Build URL → email body index so we can fall back to alert content
+        // when the job page itself is unreachable (e.g. private hostname, geo-block).
+        var fallbackContext = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var email in emailList)
+        {
+            foreach (Match m in SeekPattern.Matches(email.BodyText))
+                fallbackContext.TryAdd($"https://au.seek.com/job/{m.Groups[1].Value}", email.BodyText);
+            foreach (Match m in LinkedInPattern.Matches(email.BodyText))
+                fallbackContext.TryAdd($"https://www.linkedin.com/jobs/view/{m.Groups[1].Value}", email.BodyText);
+            foreach (Match m in JoraPattern.Matches(email.BodyText))
+                fallbackContext.TryAdd($"https://au.jora.com/job/{m.Groups[1].Value}", email.BodyText);
         }
 
         // Deduplicate against already-stored postings. Exclude "error" records so
@@ -103,7 +117,17 @@ public class JobAlertProcessor
             {
                 Console.WriteLine($"  [{evaluated + 1}/{newUrls.Count}] {url}");
 
-                var postingText = await _fetcher.FetchAsync(url);
+                string postingText;
+                try
+                {
+                    postingText = await _fetcher.FetchAsync(url);
+                }
+                catch (Exception fetchEx) when (IsNetworkLevelError(fetchEx) && fallbackContext.ContainsKey(url))
+                {
+                    Console.WriteLine($"    (page unreachable, evaluating from email alert content)");
+                    postingText = $"Source URL: {url}\n\n[Job page could not be fetched. Evaluate based on the email alert content below.]\n\n{fallbackContext[url]}";
+                }
+
                 var eval = await _evaluator.EvaluateAsync(postingText, url);
 
                 record.Company = eval.Company;
@@ -141,5 +165,10 @@ public class JobAlertProcessor
 
         return (urls.Count, evaluated, notified);
     }
+
+    // DNS failure or connection refused — not a 4xx from the server.
+    private static bool IsNetworkLevelError(Exception ex) =>
+        ex.InnerException is System.Net.Sockets.SocketException ||
+        (ex is HttpRequestException hre && hre.StatusCode is null);
 
 }
