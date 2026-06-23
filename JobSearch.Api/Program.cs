@@ -565,7 +565,8 @@ app.MapPost("/api/v1/telegram/webhook", async (
                 }
 
                 string label = command == "/cv" ? "CV" : "cover letter";
-                await telegram.SendMessageAsync($"Generating {label} for <code>{resolvedUrl}</code>...");
+                await telegram.SendMessageAsync(
+                    $"Generating {label} for <code>{System.Net.WebUtility.HtmlEncode(resolvedUrl)}</code>...");
 
                 // Re-fetch the posting text. Fall back to the stored eval summary if unavailable.
                 string postingText;
@@ -612,7 +613,8 @@ app.MapPost("/api/v1/telegram/webhook", async (
                 return;
             }
 
-            await telegram.SendMessageAsync($"Fetching <code>{url}</code>...");
+            await telegram.SendMessageAsync(
+                $"Fetching <code>{System.Net.WebUtility.HtmlEncode(url)}</code>...");
 
             string fetchedText;
             try
@@ -621,7 +623,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
             }
             catch (Exception ex)
             {
-                await telegram.SendMessageAsync($"Could not fetch that URL: {ex.Message}");
+                await telegram.SendMessageAsync($"Could not fetch that URL: {ex.Message}", parseMode: null);
                 return;
             }
 
@@ -632,7 +634,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
         }
         catch (Exception ex)
         {
-            try { await telegram.SendMessageAsync($"Unexpected error: {ex.Message}"); } catch { }
+            try { await telegram.SendMessageAsync($"Unexpected error: {ex.Message}", parseMode: null); } catch { }
         }
     });
 
