@@ -655,4 +655,5 @@ app.Map("/api/{**rest}", () => Results.NotFound());
 // SPA fallback — serves index.html for all non-API, non-asset paths (React Router routes)
 app.MapFallbackToFile("index.html");
 
+Console.WriteLine("[Startup] Calling app.Run()...");
 app.Run();
