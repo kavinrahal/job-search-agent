@@ -600,11 +600,17 @@ app.MapPost("/api/v1/telegram/webhook", async (
 
                 string evalJson = storedEvalJson ?? "{}";
 
-                string result = command == "/cv"
-                    ? await cvAgent.GenerateAsync(postingText, evalJson)
-                    : await letterAgent.GenerateAsync(postingText, evalJson);
-
-                await telegram.SendChunkedAsync(result);
+                if (command == "/cv")
+                {
+                    var cvText = await cvAgent.GenerateAsync(postingText, evalJson);
+                    var pdf = JobSearch.Api.Services.PdfRenderer.RenderCv(cvText);
+                    await telegram.SendDocumentAsync(pdf, "Kavin_Abeysinghe_CV.pdf");
+                }
+                else
+                {
+                    var letter = await letterAgent.GenerateAsync(postingText, evalJson);
+                    await telegram.SendChunkedAsync(letter);
+                }
                 return;
             }
 

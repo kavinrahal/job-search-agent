@@ -21,9 +21,11 @@ You will receive:
 
 These are absolute. No exceptions.
 
-1. **No em dashes (—).** Do not use them anywhere. If you would use one, restructure the sentence, use a comma, colon, or semicolon, or split into two sentences.
+1. **No em dashes (—).** Do not use them anywhere. If you would use one, restructure the sentence, use a comma or semicolon, or split into two sentences.
 
-2. **No banned phrases.** If any of the following appear in your draft, rewrite the sentence:
+2. **No colons (:).** Do not use them anywhere. Rewrite any sentence that would end with a colon before a list or clause.
+
+3. **No banned phrases.** If any of the following appear in your draft, rewrite the sentence:
    - passionate / passion / passionate about
    - leverage / leveraged / leveraging
    - relentless / relentlessly

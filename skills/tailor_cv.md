@@ -24,6 +24,7 @@ You will receive:
 4. **Omit GPA** unless the application explicitly requires it.
 5. **Omit Epic Lanka** unless the role specifically values design experience or early career context.
 6. **Programmed:** Include if the role values legacy modernisation, ASP.NET, or contract experience. Otherwise condense to one brief bullet or omit entirely.
+7. **No colons (:).** Do not use them anywhere in the document. Rewrite labels and descriptions to avoid them. Use an em dash (—) or a line break instead. For example, write "Languages — C#, TypeScript" not "Languages: C#, TypeScript".
 
 ---
 

@@ -77,6 +77,23 @@ public class TelegramService
         }
     }
 
+    public async Task SendDocumentAsync(byte[] fileBytes, string filename)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(_chatId), "chat_id");
+        var fileContent = new ByteArrayContent(fileBytes);
+        fileContent.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        form.Add(fileContent, "document", filename);
+
+        var resp = await _http.PostAsync($"{_apiBase}/sendDocument", form);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            Console.Error.WriteLine($"[Telegram] sendDocument {(int)resp.StatusCode}: {body}");
+        }
+    }
+
     // Splits long output across multiple messages, breaking at newlines where possible.
     public async Task SendChunkedAsync(string text, string? parseMode = null)
     {

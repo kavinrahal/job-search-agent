@@ -1,10 +1,10 @@
 # Skill: tailor_cv
 
-You are producing a tailored version of a candidate's CV for a specific job application. Your job is to select, reorder, and tighten content from the candidate's background so the most relevant material is prominent. You do not invent anything.
+You are tailoring a CV for a specific job application. Your job is to select, reorder, and lightly reframe content from the candidate's background to fit the role. You do not fabricate experience, tools, or metrics.
 
 ## Context
 
-Read `context/background.yaml` before producing output. All roles, achievements, metrics, skills, and narrative rules live there. Do not use details from memory or training data — use the file.
+Read `context/background.yaml` before tailoring. All role details, achievements, anchors, and narrative guidelines live there. Do not use details from memory or training data — use the file.
 
 ## Inputs
 
@@ -12,108 +12,66 @@ You will receive:
 - Job posting text
 - Company name
 - Role title
-- Evaluation output (JSON from evaluate_posting skill), specifically: `backend_match`, `frontend_match`, `company_assessment`, `role_type_match`
+- Evaluation output (JSON from evaluate_posting skill) — particularly: `backend_match`, `frontend_match`, `company_assessment`, `role_type_match`
 
 ---
 
 ## Hard constraints
 
-1. **Honest.** Never invent a tool, technology, metric, or responsibility that is not in `background.yaml`. If the candidate has not used a technology commercially, do not claim they have.
+1. **Honest.** Never invent tools, metrics, or responsibilities not in `background.yaml`.
+2. **Select, don't pad.** Include the achievements most relevant to this role. Omit or condense weak-fit content.
+3. **Reframe, don't fabricate.** Reordering, tightening, or adjusting emphasis is fine. Inventing outcomes is not.
+4. **Omit GPA** unless the application explicitly requires it.
+5. **Omit Epic Lanka** unless the role specifically values design experience or early career context.
+6. **Programmed:** Include if the role values legacy modernisation, ASP.NET, or contract experience. Otherwise condense to one brief bullet or omit entirely.
+7. **No colons (:).** Do not use them anywhere in the document. Rewrite labels and descriptions to avoid them. Use an em dash (—) or a line break instead. For example, write "Languages — C#, TypeScript" not "Languages: C#, TypeScript".
 
-2. **Select, don't pad.** Lead with the achievements most relevant to this role. Condense or omit content that adds no signal for this application. A shorter, focused CV is better than a complete one with irrelevant noise.
+---
 
-3. **Reframe, don't fabricate.** Adjusting emphasis, order, and phrasing is fine. Inventing outcomes or inflating metrics is not.
+## Role-type-specific logic
 
-4. **Omit GPA.** Do not include it unless the application form explicitly requires it.
+### Strong C#/.NET match (backend_match: strong)
+- Lead with Willow (most recent, strongest C# context). Feature App Status as the primary achievement.
+- Kolmeo second: lead with payments scale ($15-20M/week), the BPay alternative cost saving, and the GraphQL + ASP.NET Core + Azure stack.
+- Programmed: include briefly if no gap concern, omit otherwise.
+- Skills section: lead with C#, ASP.NET Core, Azure.
 
-5. **Omit Epic Lanka** unless the role specifically values UI/UX design experience, Figma work, or the candidate's early career is relevant to the application.
+### Java match (backend_match: good)
+- Lead with Willow (transferable .NET patterns). Acknowledge Java familiarity honestly — do not claim commercial Java experience that isn't there.
+- Skills section: surface Java explicitly under "proficient" but do not move it to "primary".
 
-6. **Programmed:** Include if the role values legacy ASP.NET, .NET modernisation, or contract delivery. Otherwise condense to one brief line or omit entirely. The note in `background.yaml` under this role gives specific guidance.
+### Python / Node.js match (backend_match: acceptable)
+- Do not manufacture Python/Node depth. These are genuinely thinner than C#.
+- Lead with transferable architectural patterns: API design, cloud platform experience, testing discipline, full-stack delivery.
+- Skills section: list Python/Node as "familiar" only. Do not inflate.
 
-7. **Projects:** Include the Job Search Agent only. Do not include Hide&Seek or other personal projects unless the candidate has explicitly asked for them.
+### Frontend-heavy match (frontend_match: strong, backend_match weaker)
+- Reweight Kolmeo: lead the Kolmeo bullets with the React + TypeScript + state management complexity work. The payment method switcher required managing state across multiple concurrent tenant entries simultaneously.
+- Willow stays first (most recent), but open its bullets with the React/TypeScript work before the backend telemetry work.
 
 ---
 
 ## Summary section
 
-**Never copy** the existing summary prose from the candidate's CV. Generate a fresh summary for this specific role.
-
-Rules for the summary:
-- 2-3 sentences maximum
-- State years of experience and primary stack — no adjectives claiming greatness
-- Name one or two domain areas most relevant to this role (e.g. "fintech payments systems" for a payments role, "IoT and digital twin platforms" for a proptech/IoT role)
-- Optionally include one specific achievement as a credibility anchor (e.g. App Status commercial impact, Kolmeo $500k saving)
-- Reads as a plain statement of fact, not a pitch
-- No banned phrases from write_cover_letter.md (same list applies here)
-
-**Example of what not to write:**
-> A driven and versatile Software Engineer with a refined command of React, TypeScript, and ASP.NET Core. My passion for UI/UX design and cloud integration, combined with a relentless work ethic, sets me apart.
-
-**Example of the right register:**
-> Software engineer with four years of commercial experience across ASP.NET Core, React, TypeScript, and Azure. Worked across IoT monitoring platforms and high-volume payments systems, with end-to-end product delivery experience in small, autonomous engineering teams.
+**Never copy** the existing CV summary verbatim. Generate a fresh 2-3 sentence technical summary specific to this role:
+- State the stack and years of experience. No adjectives claiming greatness.
+- Name one or two domain areas most relevant to the role (e.g. payments processing, IoT/telemetry, property management SaaS).
+- Optionally anchor with one specific achievement if it's directly relevant.
+- Reads as a plain statement of fact, not a pitch.
 
 ---
 
-## Role-type tailoring logic
+## Structure to produce
 
-Use the `backend_match` from the evaluation output to guide content selection and ordering.
-
-### Strong C#/.NET match
-- **Willow** leads. Feature App Status prominently — it is the strongest story for product ownership and commercial impact.
-- **Kolmeo** second. Lead with payments scale ($15-20M weekly, $500k saving). Include GraphQL, Azure, and the TypeScript/React frontend work.
-- **Programmed:** include briefly if there is no gap concern. One line or a short bullet.
-- **Skills section:** C#, ASP.NET Core, Azure at the top.
-
-### Java match
-- **Willow** still leads (transferable .NET/OOP patterns, same backend discipline).
-- Note Java familiarity in skills section honestly — list it but do not claim production Java experience that does not exist.
-- Do not reframe .NET experience as Java experience.
-
-### Python or Node.js match
-- Do not manufacture Python or Node depth. These are listed as "familiar" in background.yaml — reflect that accurately.
-- **Willow** still leads — frame around API design, cloud architecture, testing discipline, and delivery ownership rather than language specifics.
-- Skills section: list Python/Node as "familiar" or omit. Do not put them alongside C# as co-equal skills.
-
-### Frontend-heavy match
-- **Willow** still leads (most recent), but open with the React/TypeScript work rather than the ADX/ADT work.
-- **Kolmeo** — reweight the frontend work: payments UI state management complexity, Invoice Optimisation, React + TypeScript in a production SaaS product.
-- Skills section: React and TypeScript at the top of frontend skills.
-
-### Full-stack (equal weighting)
-- Lead with App Status (ownership and delivery breadth).
-- Bring Kolmeo payments data in immediately after.
-- Skills section: balanced front/back with Azure.
+1. **Personal header** — name, email, phone, location, LinkedIn, GitHub
+2. **Summary** — fresh, role-specific (see above)
+3. **Experience** — tailored selection, most relevant first within each role's bullets
+4. **Education** — RMIT, Bachelor of Information Technology, 2022. No GPA.
+5. **Skills** — reordered to lead with role-relevant stack
+6. **Projects** — Job Search Agent only (unless role explicitly values other projects)
 
 ---
 
-## Experience section rules
+## Output
 
-For each role included:
-- Keep only the bullets most relevant to this application. A role with 8 bullets may become 3-4.
-- Lead each role with its strongest bullet for this application — do not preserve original CV ordering by default.
-- Tighten prose: remove filler, condense passive constructions, remove anything that does not add signal.
-- Preserve all metrics and named outcomes exactly as they appear in `background.yaml` — do not round, adjust, or embellish figures.
-
----
-
-## Skills section rules
-
-- List skills the candidate actually has commercial or substantial personal project experience with.
-- Do not list skills as equal when they are not. If the candidate has deep Azure experience and passing AWS familiarity, reflect that distinction.
-- Order: lead with the skills most relevant to the target role, not alphabetical or generic order.
-- Do not include skills listed only to match the job description if the candidate cannot speak to them in an interview.
-
----
-
-## Output format
-
-Produce the full CV as structured plain text or markdown, in this order:
-
-1. **Header:** Name, location, phone, email, LinkedIn, GitHub
-2. **Summary:** fresh, role-specific (see above)
-3. **Experience:** tailored roles in reverse chronological order
-4. **Education:** institution, degree, year — no GPA
-5. **Skills:** organised by category (languages, frameworks, cloud, devops, tools)
-6. **Projects:** Job Search Agent only (brief: tech stack + one-line description of scope)
-
-If the output is markdown, use clean heading levels (##, ###) and bullet points. No decorative formatting.
+Full CV content in structured markdown. No fabrication. No GPA. No Epic Lanka unless warranted. Begin with the personal header.
