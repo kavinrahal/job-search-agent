@@ -29,39 +29,74 @@ public class TelegramService
     public bool TryMarkProcessed(long updateId) =>
         _processed.TryAdd(updateId, 0);
 
-    public (long UpdateId, string? Text) ParseUpdate(JsonElement update)
+    public (long UpdateId, string? Text, string? ReplyToText) ParseUpdate(JsonElement update)
     {
         var updateId = update.TryGetProperty("update_id", out var idEl)
             ? idEl.GetInt64()
             : -1L;
 
         string? text = null;
-        if (update.TryGetProperty("message", out var msg) &&
-            msg.TryGetProperty("text", out var textEl))
+        string? replyToText = null;
+
+        if (update.TryGetProperty("message", out var msg))
         {
-            text = textEl.GetString();
+            if (msg.TryGetProperty("text", out var textEl))
+                text = textEl.GetString();
+
+            if (msg.TryGetProperty("reply_to_message", out var reply) &&
+                reply.TryGetProperty("text", out var replyTextEl))
+                replyToText = replyTextEl.GetString();
         }
 
-        return (updateId, text);
+        return (updateId, text, replyToText);
     }
 
     public static string? ExtractUrl(string text)
     {
-        var match = Regex.Match(text, @"https?://[^\s]+");
-        return match.Success ? match.Value.TrimEnd('.', ',', ')') : null;
+        var match = Regex.Match(text, @"https?://[^\s<>""]+");
+        return match.Success ? match.Value.TrimEnd('.', ',', ')', '>') : null;
     }
 
-    public async Task SendMessageAsync(string text)
+    public async Task SendMessageAsync(string text, string? parseMode = "HTML")
     {
-        var payload = JsonSerializer.Serialize(new
-        {
-            chat_id = _chatId,
-            text,
-            parse_mode = "HTML",
-            disable_web_page_preview = true,
-        });
+        // Telegram's limit is 4096 chars — truncate silently here; use SendChunkedAsync for long content.
+        if (text.Length > 4096)
+            text = text[..4093] + "...";
 
-        using var content = new StringContent(payload, Encoding.UTF8, "application/json");
+        object payload = parseMode is not null
+            ? new { chat_id = _chatId, text, parse_mode = parseMode, disable_web_page_preview = true }
+            : new { chat_id = _chatId, text, disable_web_page_preview = true };
+
+        using var content = new StringContent(
+            JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
         await _http.PostAsync($"{_apiBase}/sendMessage", content);
+    }
+
+    // Splits long output across multiple messages, breaking at newlines where possible.
+    public async Task SendChunkedAsync(string text, string? parseMode = null)
+    {
+        const int Limit = 3800;
+
+        if (text.Length <= Limit)
+        {
+            await SendMessageAsync(text, parseMode);
+            return;
+        }
+
+        int start = 0;
+        while (start < text.Length)
+        {
+            int end = Math.Min(start + Limit, text.Length);
+
+            // Try to break at a newline rather than mid-sentence.
+            if (end < text.Length)
+            {
+                int nl = text.LastIndexOf('\n', end - 1, end - start);
+                if (nl > start) end = nl + 1;
+            }
+
+            await SendMessageAsync(text[start..end], parseMode);
+            start = end;
+        }
     }
 }

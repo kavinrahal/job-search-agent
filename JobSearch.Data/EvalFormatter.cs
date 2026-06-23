@@ -62,4 +62,22 @@ public static class EvalFormatter
 
         return sb.ToString().TrimEnd();
     }
+
+    // Synthesizes a minimal posting description from stored evaluation fields.
+    // Used when the original job page can't be re-fetched (bot protection, DNS, etc.).
+    public static string ToPostingContext(PostingEvaluation ev) =>
+        $"""
+        Company: {ev.Company}
+        Role: {ev.RoleTitle}
+        Source URL: {ev.SourceUrl ?? "not available"}
+        Backend technologies: {(ev.BackendTechnologies.Length > 0 ? string.Join(", ", ev.BackendTechnologies) : "not stated")}
+        Frontend technologies: {(ev.FrontendTechnologies.Length > 0 ? string.Join(", ", ev.FrontendTechnologies) : "not stated")}
+        Location: {ev.LocationDetail}
+        Salary: {ev.SalaryDetail ?? "not stated"}
+        Experience required: {ev.ExperienceDetail}
+        Company assessment: {ev.CompanyAssessment}
+        Role type: {ev.RoleTypeMatch}
+
+        [Full posting text unavailable — generate from the structured data above and the evaluation JSON.]
+        """;
 }

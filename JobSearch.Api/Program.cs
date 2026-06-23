@@ -95,6 +95,8 @@ var telegramChatId = builder.Configuration["TELEGRAM_CHAT_ID"]
 
 builder.Services.AddSingleton(_ => new JobPostingFetcher());
 builder.Services.AddSingleton(_ => new PostingEvaluator(anthropicApiKey));
+builder.Services.AddSingleton(_ => new CoverLetterAgent(anthropicApiKey));
+builder.Services.AddSingleton(_ => new CvTailorAgent(anthropicApiKey));
 builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
 
 // Trust X-Forwarded-Proto from Railway's load balancer regardless of its IP.
@@ -487,7 +489,10 @@ app.MapPost("/api/v1/telegram/webhook", async (
     HttpRequest request,
     TelegramService telegram,
     JobPostingFetcher fetcher,
-    PostingEvaluator evaluator) =>
+    PostingEvaluator evaluator,
+    CoverLetterAgent letterAgent,
+    CvTailorAgent cvAgent,
+    AppDbContext db) =>
 {
     var secretHeader = request.Headers["X-Telegram-Bot-Api-Secret-Token"].FirstOrDefault() ?? "";
     if (!telegram.VerifySecretToken(secretHeader))
@@ -503,38 +508,116 @@ app.MapPost("/api/v1/telegram/webhook", async (
         return Results.Ok();
     }
 
-    var (updateId, text) = telegram.ParseUpdate(update);
+    var (updateId, text, replyToText) = telegram.ParseUpdate(update);
 
     // Prevent duplicate processing — Telegram retries if we don't respond within 5 seconds.
     if (!telegram.TryMarkProcessed(updateId))
         return Results.Ok();
 
+    if (string.IsNullOrWhiteSpace(text))
+        return Results.Ok();
+
+    // Parse command: "/cv", "/letter", or bare URL (existing eval flow).
+    // Strip @botname suffix that Telegram appends in group chats.
+    var parts = text.Trim().Split(' ', 2, StringSplitOptions.TrimEntries);
+    var command = parts[0].ToLowerInvariant().Split('@')[0];
+    var commandArg = parts.Length > 1 ? parts[1] : null;
+
+    // For /cv and /letter commands, look up stored evaluation before going async.
+    // DB context is scoped — capture the string values we need, not the context itself.
+    string? storedEvalJson = null;
+    string? storedCompany = null;
+    string? storedTitle = null;
+    string? resolvedUrl = null;
+
+    if (command is "/cv" or "/letter")
+    {
+        resolvedUrl = (commandArg is not null ? TelegramService.ExtractUrl(commandArg) : null)
+            ?? (replyToText is not null ? TelegramService.ExtractUrl(replyToText) : null);
+
+        if (resolvedUrl is not null)
+        {
+            var posting = db.DiscoveredPostings
+                .Where(d => d.Url == resolvedUrl)
+                .Select(d => new { d.EvaluationJson, d.Company, d.Title })
+                .FirstOrDefault();
+
+            storedEvalJson = posting?.EvaluationJson;
+            storedCompany  = posting?.Company;
+            storedTitle    = posting?.Title;
+        }
+    }
+
     // Fire-and-forget: respond 200 immediately, process in background.
-    // All captured variables are Singletons or value types — no HttpContext captured.
+    // Only Singletons, value types, and pre-fetched strings are captured.
     _ = Task.Run(async () =>
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(text))
+            if (command is "/cv" or "/letter")
             {
-                await telegram.SendMessageAsync("Send me a job posting URL to evaluate.");
+                if (resolvedUrl is null)
+                {
+                    await telegram.SendMessageAsync(
+                        "Please include a job URL or reply to a job notification.\n" +
+                        "Example: <code>/cv https://au.seek.com/job/12345</code>");
+                    return;
+                }
+
+                string label = command == "/cv" ? "CV" : "cover letter";
+                await telegram.SendMessageAsync($"Generating {label} for <code>{resolvedUrl}</code>...");
+
+                // Re-fetch the posting text. Fall back to the stored eval summary if unavailable.
+                string postingText;
+                try
+                {
+                    postingText = await fetcher.FetchAsync(resolvedUrl);
+                }
+                catch
+                {
+                    if (storedEvalJson is not null)
+                    {
+                        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
+                        postingText = ev is not null
+                            ? EvalFormatter.ToPostingContext(ev)
+                            : $"Company: {storedCompany}\nRole: {storedTitle}\nURL: {resolvedUrl}";
+                    }
+                    else
+                    {
+                        postingText = $"Company: {storedCompany}\nRole: {storedTitle}\nURL: {resolvedUrl}";
+                    }
+                }
+
+                string evalJson = storedEvalJson ?? "{}";
+
+                string result = command == "/cv"
+                    ? await cvAgent.GenerateAsync(postingText, evalJson)
+                    : await letterAgent.GenerateAsync(postingText, evalJson);
+
+                await telegram.SendChunkedAsync(result);
                 return;
             }
 
+            // Default: bare URL → evaluate the posting.
             var url = TelegramService.ExtractUrl(text);
             if (url is null)
             {
                 await telegram.SendMessageAsync(
-                    "No URL found in your message.\nSend me a LinkedIn, Seek, or other job posting URL.");
+                    "Commands:\n" +
+                    "• Send a job URL to evaluate a posting\n" +
+                    "• <code>/cv &lt;url&gt;</code> — tailored CV\n" +
+                    "• <code>/letter &lt;url&gt;</code> — cover letter\n" +
+                    "Or reply to a job notification with <code>/cv</code> or <code>/letter</code>.");
                 return;
             }
 
             await telegram.SendMessageAsync($"Fetching <code>{url}</code>...");
 
-            string postingText;
+            string fetchedText;
             try
             {
-                postingText = await fetcher.FetchAsync(url);
+                fetchedText = await fetcher.FetchAsync(url);
             }
             catch (Exception ex)
             {
@@ -544,9 +627,8 @@ app.MapPost("/api/v1/telegram/webhook", async (
 
             await telegram.SendMessageAsync("Evaluating posting...");
 
-            var ev = await evaluator.EvaluateAsync(postingText, url);
-
-            await telegram.SendMessageAsync(EvalFormatter.Format(ev));
+            var evaluation = await evaluator.EvaluateAsync(fetchedText, url);
+            await telegram.SendMessageAsync(EvalFormatter.Format(evaluation));
         }
         catch (Exception ex)
         {
