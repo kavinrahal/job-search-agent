@@ -69,7 +69,12 @@ public class TelegramService
 
         using var content = new StringContent(
             JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-        await _http.PostAsync($"{_apiBase}/sendMessage", content);
+        var resp = await _http.PostAsync($"{_apiBase}/sendMessage", content);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            Console.Error.WriteLine($"[Telegram] sendMessage {(int)resp.StatusCode}: {body}");
+        }
     }
 
     // Splits long output across multiple messages, breaking at newlines where possible.
