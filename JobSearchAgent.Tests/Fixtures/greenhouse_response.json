@@ -1,0 +1,25 @@
+{
+  "jobs": [
+    {
+      "title": "Software Engineer",
+      "absolute_url": "https://boards.greenhouse.io/canva/jobs/1001",
+      "updated_at": "2026-06-01T00:00:00Z",
+      "location": { "name": "Melbourne, VIC" },
+      "content": "<p>Join our team.</p><p>Requirements: C#, .NET</p>"
+    },
+    {
+      "title": "Backend Engineer",
+      "absolute_url": "https://boards.greenhouse.io/canva/jobs/1002",
+      "updated_at": "2026-06-02T00:00:00Z",
+      "location": { "name": "London, UK" },
+      "content": "<p>Remote from London.</p>"
+    },
+    {
+      "title": "Platform Engineer",
+      "absolute_url": "https://boards.greenhouse.io/canva/jobs/1003",
+      "updated_at": "2026-06-03T00:00:00Z",
+      "location": null,
+      "content": "<p>Fully remote, location not specified.</p>"
+    }
+  ]
+}

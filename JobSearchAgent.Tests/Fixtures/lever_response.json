@@ -1,0 +1,29 @@
+[
+  {
+    "id": "abc-001",
+    "text": "Senior Software Engineer",
+    "hostedUrl": "https://jobs.lever.co/atlassian/abc-001",
+    "description": "<p>Work on core platform.</p>",
+    "descriptionPlain": "Work on core platform.",
+    "createdAt": 1748736000000,
+    "categories": { "location": "Sydney, NSW, Australia", "team": "Engineering" }
+  },
+  {
+    "id": "abc-002",
+    "text": "Staff Engineer",
+    "hostedUrl": "https://jobs.lever.co/atlassian/abc-002",
+    "description": "<p>London office role.</p>",
+    "descriptionPlain": "London office role.",
+    "createdAt": 1748736000000,
+    "categories": { "location": "London, UK", "team": "Engineering" }
+  },
+  {
+    "id": "abc-003",
+    "text": "Remote SRE",
+    "hostedUrl": "https://jobs.lever.co/atlassian/abc-003",
+    "description": "<p>Fully remote.</p>",
+    "descriptionPlain": "Fully remote.",
+    "createdAt": 1748736000000,
+    "categories": { "location": null, "team": "Infrastructure" }
+  }
+]

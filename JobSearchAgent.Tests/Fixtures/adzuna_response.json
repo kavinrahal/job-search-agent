@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Full Stack Developer",
+      "description": "Build modern web apps.",
+      "redirect_url": "https://www.adzuna.com.au/jobs/details/9001",
+      "created": "2026-06-10T00:00:00Z",
+      "location": { "display_name": "Melbourne, VIC" },
+      "company": { "display_name": "Acme Corp" },
+      "salary_min": 110000,
+      "salary_max": 140000,
+      "contract_type": null,
+      "contract_time": null
+    },
+    {
+      "title": "Backend Dev",
+      "description": "APIs only.",
+      "redirect_url": "",
+      "created": "2026-06-09T00:00:00Z",
+      "location": { "display_name": "Melbourne, VIC" },
+      "company": { "display_name": "Empty URL Co" },
+      "salary_min": null,
+      "salary_max": null,
+      "contract_type": null,
+      "contract_time": null
+    }
+  ],
+  "count": 2
+}
