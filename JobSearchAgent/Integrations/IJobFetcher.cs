@@ -26,6 +26,14 @@ internal static class JobFetcherUtils
     internal static readonly string[] AuLocationTokens =
         ["melbourne", "vic", "victoria", "australia", "remote", "hybrid"];
 
+    // Null or empty location = globally remote/unspecified; include it.
+    internal static bool IsAuLocation(string? location)
+    {
+        if (string.IsNullOrWhiteSpace(location)) return true;
+        var lower = location.ToLowerInvariant();
+        return AuLocationTokens.Any(lower.Contains);
+    }
+
     internal static string StripHtml(string html)
     {
         var text = Regex.Replace(html, @"<[^>]+>", " ");

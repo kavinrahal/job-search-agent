@@ -144,7 +144,7 @@ public class JobDiscoveryWorker
         return (newItems.Count, evaluated, notified);
     }
 
-    private static string FormatPostingText(JobFeedItem item)
+    internal static string FormatPostingText(JobFeedItem item)
     {
         string salary = item.SalaryMin.HasValue && item.SalaryMax.HasValue
             ? $"${item.SalaryMin:N0} – ${item.SalaryMax:N0} AUD"

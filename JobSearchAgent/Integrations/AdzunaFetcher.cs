@@ -6,9 +6,19 @@ namespace JobSearchAgent.Integrations;
 
 public class AdzunaFetcher : IJobFetcher
 {
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private readonly HttpClient _http;
     private readonly string _appId;
     private readonly string _appKey;
+
+    public AdzunaFetcher(string appId, string appKey)
+        : this(appId, appKey, new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
+
+    internal AdzunaFetcher(string appId, string appKey, HttpClient http)
+    {
+        _appId = appId;
+        _appKey = appKey;
+        _http = http;
+    }
 
     private static readonly string[] Keywords =
     [
@@ -18,12 +28,6 @@ public class AdzunaFetcher : IJobFetcher
         "full stack developer",
         "full stack engineer",
     ];
-
-    public AdzunaFetcher(string appId, string appKey)
-    {
-        _appId = appId;
-        _appKey = appKey;
-    }
 
     public async Task<List<JobFeedItem>> FetchAllAsync()
     {

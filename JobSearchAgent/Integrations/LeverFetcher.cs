@@ -7,7 +7,9 @@ namespace JobSearchAgent.Integrations;
 
 public class LeverFetcher : IJobFetcher
 {
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private readonly HttpClient _http;
+    public LeverFetcher() : this(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
+    internal LeverFetcher(HttpClient http) { _http = http; }
 
     // Slug -> display name. Add entries here as you find more AU companies on Lever.
     // Verify a slug: https://api.lever.co/v0/postings/{slug}?mode=json
@@ -75,12 +77,7 @@ public class LeverFetcher : IJobFetcher
             })];
     }
 
-    private static bool IsAuLocation(string? location)
-    {
-        if (string.IsNullOrWhiteSpace(location)) return true;
-        var lower = location.ToLowerInvariant();
-        return JobFetcherUtils.AuLocationTokens.Any(lower.Contains);
-    }
+    private static bool IsAuLocation(string? location) => JobFetcherUtils.IsAuLocation(location);
 
     private record LeverPosting(
         [property: JsonPropertyName("id")]               string Id,

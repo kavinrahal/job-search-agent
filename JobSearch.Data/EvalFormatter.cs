@@ -58,7 +58,7 @@ public static class EvalFormatter
         sb.AppendLine($"<b>Rationale:</b> {ev.Rationale}");
 
         if (ev.SourceUrl is not null)
-            sb.Append($"\n<a href=\"{ev.SourceUrl}\">View posting</a>");
+            sb.Append($"\n{ev.SourceUrl}");
 
         return sb.ToString().TrimEnd();
     }

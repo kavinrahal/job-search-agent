@@ -72,7 +72,9 @@ public class PostingEvaluator
         };
     }
 
-    public async Task<PostingEvaluation> EvaluateAsync(string postingText, string? sourceUrl = null)
+    protected PostingEvaluator() { _client = null!; _systemPrompt = ""; _tool = null!; }
+
+    public virtual async Task<PostingEvaluation> EvaluateAsync(string postingText, string? sourceUrl = null)
     {
         string userContent = sourceUrl is not null
             ? $"Source URL: {sourceUrl}\n\n{postingText}"

@@ -14,7 +14,7 @@ public class TelegramNotifier : IDisposable
         _chatId = chatId;
     }
 
-    public async Task<bool> SendAsync(string message, string? parseMode = null)
+    public virtual async Task<bool> SendAsync(string message, string? parseMode = null)
     {
         try
         {

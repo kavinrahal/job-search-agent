@@ -7,7 +7,9 @@ namespace JobSearchAgent.Integrations;
 
 public class GreenhouseFetcher : IJobFetcher
 {
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private readonly HttpClient _http;
+    public GreenhouseFetcher() : this(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
+    internal GreenhouseFetcher(HttpClient http) { _http = http; }
 
     // Slug -> display name. Add entries here as you find more AU companies on Greenhouse.
     // Verify a slug: https://boards-api.greenhouse.io/v1/boards/{slug}/jobs
@@ -78,12 +80,7 @@ public class GreenhouseFetcher : IJobFetcher
             })];
     }
 
-    private static bool IsAuLocation(string? location)
-    {
-        if (string.IsNullOrWhiteSpace(location)) return true;
-        var lower = location.ToLowerInvariant();
-        return JobFetcherUtils.AuLocationTokens.Any(lower.Contains);
-    }
+    private static bool IsAuLocation(string? location) => JobFetcherUtils.IsAuLocation(location);
 
     private record GreenhouseResponse(
         [property: JsonPropertyName("jobs")] List<GreenhouseJob> Jobs

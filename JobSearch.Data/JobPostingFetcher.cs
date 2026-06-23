@@ -20,7 +20,7 @@ public class JobPostingFetcher
         _http.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-AU,en;q=0.9");
     }
 
-    public async Task<string> FetchAsync(string url)
+    public virtual async Task<string> FetchAsync(string url)
     {
         var seekMatch = SeekUrlPattern.Match(url);
         if (seekMatch.Success)
