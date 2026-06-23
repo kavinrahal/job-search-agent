@@ -156,10 +156,18 @@ app.Use(async (ctx, next) =>
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-using (var scope = app.Services.CreateScope())
+Console.WriteLine("[Startup] Running database migration...");
+try
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+    Console.WriteLine("[Startup] Migration complete.");
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"[Startup] Migration failed: {ex}");
+    throw;
 }
 
 app.UseAuthentication();
