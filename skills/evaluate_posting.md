@@ -23,6 +23,7 @@ Key rules for disqualifiers:
 - **PHP:** Only disqualifies if PHP is the *primary* backend. A PHP tool mentioned alongside a dominant .NET or Java backend is not a disqualifier — note it as context only.
 - **Gambling:** Company must operate in gambling/betting/wagering as its core business. An adjacent or tangential mention does not disqualify.
 - **Solo engineer:** Only disqualifies if the posting explicitly states the candidate would be the *only* engineer. "Small team" or "early-stage" does not trigger this.
+- **Senior role:** Check the job title itself (headline, h1, or explicit title field). If the title contains "Senior", apply the senior_role disqualifier. Do not trigger on "Senior" elsewhere in the posting (e.g. reporting lines, stakeholder descriptions). Only the job title itself triggers this.
 
 ### Step 2 — Dimension scoring
 

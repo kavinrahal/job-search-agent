@@ -65,6 +65,16 @@ hard_disqualifiers:
       Customer-facing technical roles (solutions engineering, developer relations)
       are not excluded. This covers roles where selling is part of the job description.
 
+  - id: senior_role
+    description: Job title explicitly contains "Senior"
+    notes: >
+      Hard candidate preference — not a scope assessment. Check if the job title itself
+      (as stated in the posting headline, job title line, or h1 heading) contains the
+      word "Senior". Common patterns: "Senior Software Engineer", "Senior Developer",
+      "Senior Engineer", "Senior Full Stack Developer", "Senior Backend Engineer", etc.
+      Do NOT trigger on "Senior" appearing elsewhere in the posting (e.g. "reports to a
+      Senior Manager", "works with senior stakeholders"). Only the job title itself triggers this.
+
 # ---------------------------------------------------------------------------
 # LOCATION
 # ---------------------------------------------------------------------------

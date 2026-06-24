@@ -572,6 +572,15 @@ app.MapPost("/api/v1/telegram/webhook", async (
                     return;
                 }
 
+                if (storedTitle is not null &&
+                    storedTitle.Contains("Senior", StringComparison.OrdinalIgnoreCase))
+                {
+                    await telegram.SendMessageAsync(
+                        $"Skipped — this posting is Senior-level ({storedTitle}). " +
+                        "No CV or cover letter generated.", parseMode: null);
+                    return;
+                }
+
                 string label = command == "/cv" ? "CV" : "cover letter";
                 await telegram.SendMessageAsync(
                     $"Generating {label} for <code>{System.Net.WebUtility.HtmlEncode(resolvedUrl)}</code>...");

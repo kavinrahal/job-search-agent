@@ -14,14 +14,18 @@ public class CvTailorAgent
     {
         _client = new AnthropicClient { ApiKey = apiKey };
 
-        string skillText    = SkillLoader.Load("tailor_cv.md");
-        string background   = SkillLoader.Load("context/background.yaml");
+        string skillText  = SkillLoader.Load("tailor_cv.md");
+        string background = SkillLoader.Load("context/background.yaml");
+        string cvBase     = SkillLoader.Load("context/cv_base.md");
 
         _systemPrompt = $"""
             {skillText}
 
             --- CANDIDATE BACKGROUND ---
             {background}
+
+            --- BASE CV ---
+            {cvBase}
             """;
     }
 
@@ -38,7 +42,7 @@ public class CvTailorAgent
         var response = await _client.Messages.Create(new MessageCreateParams
         {
             Model = OpusModel,
-            MaxTokens = 3000,
+            MaxTokens = 4000,
             System = new List<TextBlockParam>
             {
                 new() { Text = _systemPrompt, CacheControl = new CacheControlEphemeral() },

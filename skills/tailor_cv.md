@@ -1,77 +1,71 @@
 # Skill: tailor_cv
 
-You are tailoring a CV for a specific job application. Your job is to select, reorder, and lightly reframe content from the candidate's background to fit the role. You do not fabricate experience, tools, or metrics.
+You are adapting a candidate's existing CV for a specific job application. Your approach is conservative — preserve the content of the base CV and make only targeted edits to improve fit for this role. You do not fabricate experience, tools, or metrics.
 
 ## Context
 
-Read `context/background.yaml` before tailoring. All role details, achievements, anchors, and narrative guidelines live there. Do not use details from memory or training data — use the file.
+Read `context/background.yaml` for candidate background and narrative guidance. The base CV text is provided in your system context under BASE CV.
 
 ## Inputs
 
 You will receive:
 - Job posting text
-- Company name
-- Role title
-- Evaluation output (JSON from evaluate_posting skill) — particularly: `backend_match`, `frontend_match`, `company_assessment`, `role_type_match`
+- Evaluation output (JSON from evaluate_posting skill)
+
+---
+
+## What you are doing
+
+You are NOT writing a CV from scratch. You are making minimal targeted edits to the base CV to better match this specific job listing. The primary edit is always the Summary section. Everything else should remain as close to the base as possible.
+
+---
+
+## Permitted changes only
+
+1. **Summary** — Always replace the placeholder with a fresh summary specific to this role. See rules below.
+
+2. **Bullet reordering within roles** — Reorder the bullets within a role to lead with the most relevant to this posting. Do not move bullets between roles.
+
+3. **Keyword and phrase additions** — If the job posting names a specific technology, methodology, or concept that the base CV already describes but does not name, add the name where it fits naturally. Example: the posting says "event-driven architecture" and a bullet describes async processing — add the phrase. Do not add claims to bullets that don't already contain the underlying substance.
+
+4. **Minor wording adjustments** — Tighten or adjust emphasis where it improves relevance to the role. Do not change the substance or add new claims.
+
+5. **Skills reordering** — Reorder items within the Skills section to lead with the stack most relevant to this posting. Do not add technologies not listed in the base.
+
+6. **Epic Lanka** — This section is marked as conditional in the base CV. Omit it entirely from your output unless the role specifically values design experience or early career context. For most applications, remove it.
+
+7. **Programmed** — Condense to one short bullet or omit if the role is primarily product engineering with no legacy modernisation angle. Include all bullets if the posting values legacy code, ASP.NET, or contractor experience.
+
+---
+
+## What you must NOT do
+
+- Remove entire bullets or sections beyond the Epic Lanka and Programmed rules above
+- Add tools, metrics, or responsibilities not present in the base CV
+- Restructure the overall format or section order
+- Change dates, role names, or company names
+- Invent outcomes or numbers
+
+---
+
+## Summary rules
+
+Replace the summary placeholder with a fresh 2-3 sentence technical summary specific to this role:
+- State the stack and years of experience. No adjectives claiming greatness.
+- Name one or two domain areas most relevant to the role (e.g. payments processing, IoT/telemetry, property management SaaS).
+- Optionally anchor with one specific achievement if it is directly relevant.
+- Reads as a plain statement of fact, not a pitch.
 
 ---
 
 ## Hard constraints
 
-1. **Honest.** Never invent tools, metrics, or responsibilities not in `background.yaml`.
-2. **Select, don't pad.** Include the achievements most relevant to this role. Omit or condense weak-fit content.
-3. **Reframe, don't fabricate.** Reordering, tightening, or adjusting emphasis is fine. Inventing outcomes is not.
-4. **Omit GPA** unless the application explicitly requires it.
-5. **Omit Epic Lanka** unless the role specifically values design experience or early career context.
-6. **Programmed:** Include if the role values legacy modernisation, ASP.NET, or contract experience. Otherwise condense to one brief bullet or omit entirely.
-7. **No colons (:).** Do not use them anywhere in the document. Rewrite labels and descriptions to avoid them. Use an em dash (—) or a line break instead. For example, write "Languages — C#, TypeScript" not "Languages: C#, TypeScript".
-
----
-
-## Role-type-specific logic
-
-### Strong C#/.NET match (backend_match: strong)
-- Lead with Willow (most recent, strongest C# context). Feature App Status as the primary achievement.
-- Kolmeo second: lead with payments scale ($15-20M/week), the BPay alternative cost saving, and the GraphQL + ASP.NET Core + Azure stack.
-- Programmed: include briefly if no gap concern, omit otherwise.
-- Skills section: lead with C#, ASP.NET Core, Azure.
-
-### Java match (backend_match: good)
-- Lead with Willow (transferable .NET patterns). Acknowledge Java familiarity honestly — do not claim commercial Java experience that isn't there.
-- Skills section: surface Java explicitly under "proficient" but do not move it to "primary".
-
-### Python / Node.js match (backend_match: acceptable)
-- Do not manufacture Python/Node depth. These are genuinely thinner than C#.
-- Lead with transferable architectural patterns: API design, cloud platform experience, testing discipline, full-stack delivery.
-- Skills section: list Python/Node as "familiar" only. Do not inflate.
-
-### Frontend-heavy match (frontend_match: strong, backend_match weaker)
-- Reweight Kolmeo: lead the Kolmeo bullets with the React + TypeScript + state management complexity work. The payment method switcher required managing state across multiple concurrent tenant entries simultaneously.
-- Willow stays first (most recent), but open its bullets with the React/TypeScript work before the backend telemetry work.
-
----
-
-## Summary section
-
-**Never copy** the existing CV summary verbatim. Generate a fresh 2-3 sentence technical summary specific to this role:
-- State the stack and years of experience. No adjectives claiming greatness.
-- Name one or two domain areas most relevant to the role (e.g. payments processing, IoT/telemetry, property management SaaS).
-- Optionally anchor with one specific achievement if it's directly relevant.
-- Reads as a plain statement of fact, not a pitch.
-
----
-
-## Structure to produce
-
-1. **Personal header** — name, email, phone, location, LinkedIn, GitHub
-2. **Summary** — fresh, role-specific (see above)
-3. **Experience** — tailored selection, most relevant first within each role's bullets
-4. **Education** — RMIT, Bachelor of Information Technology, 2022. No GPA.
-5. **Skills** — reordered to lead with role-relevant stack
-6. **Projects** — Job Search Agent only (unless role explicitly values other projects)
+1. **No colons (:).** Do not use them anywhere in the document. Use an em dash (—) or restructure the sentence. For example, write "Languages — C#, TypeScript" not "Languages: C#, TypeScript".
+2. **No GPA.** Do not include it anywhere.
+3. **Honest.** Never add tools, metrics, or responsibilities not present in the base CV.
 
 ---
 
 ## Output
 
-Full CV content in structured markdown. No fabrication. No GPA. No Epic Lanka unless warranted. Begin with the personal header.
+The complete CV in the same structured markdown format as the base CV, beginning with the personal header. Replace the summary placeholder with the fresh summary. Apply the Epic Lanka and Programmed rules. No additional prose, no explanations, no preamble — just the CV.
