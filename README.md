@@ -1,107 +1,101 @@
 # Job Search Agent
 
-An agentic email assistant that monitors your Gmail inbox, classifies job-search related emails using Claude AI, and surfaces them in a real-time dashboard.
+An always-on, agentic job search management system. Monitors Gmail for job-related emails, discovers and evaluates job postings, generates tailored CVs and cover letters, and surfaces everything via a Telegram bot and a React dashboard.
 
-## How it works
+## Architecture
 
 ```
-Gmail API → JobSearchAgent (C# console) → SQLite DB → JobSearch.Api (ASP.NET Core) → JobSearch.Web (React)
+Gmail API ──────────────────────┐
+                                ▼
+                       JobSearchAgent (C# worker)
+                       ├── Email classification (Claude)
+                       ├── Job discovery & evaluation (Claude)
+                       └── PostgreSQL (shared with API)
+
+Telegram webhook ──────────────┐
+                                ▼
+                       JobSearch.Api (ASP.NET Core)
+                       ├── GET /api/v1/... — dashboard data
+                       ├── POST /api/v1/telegram/webhook
+                       │   ├── URL evaluation (Claude)
+                       │   ├── /cv — tailored CV → PDF
+                       │   └── /letter — cover letter
+                       └── React SPA (served from wwwroot)
 ```
 
-1. **JobSearchAgent** — fetches emails from Gmail and classifies each one with Claude Haiku (parallel, up to 15 concurrent requests). Results are persisted to a local SQLite database.
-2. **JobSearch.Api** — a minimal ASP.NET Core API that reads from the same database and exposes two endpoints for the frontend.
-3. **JobSearch.Web** — a React + Tailwind dashboard for filtering and browsing classified emails.
-
-### Email categories
-
-- Application confirmed
-- Interview invite
-- Recruiter outreach
-- Scheduling request
-- Offer
-- Rejection
-- Action needed
-- Not relevant
+Both projects share the same PostgreSQL database and the same `skills/` directory.
 
 ---
 
-## Prerequisites
+## Features
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download)
-- [Node.js 18+](https://nodejs.org)
-- A [Google Cloud project](https://console.cloud.google.com/) with the Gmail API enabled and an OAuth 2.0 desktop client (`credentials.json`)
-- An [Anthropic API key](https://console.anthropic.com/)
+### Email pipeline
+- Fetches and classifies job-related emails from Gmail using Claude
+- Categories: application confirmed, interview invite, recruiter outreach, scheduling request, offer, rejection, action needed, not relevant
+- Tracks application lifecycle — applied, screening, interviewing, offer, rejected, etc.
+
+### Job posting evaluation
+- Send any job URL to the Telegram bot to get a structured evaluation
+- Claude evaluates against personal criteria (location, stack, salary, experience level, company type)
+- Hard disqualifiers: visa sponsorship exclusion, PHP as primary stack, gambling industry, non-AU, solo engineer, Senior-titled roles
+- Output: structured breakdown with recommendation (strong/good/weak match or discard) and orange flags
+
+### Telegram bot commands
+- **Send a URL** — evaluate the posting, get a structured breakdown
+- **`/cv <url>`** — generate a tailored CV as a PDF download
+- **`/letter <url>`** — generate a tailored cover letter
+- Both `/cv` and `/letter` also work by replying to a job notification
+
+### CV generation
+- Starts from a full base CV (`skills/context/cv_base.md`) and makes only targeted keyword/phrase additions for the specific role
+- Writes a fresh role-specific summary for every application
+- Outputs as a formatted PDF via QuestPDF
+- Filters: no GPA, Epic Lanka included only for design-relevant roles, Programmed condensed or omitted when not relevant
+
+### Cover letter generation
+- Tailored per role using anchors from `context/background.yaml`
+- Hard writing rules: no colons, no em dashes, no banned phrases (passion, leverage, etc.), 350–500 words, active voice
+
+### React dashboard
+- Browse classified emails with filters
+- View job discoveries with evaluation breakdowns
+- Track application pipeline by status
+- Health endpoint for uptime monitoring
 
 ---
 
-## Setup
+## Skills system
 
-### 1. Clone and install
+All agent behaviour is defined in markdown skill files in `skills/`. Both the API and the worker load from this directory at runtime — update one, both pick it up on the next deploy.
 
-```bash
-git clone <repo-url>
-cd job-search
-npm install          # installs concurrently at the root
-cd JobSearch.Web
-npm install          # installs the React dev dependencies
-cd ..
 ```
-
-### 2. Add your Anthropic API key
-
-```bash
-cd JobSearchAgent
-dotnet user-secrets set ANTHROPIC_API_KEY sk-ant-...
-cd ..
+skills/
+├── evaluate_posting.md       # Evaluates job postings against criteria
+├── tailor_cv.md              # Adapts base CV for a specific role
+├── write_cover_letter.md     # Generates tailored cover letters
+├── classify_email.md         # Classifies job-related emails
+└── context/
+    ├── background.yaml       # Candidate data, anchors, narrative guidelines
+    ├── cv_base.md            # Full base CV — source of truth for CV generation
+    └── job_criteria.yaml     # All evaluation criteria, thresholds, disqualifiers
 ```
-
-### 3. Add your Gmail credentials
-
-Place your `credentials.json` (OAuth 2.0 desktop client downloaded from Google Cloud Console) in the repo root. It is git-ignored and will never be committed.
-
-The first time the agent runs it will open a browser window for Gmail authorisation. The resulting `token.json` is saved next to `credentials.json` and is also git-ignored.
 
 ---
 
-## Running
+## Tech stack
 
-### Start the dashboard
-
-```bash
-npm run dev
-```
-
-This starts three processes concurrently:
-
-| Label | What it does |
+| Layer | Technology |
 |---|---|
-| `[API]` | ASP.NET Core API on `http://localhost:5000` |
-| `[WEB]` | Vite dev server on `http://localhost:5173` |
-| `[AGENT]` | Fetches and classifies any unclassified emails, then exits |
-
-Open **http://localhost:5173** in your browser.
-
-### Sync new emails
-
-Re-run `npm run dev` (or run the agent on its own) to pull in any emails that have arrived since the last run:
-
-```bash
-cd JobSearchAgent
-dotnet run
-```
-
-### Classify a specific date range
-
-```bash
-cd JobSearchAgent
-dotnet run -- --from 2025-01-01 --to 2025-03-31
-```
-
-Or fetch the last N days:
-
-```bash
-dotnet run -- --days 7
-```
+| Backend API | C#, ASP.NET Core 9, Minimal API |
+| Worker | C# console app |
+| Frontend | React, TypeScript, Vite, Tailwind CSS |
+| AI | Claude (claude-opus-4-8) via Anthropic SDK |
+| Database | PostgreSQL (EF Core, Npgsql) |
+| PDF generation | QuestPDF |
+| Auth | Google OAuth 2.0 + secure cookie sessions |
+| Deployment | Railway, Docker |
+| Email | Gmail API |
+| Notifications | Telegram Bot API (webhook) |
 
 ---
 
@@ -109,28 +103,90 @@ dotnet run -- --days 7
 
 ```
 job-search/
-├── JobSearchAgent/          # Console app — Gmail fetch + Claude classification
-│   ├── Agents/              # EmailClassifier (parallel Haiku calls)
-│   ├── Data/                # EF Core DbContext + entity models
-│   ├── Integrations/        # GmailClient
-│   ├── Models/              # RawEmail record
-│   ├── Storage/             # EmailRepository
-│   └── skills/              # System-prompt markdown files
-├── JobSearch.Api/           # ASP.NET Core minimal API
-│   └── Program.cs           # GET /api/summary, GET /api/emails
-├── JobSearch.Web/           # React + TypeScript + Tailwind v4
-│   └── src/
-│       ├── components/      # SummaryCards, EmailTable
-│       ├── api.ts           # fetch wrappers
-│       └── types.ts         # TypeScript interfaces
-├── .gitignore
-└── package.json             # root dev script (concurrently)
+├── skills/                   # Shared agent skill files (used by API + worker)
+│   └── context/              # Candidate data, CV base, job criteria
+├── JobSearch.Api/            # ASP.NET Core API + React SPA host
+│   ├── Program.cs            # All routes + Telegram webhook handler
+│   └── Services/
+│       ├── TelegramService.cs
+│       └── PdfRenderer.cs    # Markdown → PDF via QuestPDF
+├── JobSearch.Data/           # Shared data layer (EF Core, agents)
+│   ├── AppDbContext.cs
+│   ├── CvTailorAgent.cs
+│   ├── CoverLetterAgent.cs
+│   ├── PostingEvaluator.cs
+│   ├── SkillLoader.cs        # Loads skill files from skills/ directory
+│   └── Migrations/
+├── JobSearchAgent/           # Worker — Gmail fetch, classification, discovery
+├── JobSearch.Web/            # React frontend source
+└── package.json              # Root dev script (concurrently)
+```
+
+---
+
+## Environment variables
+
+Set these in Railway (production) or `dotnet user-secrets` / `.env` (local).
+
+| Variable | Description |
+|---|---|
+| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token from BotFather |
+| `TELEGRAM_WEBHOOK_SECRET` | Alphanumeric secret for webhook verification |
+| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
+| `ALLOWED_EMAIL` | Google account allowed to access the dashboard |
+| `GMAIL_CLIENT_ID` | Gmail API OAuth client ID (worker only) |
+| `GMAIL_CLIENT_SECRET` | Gmail API OAuth client secret (worker only) |
+
+---
+
+## Local development
+
+### Prerequisites
+- .NET 9 SDK
+- Node.js 18+
+- PostgreSQL (or a Railway dev database)
+- Telegram bot registered via BotFather
+
+### Start everything
+
+```bash
+npm install
+cd JobSearch.Web && npm install && cd ..
+npm run dev
+```
+
+This starts three processes:
+
+| Label | What it does |
+|---|---|
+| `[API]` | ASP.NET Core on `http://localhost:5000` |
+| `[WEB]` | Vite dev server on `http://localhost:5173` |
+| `[AGENT]` | Runs the Gmail worker once, then exits |
+
+### Register the Telegram webhook
+
+After deploying (or when your Railway URL changes):
+
+```
+https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<your-railway-url>/api/v1/telegram/webhook&secret_token=<WEBHOOK_SECRET>
+```
+
+Verify with:
+
+```
+https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 ```
 
 ---
 
 ## Security
 
-- `credentials.json`, `token.json`, `.env`, and `*.db` are all git-ignored.
-- The Anthropic API key is stored in `dotnet user-secrets` (never in source).
-- The SQLite database lives locally only.
+- Google OAuth restricts dashboard access to a single configured email address
+- Telegram webhook is verified with a secret token on every request
+- `__Host-` cookie prefix with `HttpOnly`, `Secure`, `SameSite=Strict` in production
+- HSTS, CSP, and standard security headers on all responses
+- No secrets in source — all via environment variables or `dotnet user-secrets`
