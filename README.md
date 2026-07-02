@@ -36,8 +36,7 @@ Both projects share the same PostgreSQL database and the same `skills/` director
 
 ### Job posting evaluation
 - Send any job URL to the Telegram bot to get a structured evaluation
-- Claude evaluates against personal criteria (location, stack, salary, experience level, company type)
-- Hard disqualifiers: visa sponsorship exclusion, PHP as primary stack, gambling industry, non-AU, solo engineer, Senior-titled roles
+- Claude evaluates against configurable criteria defined in `skills/context/job_criteria.yaml` — location, stack, salary, experience level, company type, and hard disqualifiers
 - Output: structured breakdown with recommendation (strong/good/weak match or discard) and orange flags
 
 ### Telegram bot commands
@@ -47,14 +46,14 @@ Both projects share the same PostgreSQL database and the same `skills/` director
 - Both `/cv` and `/letter` also work by replying to a job notification
 
 ### CV generation
-- Starts from a full base CV (`skills/context/cv_base.md`) and makes only targeted keyword/phrase additions for the specific role
+- Starts from a full base CV (`skills/context/cv_base.md`) and makes only targeted keyword/phrase additions for the specific role — preserving all existing content rather than regenerating from scratch
 - Writes a fresh role-specific summary for every application
 - Outputs as a formatted PDF via QuestPDF
-- Filters: no GPA, Epic Lanka included only for design-relevant roles, Programmed condensed or omitted when not relevant
+- Tailoring rules (which sections to include, condense, or omit per role type) are defined in `skills/tailor_cv.md`
 
 ### Cover letter generation
-- Tailored per role using anchors from `context/background.yaml`
-- Hard writing rules: no colons, no em dashes, no banned phrases (passion, leverage, etc.), 350–500 words, active voice
+- Tailored per role using candidate anchors and narrative guidelines from `skills/context/background.yaml`
+- Writing rules (tone, structure, length, banned phrases) are defined in `skills/write_cover_letter.md`
 
 ### React dashboard
 - Browse classified emails with filters
