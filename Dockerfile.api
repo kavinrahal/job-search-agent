@@ -7,7 +7,7 @@ COPY JobSearch.Web/ ./
 RUN npm run build
 
 # Stage 2: build the .NET API
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS api-build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS api-build
 WORKDIR /src
 COPY . .
 # Merge React output into wwwroot before publish so dotnet includes it
@@ -15,7 +15,7 @@ COPY --from=web-build /app/dist ./JobSearch.Api/wwwroot/
 RUN dotnet publish JobSearch.Api/JobSearch.Api.csproj -c Release -o /app/publish
 
 # Stage 3: runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:9.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=api-build /app/publish .
 COPY --from=api-build /src/skills /app/skills

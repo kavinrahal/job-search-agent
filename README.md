@@ -145,7 +145,7 @@ Set these in Railway (production) or `dotnet user-secrets` / `.env` (local).
 ## Local development
 
 ### Prerequisites
-- .NET 9 SDK
+- .NET 10 SDK
 - Node.js 18+
 - PostgreSQL (or a Railway dev database)
 - Telegram bot registered via BotFather
