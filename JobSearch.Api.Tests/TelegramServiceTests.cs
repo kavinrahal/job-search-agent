@@ -20,7 +20,7 @@ public class TelegramServiceTests
             {"update_id":1,"message":{"text":"/cv https://au.seek.com/job/123"}}
             """);
 
-        var (updateId, text, replyToText) = svc.ParseUpdate(doc.RootElement);
+        var (updateId, text, replyToText) = TelegramService.ParseUpdate(doc.RootElement);
 
         Assert.Equal(1L, updateId);
         Assert.Equal("/cv https://au.seek.com/job/123", text);
@@ -46,7 +46,7 @@ public class TelegramServiceTests
             }
             """);
 
-        var (_, text, replyToText) = svc.ParseUpdate(doc.RootElement);
+        var (_, text, replyToText) = TelegramService.ParseUpdate(doc.RootElement);
 
         Assert.Equal("/letter", text);
         Assert.Equal("Canva — Engineer\nhttps://au.seek.com/job/456", replyToText);
@@ -60,7 +60,7 @@ public class TelegramServiceTests
         var svc = Make();
         using var doc = JsonDocument.Parse("""{"update_id":3}""");
 
-        var (updateId, text, replyToText) = svc.ParseUpdate(doc.RootElement);
+        var (updateId, text, replyToText) = TelegramService.ParseUpdate(doc.RootElement);
 
         Assert.Equal(3L, updateId);
         Assert.Null(text);
@@ -74,7 +74,7 @@ public class TelegramServiceTests
         var svc = Make();
         using var doc = JsonDocument.Parse("""{"update_id":4,"message":{"photo":{}}}""");
 
-        var (_, text, _) = svc.ParseUpdate(doc.RootElement);
+        var (_, text, _) = TelegramService.ParseUpdate(doc.RootElement);
 
         Assert.Null(text);
     }

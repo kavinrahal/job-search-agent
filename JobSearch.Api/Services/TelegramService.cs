@@ -29,7 +29,7 @@ public class TelegramService
     public bool TryMarkProcessed(long updateId) =>
         _processed.TryAdd(updateId, 0);
 
-    public (long UpdateId, string? Text, string? ReplyToText) ParseUpdate(JsonElement update)
+    public static (long UpdateId, string? Text, string? ReplyToText) ParseUpdate(JsonElement update)
     {
         var updateId = update.TryGetProperty("update_id", out var idEl)
             ? idEl.GetInt64()
@@ -73,7 +73,7 @@ public class TelegramService
         if (!resp.IsSuccessStatusCode)
         {
             var body = await resp.Content.ReadAsStringAsync();
-            Console.Error.WriteLine($"[Telegram] sendMessage {(int)resp.StatusCode}: {body}");
+            await Console.Error.WriteLineAsync($"[Telegram] sendMessage {(int)resp.StatusCode}: {body}");
         }
     }
 
@@ -90,7 +90,7 @@ public class TelegramService
         if (!resp.IsSuccessStatusCode)
         {
             var body = await resp.Content.ReadAsStringAsync();
-            Console.Error.WriteLine($"[Telegram] sendDocument {(int)resp.StatusCode}: {body}");
+            await Console.Error.WriteLineAsync($"[Telegram] sendDocument {(int)resp.StatusCode}: {body}");
         }
     }
 

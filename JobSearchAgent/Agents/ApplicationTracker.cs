@@ -1,5 +1,6 @@
 using JobSearch.Data;
 using JobSearchAgent.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace JobSearchAgent.Agents;
 
@@ -33,7 +34,7 @@ public static class ApplicationTracker
         return tr > cr;
     }
 
-    public static TrackingResult ProcessClassifications(
+    public static async Task<TrackingResult> ProcessClassificationsAsync(
         AppDbContext db,
         IEnumerable<(RawEmail Email, EmailClassification Classification)> results)
     {
@@ -50,16 +51,11 @@ public static class ApplicationTracker
             if (string.IsNullOrWhiteSpace(clf.Company))
                 continue;
 
-            bool wasCreated;
-            var app = FindOrCreate(db, clf, email, now, out wasCreated);
+            var (app, wasCreated) = await FindOrCreateAsync(db, clf, email, now);
             if (app is null) continue;
 
             if (wasCreated)
-            {
                 created++;
-                // Initial creation event already written inside FindOrCreate
-                // If the triggering email itself implies a status beyond Applied, apply it now
-            }
 
             var (toStatus, summary) = ResolveTransition(app.Status, clf);
 
@@ -110,34 +106,32 @@ public static class ApplicationTracker
             }
         }
 
-        db.SaveChanges();
+        await db.SaveChangesAsync();
         return new TrackingResult(created, updated, notifications);
     }
 
-    private static Application? FindOrCreate(
+    private static async Task<(Application? app, bool wasCreated)> FindOrCreateAsync(
         AppDbContext db,
         EmailClassification clf,
         RawEmail email,
-        DateTime now,
-        out bool wasCreated)
+        DateTime now)
     {
-        wasCreated = false;
         string company = clf.Company.Trim();
         string role = clf.RoleTitle.Trim();
 
-        // Case-insensitive match — EF Core translates ToLower() to LOWER() in PostgreSQL
-        var existing = db.Applications.FirstOrDefault(a =>
-            a.Company.ToLower() == company.ToLower() &&
-            (role == "" || a.RoleTitle.ToLower() == role.ToLower()));
+        // EF Core translates string.Equals with StringComparison.OrdinalIgnoreCase to ILIKE on PostgreSQL
+        var existing = await db.Applications.FirstOrDefaultAsync(a =>
+            string.Equals(a.Company, company, StringComparison.OrdinalIgnoreCase) &&
+            (role == "" || string.Equals(a.RoleTitle, role, StringComparison.OrdinalIgnoreCase)));
 
         if (existing is not null)
-            return existing;
+            return (existing, false);
 
         // Only create a new application for categories that imply one was submitted
         if (clf.Category is not (
             "application_confirmation" or "rejection" or
             "interview_invitation" or "scheduling_request" or "offer"))
-            return null;
+            return (null, false);
 
         var app = new Application
         {
@@ -148,7 +142,7 @@ public static class ApplicationTracker
             UpdatedAt = now,
         };
         db.Applications.Add(app);
-        db.SaveChanges(); // flush to get app.Id before adding events
+        await db.SaveChangesAsync(); // flush to get app.Id before adding events
 
         db.ApplicationEvents.Add(new ApplicationEvent
         {
@@ -161,8 +155,7 @@ public static class ApplicationTracker
             OccurredAt = email.ReceivedAt.UtcDateTime,
         });
 
-        wasCreated = true;
-        return app;
+        return (app, true);
     }
 
     private static (string newStatus, string summary) ResolveTransition(

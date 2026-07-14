@@ -55,6 +55,7 @@ public class AdzunaFetcher : IJobFetcher
 
     private async Task<List<JobFeedItem>> FetchKeywordAsync(string keyword)
     {
+#pragma warning disable S1075 // Adzuna public API base URL — not a configurable path
         var url = "https://api.adzuna.com/v1/api/jobs/au/search/1" +
             $"?app_id={Uri.EscapeDataString(_appId)}" +
             $"&app_key={Uri.EscapeDataString(_appKey)}" +
@@ -64,6 +65,7 @@ public class AdzunaFetcher : IJobFetcher
             $"&max_days_old=14" +
             $"&sort_by=date" +
             $"&content-type=application%2Fjson";
+#pragma warning restore S1075
 
         using var httpResponse = await _http.GetAsync(url);
         httpResponse.EnsureSuccessStatusCode();
@@ -88,12 +90,12 @@ public class AdzunaFetcher : IJobFetcher
             })];
     }
 
-    private record AdzunaResponse(
+    private sealed record AdzunaResponse(
         [property: JsonPropertyName("results")] List<AdzunaJob> Results,
         [property: JsonPropertyName("count")]   int Count
     );
 
-    private record AdzunaJob(
+    private sealed record AdzunaJob(
         [property: JsonPropertyName("title")]        string Title,
         [property: JsonPropertyName("description")]  string Description,
         [property: JsonPropertyName("redirect_url")] string RedirectUrl,
@@ -106,6 +108,6 @@ public class AdzunaFetcher : IJobFetcher
         [property: JsonPropertyName("contract_time")]string? ContractTime
     );
 
-    private record AdzunaLocation([property: JsonPropertyName("display_name")] string DisplayName);
-    private record AdzunaCompany( [property: JsonPropertyName("display_name")] string DisplayName);
+    private sealed record AdzunaLocation([property: JsonPropertyName("display_name")] string DisplayName);
+    private sealed record AdzunaCompany( [property: JsonPropertyName("display_name")] string DisplayName);
 }

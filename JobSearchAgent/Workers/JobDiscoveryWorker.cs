@@ -2,6 +2,7 @@ using System.Text.Json;
 using JobSearch.Data;
 using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
+using Microsoft.EntityFrameworkCore;
 
 namespace JobSearchAgent.Workers;
 
@@ -48,10 +49,10 @@ public class JobDiscoveryWorker
         var recent = feedItems.Where(i => i.PublishedAt >= cutoff).ToList();
         Console.WriteLine($"Job discovery: {feedItems.Count} total, {recent.Count} within {MaxAgeDays} days.");
 
-        var existingUrls = _db.DiscoveredPostings
+        var existingUrls = await _db.DiscoveredPostings
             .Where(d => d.Recommendation != "error")
             .Select(d => d.Url)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
 
         var newItems = recent
             .Where(i => !existingUrls.Contains(i.Url))
@@ -71,7 +72,7 @@ public class JobDiscoveryWorker
         foreach (var item in newItems)
         {
             // Insert immediately so a concurrent/retry run won't re-evaluate the same URL.
-            var record = _db.DiscoveredPostings.FirstOrDefault(d => d.Url == item.Url);
+            var record = await _db.DiscoveredPostings.FirstOrDefaultAsync(d => d.Url == item.Url);
             if (record is null)
             {
                 record = new DiscoveredPosting { Url = item.Url, Source = item.Source, Title = item.Title, Company = item.Company, DiscoveredAt = DateTime.UtcNow };
@@ -82,7 +83,7 @@ public class JobDiscoveryWorker
                 record.Recommendation = null;
                 record.EvaluatedAt = null;
             }
-            _db.SaveChanges();
+            await _db.SaveChangesAsync();
 
             try
             {
@@ -114,20 +115,18 @@ public class JobDiscoveryWorker
                 record.EvaluationJson = JsonSerializer.Serialize(eval);
                 record.DisqualifierHit = eval.DisqualifierHit;
                 record.EvaluatedAt = DateTime.UtcNow;
-                _db.SaveChanges();
+                await _db.SaveChangesAsync();
 
                 evaluated++;
                 Console.WriteLine($"    => {eval.Recommendation} | {eval.Company}");
 
                 if (_telegram is not null &&
-                    (eval.Recommendation is "strong_match" or "good_match"))
+                    eval.Recommendation is "strong_match" or "good_match" &&
+                    await _telegram.SendAsync(EvalFormatter.Format(eval), "HTML"))
                 {
-                    if (await _telegram.SendAsync(EvalFormatter.Format(eval), "HTML"))
-                    {
-                        record.NotificationSent = true;
-                        _db.SaveChanges();
-                        notified++;
-                    }
+                    record.NotificationSent = true;
+                    await _db.SaveChangesAsync();
+                    notified++;
                 }
             }
             catch (Exception ex)
@@ -135,7 +134,7 @@ public class JobDiscoveryWorker
                 Console.WriteLine($"    ! Error: {ex.Message}");
                 record.Recommendation = "error";
                 record.EvaluatedAt = DateTime.UtcNow;
-                _db.SaveChanges();
+                await _db.SaveChangesAsync();
             }
 
             await Task.Delay(1200); // throttle between Claude calls
@@ -146,11 +145,13 @@ public class JobDiscoveryWorker
 
     internal static string FormatPostingText(JobFeedItem item)
     {
-        string salary = item.SalaryMin.HasValue && item.SalaryMax.HasValue
-            ? $"${item.SalaryMin:N0} – ${item.SalaryMax:N0} AUD"
-            : item.SalaryMin.HasValue
-                ? $"From ${item.SalaryMin:N0} AUD"
-                : "Not stated";
+        string salary;
+        if (item.SalaryMin.HasValue && item.SalaryMax.HasValue)
+            salary = $"${item.SalaryMin:N0} – ${item.SalaryMax:N0} AUD";
+        else if (item.SalaryMin.HasValue)
+            salary = $"From ${item.SalaryMin:N0} AUD";
+        else
+            salary = "Not stated";
 
         return $"""
             Company: {item.Company}

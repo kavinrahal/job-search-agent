@@ -82,11 +82,11 @@ public class GreenhouseFetcher : IJobFetcher
 
     private static bool IsAuLocation(string? location) => JobFetcherUtils.IsAuLocation(location);
 
-    private record GreenhouseResponse(
+    private sealed record GreenhouseResponse(
         [property: JsonPropertyName("jobs")] List<GreenhouseJob> Jobs
     );
 
-    private record GreenhouseJob(
+    private sealed record GreenhouseJob(
         [property: JsonPropertyName("title")]        string Title,
         [property: JsonPropertyName("absolute_url")] string AbsoluteUrl,
         [property: JsonPropertyName("updated_at")]   DateTime UpdatedAt,
@@ -94,7 +94,7 @@ public class GreenhouseFetcher : IJobFetcher
         [property: JsonPropertyName("content")]      string? Content
     );
 
-    private record GreenhouseLocation(
+    private sealed record GreenhouseLocation(
         [property: JsonPropertyName("name")] string Name
     );
 }

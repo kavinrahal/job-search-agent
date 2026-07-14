@@ -1,3 +1,4 @@
+using System.Globalization;
 using JobSearch.Data;
 using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
@@ -18,9 +19,9 @@ for (int i = 0; i < args.Length - 1; i++)
 {
     if (args[i] == "--days" && int.TryParse(args[i + 1], out int d))
         days = d;
-    else if (args[i] == "--from" && DateTimeOffset.TryParse(args[i + 1], out var f))
+    else if (args[i] == "--from" && DateTimeOffset.TryParse(args[i + 1], CultureInfo.InvariantCulture, out var f))
         fromDate = f;
-    else if (args[i] == "--to" && DateTimeOffset.TryParse(args[i + 1], out var t))
+    else if (args[i] == "--to" && DateTimeOffset.TryParse(args[i + 1], CultureInfo.InvariantCulture, out var t))
         toDate = t;
 }
 
@@ -86,7 +87,7 @@ else if (days.HasValue)
 }
 else
 {
-    var latestRaw = db.RawEmails.OrderByDescending(r => r.ReceivedAt).Select(r => (DateTime?)r.ReceivedAt).FirstOrDefault();
+    var latestRaw = await db.RawEmails.OrderByDescending(r => r.ReceivedAt).Select(r => (DateTime?)r.ReceivedAt).FirstOrDefaultAsync();
     since = latestRaw is DateTime d ? new DateTimeOffset(d, TimeSpan.Zero) : null;
     string label = since.HasValue
         ? since.Value.ToString("yyyy-MM-dd HH:mm UTC")
@@ -96,23 +97,25 @@ else
 
 var emails = await gmail.FetchEmailsSinceAsync(since, until: toDate);
 
-// Always upsert (idempotent)
-foreach (var email in emails)
+// Batch upsert — one query to find existing, one SaveChanges for all new rows
+var fetchedIds = emails.Select(e => e.MessageId).ToHashSet();
+var existingIds = await db.RawEmails
+    .Where(r => fetchedIds.Contains(r.MessageId))
+    .Select(r => r.MessageId)
+    .ToHashSetAsync();
+foreach (var email in emails.Where(e => !existingIds.Contains(e.MessageId)))
 {
-    if (!db.RawEmails.Any(r => r.MessageId == email.MessageId))
+    db.RawEmails.Add(new RawEmailRecord
     {
-        db.RawEmails.Add(new RawEmailRecord
-        {
-            MessageId   = email.MessageId,
-            ThreadId    = email.ThreadId,
-            FromAddress = email.FromAddress,
-            Subject     = email.Subject,
-            BodyText    = email.BodyText,
-            ReceivedAt  = email.ReceivedAt.UtcDateTime,
-        });
-        db.SaveChanges();
-    }
+        MessageId   = email.MessageId,
+        ThreadId    = email.ThreadId,
+        FromAddress = email.FromAddress,
+        Subject     = email.Subject,
+        BodyText    = email.BodyText,
+        ReceivedAt  = email.ReceivedAt.UtcDateTime,
+    });
 }
+await db.SaveChangesAsync();
 
 // Determine what to classify
 List<RawEmail> emailsToClassify;
@@ -189,7 +192,7 @@ if (emailsToClassify.Count == 0)
         NewApplications = 0,
         DurationMs = (int)(DateTime.UtcNow - runStart).TotalMilliseconds,
     });
-    db.SaveChanges();
+    await db.SaveChangesAsync();
     return;
 }
 
@@ -199,7 +202,7 @@ var results = await classifier.ClassifyBatchAsync(emailsToClassify);
 var now = DateTime.UtcNow;
 foreach (var (email, clf) in results)
 {
-    var existing = db.Classifications.FirstOrDefault(c => c.MessageId == email.MessageId);
+    var existing = await db.Classifications.FirstOrDefaultAsync(c => c.MessageId == email.MessageId);
     if (existing is not null)
     {
         existing.IsJobRelated = clf.IsJobRelated;
@@ -223,7 +226,7 @@ foreach (var (email, clf) in results)
         });
     }
 }
-db.SaveChanges();
+await db.SaveChangesAsync();
 
 var jobRelated = results.Where(r => r.Classification.IsJobRelated).ToList();
 int notRelevantCount = results.Count - jobRelated.Count;
@@ -231,7 +234,7 @@ int notRelevantCount = results.Count - jobRelated.Count;
 Console.WriteLine();
 Console.WriteLine($"Results: {jobRelated.Count} job-related, {notRelevantCount} not relevant.");
 
-var tracking = ApplicationTracker.ProcessClassifications(db, results);
+var tracking = await ApplicationTracker.ProcessClassificationsAsync(db, results);
 if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
     Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
 
@@ -242,7 +245,7 @@ if (!testMode)
 
 if (botToken is not null && chatId is not null)
 {
-    var pending = db.Notifications.Where(n => n.SentAt == null).ToList();
+    var pending = await db.Notifications.Where(n => n.SentAt == null).ToListAsync();
     if (pending.Count > 0)
     {
         using var telegram = new TelegramNotifier(botToken, chatId);
@@ -256,7 +259,7 @@ if (botToken is not null && chatId is not null)
                 sent++;
             }
         }
-        db.SaveChanges();
+        await db.SaveChangesAsync();
         Console.WriteLine($"Telegram: {sent}/{pending.Count} notification(s) sent.");
     }
 }
@@ -302,7 +305,7 @@ db.SystemHealth.Add(new JobSearch.Data.SystemHealth
     NewApplications = tracking.Created,
     DurationMs = (int)(DateTime.UtcNow - runStart).TotalMilliseconds,
 });
-db.SaveChanges();
+await db.SaveChangesAsync();
 
 // ---------------------------------------------------------------------------
 // Load all stored job_alert emails from DB and run the alert processor.
@@ -311,10 +314,10 @@ db.SaveChanges();
 // ---------------------------------------------------------------------------
 async Task RunAlertProcessing()
 {
-    var alertMessageIds = db.Classifications
+    var alertMessageIds = await db.Classifications
         .Where(c => c.Category == "job_alert" && c.IsJobRelated)
         .Select(c => c.MessageId)
-        .ToHashSet();
+        .ToHashSetAsync();
     if (alertMessageIds.Count == 0) return;
 
     var allAlertEmails = db.RawEmails

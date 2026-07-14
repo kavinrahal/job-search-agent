@@ -46,8 +46,10 @@ public class GmailClient
         string credentialsPath, string tokenStorePath)
     {
         await using var stream = File.OpenRead(credentialsPath);
+#pragma warning disable S6966 // Google.Apis library has no FromStreamAsync equivalent
         var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
             GoogleClientSecrets.FromStream(stream).Secrets,
+#pragma warning restore S6966
             [GmailService.Scope.GmailReadonly],
             "user",
             CancellationToken.None,

@@ -138,27 +138,21 @@ public class EmailClassifier
     public async Task<List<(RawEmail Email, EmailClassification Classification)>> ClassifyBatchAsync(
         List<RawEmail> emails, int maxConcurrency = 15)
     {
-        var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
+        var results = new (RawEmail Email, EmailClassification Classification)[emails.Count];
         int completed = 0;
-        var results = new (RawEmail Email, EmailClassification Classification)?[emails.Count];
 
-        await Task.WhenAll(emails.Select(async (email, i) =>
-        {
-            await semaphore.WaitAsync();
-            try
+        await Parallel.ForEachAsync(
+            emails.Index(),
+            new ParallelOptions { MaxDegreeOfParallelism = maxConcurrency },
+            async (pair, _) =>
             {
-                results[i] = (email, await ClassifyAsync(email));
+                results[pair.Index] = (pair.Item, await ClassifyAsync(pair.Item));
                 int n = Interlocked.Increment(ref completed);
                 if (n % 10 == 0 || n == emails.Count)
                     Console.WriteLine($"  classified {n}/{emails.Count}...");
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        }));
+            });
 
-        return [.. results.Where(r => r.HasValue).Select(r => r!.Value)];
+        return [.. results];
     }
 
 

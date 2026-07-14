@@ -52,17 +52,25 @@ public class JobPostingFetcher
 
         if (root.TryGetProperty("location", out var loc))
         {
-            var locText = loc.ValueKind == JsonValueKind.String
-                ? loc.GetString()
-                : loc.TryGetProperty("label", out var ll) ? ll.GetString() : null;
+            string? locText;
+            if (loc.ValueKind == JsonValueKind.String)
+                locText = loc.GetString();
+            else if (loc.TryGetProperty("label", out var ll))
+                locText = ll.GetString();
+            else
+                locText = null;
             if (locText is not null) sb.AppendLine($"Location: {locText}");
         }
 
         if (root.TryGetProperty("salary", out var sal))
         {
-            var salText = sal.ValueKind == JsonValueKind.String
-                ? sal.GetString()
-                : sal.TryGetProperty("label", out var sl) ? sl.GetString() : null;
+            string? salText;
+            if (sal.ValueKind == JsonValueKind.String)
+                salText = sal.GetString();
+            else if (sal.TryGetProperty("label", out var sl))
+                salText = sl.GetString();
+            else
+                salText = null;
             if (salText is not null) sb.AppendLine($"Salary: {salText}");
         }
 

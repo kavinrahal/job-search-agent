@@ -85,7 +85,7 @@ skills/
 
 | Layer | Technology |
 |---|---|
-| Backend API | C#, ASP.NET Core 9, Minimal API |
+| Backend API | C#, ASP.NET Core 10, Minimal API |
 | Worker | C# console app |
 | Frontend | React, TypeScript, Vite, Tailwind CSS |
 | AI | Claude (claude-opus-4-8) via Anthropic SDK |

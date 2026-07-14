@@ -79,7 +79,7 @@ public class LeverFetcher : IJobFetcher
 
     private static bool IsAuLocation(string? location) => JobFetcherUtils.IsAuLocation(location);
 
-    private record LeverPosting(
+    private sealed record LeverPosting(
         [property: JsonPropertyName("id")]               string Id,
         [property: JsonPropertyName("text")]             string Text,
         [property: JsonPropertyName("hostedUrl")]        string HostedUrl,
@@ -89,7 +89,7 @@ public class LeverFetcher : IJobFetcher
         [property: JsonPropertyName("categories")]       LeverCategories? Categories
     );
 
-    private record LeverCategories(
+    private sealed record LeverCategories(
         [property: JsonPropertyName("location")] string? Location,
         [property: JsonPropertyName("team")]     string? Team
     );

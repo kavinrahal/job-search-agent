@@ -4,6 +4,7 @@ using JobSearch.Data;
 using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
 using JobSearchAgent.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace JobSearchAgent.Workers;
 
@@ -43,13 +44,13 @@ public class JobAlertProcessor
     internal static Dictionary<string, string> ExtractJobUrls(IEnumerable<RawEmail> emails)
     {
         var urls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var email in emails)
+        foreach (var bodyText in emails.Select(e => e.BodyText))
         {
-            foreach (Match m in SeekPattern.Matches(email.BodyText))
+            foreach (Match m in SeekPattern.Matches(bodyText))
                 urls.TryAdd($"https://au.seek.com/job/{m.Groups[1].Value}", "seek_alert");
-            foreach (Match m in LinkedInPattern.Matches(email.BodyText))
+            foreach (Match m in LinkedInPattern.Matches(bodyText))
                 urls.TryAdd($"https://www.linkedin.com/jobs/view/{m.Groups[1].Value}", "linkedin_alert");
-            foreach (Match m in JoraPattern.Matches(email.BodyText))
+            foreach (Match m in JoraPattern.Matches(bodyText))
                 urls.TryAdd($"https://au.jora.com/job/{m.Groups[1].Value}", "jora_alert");
         }
         return urls;
@@ -70,22 +71,22 @@ public class JobAlertProcessor
         // Build URL → email body index so we can fall back to alert content
         // when the job page itself is unreachable (e.g. private hostname, geo-block).
         var fallbackContext = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var email in emailList)
+        foreach (var bodyText in emailList.Select(e => e.BodyText))
         {
-            foreach (Match m in SeekPattern.Matches(email.BodyText))
-                fallbackContext.TryAdd($"https://au.seek.com/job/{m.Groups[1].Value}", email.BodyText);
-            foreach (Match m in LinkedInPattern.Matches(email.BodyText))
-                fallbackContext.TryAdd($"https://www.linkedin.com/jobs/view/{m.Groups[1].Value}", email.BodyText);
-            foreach (Match m in JoraPattern.Matches(email.BodyText))
-                fallbackContext.TryAdd($"https://au.jora.com/job/{m.Groups[1].Value}", email.BodyText);
+            foreach (Match m in SeekPattern.Matches(bodyText))
+                fallbackContext.TryAdd($"https://au.seek.com/job/{m.Groups[1].Value}", bodyText);
+            foreach (Match m in LinkedInPattern.Matches(bodyText))
+                fallbackContext.TryAdd($"https://www.linkedin.com/jobs/view/{m.Groups[1].Value}", bodyText);
+            foreach (Match m in JoraPattern.Matches(bodyText))
+                fallbackContext.TryAdd($"https://au.jora.com/job/{m.Groups[1].Value}", bodyText);
         }
 
         // Deduplicate against already-stored postings. Exclude "error" records so
         // transient failures (403, timeout) are retried on the next run.
-        var existingUrls = _db.DiscoveredPostings
+        var existingUrls = await _db.DiscoveredPostings
             .Where(d => d.Recommendation != "error")
             .Select(d => d.Url)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
 
         var newUrls = urls
             .Where(kv => !existingUrls.Contains(kv.Key))
@@ -100,7 +101,7 @@ public class JobAlertProcessor
 
         foreach (var (url, source) in newUrls)
         {
-            var record = _db.DiscoveredPostings.FirstOrDefault(d => d.Url == url);
+            var record = await _db.DiscoveredPostings.FirstOrDefaultAsync(d => d.Url == url);
             if (record is null)
             {
                 record = new DiscoveredPosting { Url = url, Source = source, Title = "", DiscoveredAt = DateTime.UtcNow };
@@ -111,7 +112,7 @@ public class JobAlertProcessor
                 record.Recommendation = null;
                 record.EvaluatedAt = null;
             }
-            _db.SaveChanges();
+            await _db.SaveChangesAsync();
 
             try
             {
@@ -136,20 +137,18 @@ public class JobAlertProcessor
                 record.EvaluationJson = JsonSerializer.Serialize(eval);
                 record.DisqualifierHit = eval.DisqualifierHit;
                 record.EvaluatedAt = DateTime.UtcNow;
-                _db.SaveChanges();
+                await _db.SaveChangesAsync();
 
                 evaluated++;
                 Console.WriteLine($"    => {eval.Recommendation} | {eval.Company} — {eval.RoleTitle}");
 
                 if (_telegram is not null &&
-                    eval.Recommendation is "strong_match" or "good_match")
+                    eval.Recommendation is "strong_match" or "good_match" &&
+                    await _telegram.SendAsync(EvalFormatter.Format(eval, "via job alert"), "HTML"))
                 {
-                    if (await _telegram.SendAsync(EvalFormatter.Format(eval, "via job alert"), "HTML"))
-                    {
-                        record.NotificationSent = true;
-                        _db.SaveChanges();
-                        notified++;
-                    }
+                    record.NotificationSent = true;
+                    await _db.SaveChangesAsync();
+                    notified++;
                 }
             }
             catch (Exception ex)
@@ -157,7 +156,7 @@ public class JobAlertProcessor
                 Console.WriteLine($"    ! Error: {ex.Message}");
                 record.Recommendation = "error";
                 record.EvaluatedAt = DateTime.UtcNow;
-                _db.SaveChanges();
+                await _db.SaveChangesAsync();
             }
 
             await Task.Delay(1200);

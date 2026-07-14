@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
 using JobSearch.Api.Services;
@@ -7,7 +8,6 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -105,7 +105,7 @@ builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegra
 builder.Services.Configure<ForwardedHeadersOptions>(o =>
 {
     o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    o.KnownNetworks.Clear();
+    o.KnownIPNetworks.Clear();
     o.KnownProxies.Clear();
 });
 
@@ -139,6 +139,7 @@ app.Use(async (ctx, next) =>
     ctx.Response.Headers.Append("X-Frame-Options", "DENY");
     ctx.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
     ctx.Response.Headers.Append("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+#pragma warning disable S7039 // CSP is intentionally restrictive — 'unsafe-inline' only for styles (no nonce support in SPA build)
     ctx.Response.Headers.Append("Content-Security-Policy",
         "default-src 'self'; " +
         "script-src 'self'; " +
@@ -149,6 +150,7 @@ app.Use(async (ctx, next) =>
         "frame-src 'none'; " +
         "base-uri 'self'; " +
         "form-action 'self' https://accounts.google.com");
+#pragma warning restore S7039
     await next();
 });
 
@@ -166,7 +168,7 @@ try
 }
 catch (Exception ex)
 {
-    Console.Error.WriteLine($"[Startup] Migration failed: {ex}");
+    await Console.Error.WriteLineAsync($"[Startup] Migration failed: {ex}");
     throw;
 }
 
@@ -314,10 +316,10 @@ api.MapGet("/emails", (
         from c in cls.DefaultIfEmpty()
         select new { Email = e, Classification = c };
 
-    if (from is not null && DateTime.TryParse(from, out var fromDate))
+    if (from is not null && DateTime.TryParse(from, CultureInfo.InvariantCulture, out var fromDate))
         query = query.Where(x => x.Email.ReceivedAt >= DateTime.SpecifyKind(fromDate, DateTimeKind.Utc));
 
-    if (to is not null && DateTime.TryParse(to, out var toDate))
+    if (to is not null && DateTime.TryParse(to, CultureInfo.InvariantCulture, out var toDate))
         query = query.Where(x => x.Email.ReceivedAt <= DateTime.SpecifyKind(toDate, DateTimeKind.Utc));
 
     if (category is not null)
@@ -389,12 +391,12 @@ api.MapGet("/applications", (
 });
 
 // GET /api/v1/applications/{id}/events
-api.MapGet("/applications/{id}/events", (int id, AppDbContext db) =>
+api.MapGet("/applications/{id}/events", async (int id, AppDbContext db) =>
 {
-    var application = db.Applications.Find(id);
+    var application = await db.Applications.FindAsync(id);
     if (application is null) return Results.NotFound();
 
-    var events = db.ApplicationEvents
+    var events = await db.ApplicationEvents
         .Where(e => e.ApplicationId == id)
         .OrderBy(e => e.OccurredAt)
         .Select(e => new
@@ -406,7 +408,7 @@ api.MapGet("/applications/{id}/events", (int id, AppDbContext db) =>
             summary = e.Summary,
             occurredAt = e.OccurredAt,
         })
-        .ToList();
+        .ToListAsync();
 
     return Results.Ok(new
     {
@@ -516,7 +518,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
         return Results.Ok();
     }
 
-    var (updateId, text, replyToText) = telegram.ParseUpdate(update);
+    var (updateId, text, replyToText) = TelegramService.ParseUpdate(update);
 
     // Prevent duplicate processing — Telegram retries if we don't respond within 5 seconds.
     if (!telegram.TryMarkProcessed(updateId))
@@ -545,10 +547,10 @@ app.MapPost("/api/v1/telegram/webhook", async (
 
         if (resolvedUrl is not null)
         {
-            var posting = db.DiscoveredPostings
+            var posting = await db.DiscoveredPostings
                 .Where(d => d.Url == resolvedUrl)
                 .Select(d => new { d.EvaluationJson, d.Company, d.Title })
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
             storedEvalJson = posting?.EvaluationJson;
             storedCompany  = posting?.Company;
@@ -657,7 +659,9 @@ app.MapPost("/api/v1/telegram/webhook", async (
         }
         catch (Exception ex)
         {
+#pragma warning disable S2486, S108 // swallow intentionally — don't let Telegram send failure mask the original error
             try { await telegram.SendMessageAsync($"Unexpected error: {ex.Message}", parseMode: null); } catch { }
+#pragma warning restore S2486, S108
         }
     });
 
@@ -670,5 +674,5 @@ app.Map("/api/{**rest}", () => Results.NotFound());
 // SPA fallback — serves index.html for all non-API, non-asset paths (React Router routes)
 app.MapFallbackToFile("index.html");
 
-Console.WriteLine("[Startup] Calling app.Run()...");
-app.Run();
+Console.WriteLine("[Startup] Calling app.RunAsync()...");
+await app.RunAsync();

@@ -1,4 +1,3 @@
-using System.Text;
 using Anthropic;
 using Anthropic.Models.Messages;
 
@@ -27,18 +26,23 @@ public class CoverLetterAgent
 
     public async Task<string> GenerateAsync(string postingText, string evaluationJson, string? instruction = null)
     {
-        var content = new StringBuilder();
-        content.AppendLine("Job posting:");
-        content.AppendLine(postingText);
-        content.AppendLine();
-        content.AppendLine("--- EVALUATION ---");
-        content.AppendLine(evaluationJson);
+        string userContent = instruction is not null
+            ? $"""
+              Job posting:
+              {postingText}
 
-        if (instruction is not null)
-        {
-            content.AppendLine();
-            content.AppendLine($"Candidate instruction: {instruction}");
-        }
+              --- EVALUATION ---
+              {evaluationJson}
+
+              Candidate instruction: {instruction}
+              """
+            : $"""
+              Job posting:
+              {postingText}
+
+              --- EVALUATION ---
+              {evaluationJson}
+              """;
 
         var response = await _client.Messages.Create(new MessageCreateParams
         {
@@ -48,18 +52,12 @@ public class CoverLetterAgent
             {
                 new() { Text = _systemPrompt, CacheControl = new CacheControlEphemeral() },
             },
-            Messages = [new() { Role = Role.User, Content = content.ToString() }],
+            Messages = [new() { Role = Role.User, Content = userContent }],
         });
 
         return ExtractText(response.Content);
     }
 
-    private static string ExtractText(IReadOnlyList<ContentBlock> blocks)
-    {
-        var sb = new StringBuilder();
-        foreach (var block in blocks)
-            if (block.TryPickText(out TextBlock? tb) && tb is not null)
-                sb.Append(tb.Text);
-        return sb.ToString().Trim();
-    }
+    private static string ExtractText(IReadOnlyList<ContentBlock> blocks) =>
+        string.Concat(blocks.Select(b => b.TryPickText(out TextBlock? tb) ? tb?.Text ?? "" : "")).Trim();
 }

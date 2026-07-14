@@ -5,7 +5,7 @@ namespace JobSearch.Data;
 public class AppDbContext : DbContext
 {
     public AppDbContext() { }
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+    public AppDbContext(DbContextOptions<AppDbContext> optionsBuilder) : base(optionsBuilder) { }
 
     public DbSet<RawEmailRecord> RawEmails { get; set; }
     public DbSet<ClassificationRecord> Classifications { get; set; }
@@ -15,10 +15,10 @@ public class AppDbContext : DbContext
     public DbSet<SystemHealth> SystemHealth { get; set; }
     public DbSet<DiscoveredPosting> DiscoveredPostings { get; set; }
 
-    protected override void OnConfiguring(DbContextOptionsBuilder options)
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        if (options.IsConfigured) return;
-        options.UseNpgsql(GetConnectionString());
+        if (optionsBuilder.IsConfigured) return;
+        optionsBuilder.UseNpgsql(GetConnectionString());
     }
 
     // Priority: DATABASE_URL env var (Railway) → configured value (user-secrets/appsettings) → local default
@@ -31,7 +31,9 @@ public class AppDbContext : DbContext
         if (!string.IsNullOrEmpty(configured))
             return configured;
 
+#pragma warning disable S2068 // local dev default only — not a real credential
         return "Host=localhost;Database=job_search;Username=postgres;Password=postgres";
+#pragma warning restore S2068
     }
 
     // Convert postgresql://user:pass@host:port/db to Npgsql connection string
@@ -42,17 +44,17 @@ public class AppDbContext : DbContext
         return $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};Username={parts[0]};Password={Uri.UnescapeDataString(parts[1])};SSL Mode=Require;Trust Server Certificate=true";
     }
 
-    protected override void OnModelCreating(ModelBuilder builder)
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        builder.Entity<RawEmailRecord>()
+        modelBuilder.Entity<RawEmailRecord>()
             .HasIndex(e => e.MessageId)
             .IsUnique();
 
-        builder.Entity<ClassificationRecord>()
+        modelBuilder.Entity<ClassificationRecord>()
             .HasIndex(c => c.MessageId)
             .IsUnique();
 
-        builder.Entity<Application>(e =>
+        modelBuilder.Entity<Application>(e =>
         {
             e.HasIndex(a => new { a.Company, a.RoleTitle });
             e.HasMany(a => a.Events)
@@ -65,16 +67,16 @@ public class AppDbContext : DbContext
              .OnDelete(DeleteBehavior.SetNull);
         });
 
-        builder.Entity<ApplicationEvent>()
+        modelBuilder.Entity<ApplicationEvent>()
             .HasIndex(e => e.ApplicationId);
 
-        builder.Entity<Notification>()
+        modelBuilder.Entity<Notification>()
             .HasIndex(n => n.SentAt);  // fast query for pending notifications
 
-        builder.Entity<SystemHealth>()
+        modelBuilder.Entity<SystemHealth>()
             .HasIndex(h => h.CheckedAt);
 
-        builder.Entity<DiscoveredPosting>(e =>
+        modelBuilder.Entity<DiscoveredPosting>(e =>
         {
             e.HasIndex(d => d.Url).IsUnique();
             e.HasIndex(d => d.DiscoveredAt);
