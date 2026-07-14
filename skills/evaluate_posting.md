@@ -20,7 +20,8 @@ Check every hard disqualifier in `job_criteria.yaml`. If any one matches, set `r
 
 Key rules for disqualifiers:
 - **Sponsorship:** Silence is not a disqualifier. Only explicit exclusion language disqualifies. Quote the exact phrase. Do not infer sponsorship stance from company size, industry, tech stack, or tone.
-- **PHP:** Only disqualifies if PHP is the *primary* backend. A PHP tool mentioned alongside a dominant .NET or Java backend is not a disqualifier — note it as context only.
+- **Backend stack:** Backend must be C#/.NET. Only disqualifies if the non-.NET language/framework (Java, Python, Node.js, Ruby, Go, PHP, etc.) is the *primary* backend. A minor/legacy mention alongside a dominant .NET backend is not a disqualifier — note it as context only.
+- **Contract role:** Only permanent full-time roles are in scope. Only disqualifies on explicit contract/fixed-term/temporary/casual language. If employment type is unstated, assume full-time.
 - **Gambling:** Company must operate in gambling/betting/wagering as its core business. An adjacent or tangential mention does not disqualify.
 - **Solo engineer:** Only disqualifies if the posting explicitly states the candidate would be the *only* engineer. "Small team" or "early-stage" does not trigger this.
 - **Senior role:** Check the job title itself (headline, h1, or explicit title field). If the title contains "Senior", apply the senior_role disqualifier. Do not trigger on "Senior" elsewhere in the posting (e.g. reporting lines, stakeholder descriptions). Only the job title itself triggers this.
@@ -29,11 +30,9 @@ Key rules for disqualifiers:
 
 Evaluate dimensions in this priority order. Backend stack and experience drive the recommendation. Location is neutral between Melbourne and Sydney. Company and culture signals are the lowest priority — note them in the rationale as FYI, do not let them push the recommendation down.
 
-**Priority 1 — Backend stack** (highest weight):
+**Priority 1 — Backend stack** (highest weight, binary):
 - `strong`: C#, .NET, ASP.NET Core
-- `good`: Java, Spring Boot
-- `acceptable`: Python, Node.js, TypeScript server-side — but only flag as a longshot if the posting is clearly prescriptive about the stack with no flexibility. If wording is ambiguous or the role signals openness to other OOP backgrounds, treat as acceptable without a flag.
-- `excluded`: PHP as primary
+- Anything else as the primary backend (Java, Python, Node.js, Ruby, Go, PHP, etc.) is a hard disqualifier — it should already have been caught in Step 1, not scored here
 - Name the specific technologies from the posting in your output
 
 **Priority 2 — Experience:**
@@ -44,13 +43,13 @@ Evaluate dimensions in this priority order. Backend stack and experience drive t
 - When a range is stated (e.g. "3-6 years"), use the midpoint
 
 **Priority 3 — Location:**
-- `preferred`: Melbourne, Sydney, or AU-based remote — all equally weighted
-- `acceptable`: stated hybrid/remote for AU
+- `preferred`: anywhere in Australia — on-site, hybrid, or remote, all equally weighted, no city preference
+- `acceptable`: stated hybrid/remote for AU where the city is unclear
 - `weak`: location unclear, or role requires relocation outside AU
 
-**Priority 4 — Frontend stack:**
-- `strong`: React, TypeScript
-- `good`: Angular, Vue.js, Next.js
+**Priority 4 — Frontend stack** (flexible, does not affect recommendation tier):
+- `strong`: React, Angular, TypeScript, JavaScript
+- `good`: Vue.js, Next.js
 - `acceptable`: other modern JS frameworks
 
 **Priority 5 — Salary:**
