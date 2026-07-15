@@ -514,6 +514,26 @@ api.MapGet("/health", (AppDbContext db) =>
         : Results.Ok(result);
 }).AllowAnonymous(); // UptimeRobot hits this without a session
 
+// Recognizes our own "couldn't fetch, paste the description" prompt (identified by its
+// trailing "/cv <url>" or "/letter <url>" line) so a reply to it can be treated as pasted
+// posting content instead of a new command. Shared by both the Telegram and WhatsApp
+// webhook handlers below — TelegramService.ExtractUrl and WhatsAppService.ExtractUrl use
+// the identical regex, so either works here.
+static (string Command, string Url)? ParsePasteFallbackPrompt(string promptText)
+{
+    var lastLine = promptText.TrimEnd().Split('\n').LastOrDefault()?.Trim();
+    if (string.IsNullOrEmpty(lastLine)) return null;
+
+    var parts = lastLine.Split(' ', 2, StringSplitOptions.TrimEntries);
+    if (parts.Length != 2) return null;
+
+    var cmd = parts[0].ToLowerInvariant();
+    if (cmd is not ("/cv" or "/letter")) return null;
+
+    var url = TelegramService.ExtractUrl(parts[1]);
+    return url is not null ? (cmd, url) : null;
+}
+
 // ---------------------------------------------------------------------------
 // Telegram webhook — unauthenticated but verified by secret token
 // ---------------------------------------------------------------------------
@@ -560,8 +580,20 @@ app.MapPost("/api/v1/telegram/webhook", async (
     string? storedEvalJson = null;
     string? storedTitle = null;
     string? resolvedUrl = null;
+    string? pastedPostingText = null;
 
-    if (command is "/cv" or "/letter")
+    // A reply to our own "couldn't fetch, paste the description" prompt — treat this
+    // whole message as the posting content for the command/URL embedded in that prompt,
+    // bypassing fetch and the DB lookup entirely (there's nothing stored, that's why
+    // the prompt was sent in the first place).
+    var pasteFallback = replyToText is not null ? ParsePasteFallbackPrompt(replyToText) : null;
+    if (pasteFallback is not null)
+    {
+        command = pasteFallback.Value.Command;
+        resolvedUrl = pasteFallback.Value.Url;
+        pastedPostingText = text;
+    }
+    else if (command is "/cv" or "/letter")
     {
         resolvedUrl = (commandArg is not null ? TelegramService.ExtractUrl(commandArg) : null)
             ?? (replyToText is not null ? TelegramService.ExtractUrl(replyToText) : null);
@@ -604,33 +636,44 @@ app.MapPost("/api/v1/telegram/webhook", async (
                 }
 
                 string label = command == "/cv" ? "CV" : "cover letter";
-                await telegram.SendMessageAsync(
-                    $"Generating {label} for <code>{System.Net.WebUtility.HtmlEncode(resolvedUrl)}</code>...");
 
-                // Re-fetch the posting text. Fall back to the stored eval summary if unavailable.
-                string? postingText = null;
-                try
+                string? postingText;
+                if (pastedPostingText is not null)
                 {
-                    postingText = await fetcher.FetchAsync(resolvedUrl);
+                    postingText = pastedPostingText;
+                    await telegram.SendMessageAsync($"Generating {label} from what you provided...");
                 }
-                catch when (storedEvalJson is not null)
-                {
-                    var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
-                    if (ev is not null) postingText = EvalFormatter.ToPostingContext(ev);
-                }
-                catch
-                {
-                    // No cached fallback either — postingText stays null, handled below.
-                }
-
-                if (postingText is null)
+                else
                 {
                     await telegram.SendMessageAsync(
-                        "Couldn't fetch that posting — it may have expired or been taken down, " +
-                        "and I don't have a cached copy of it either. Paste the job description " +
-                        "text here and I'll generate from that instead.", parseMode: null);
-                    return;
+                        $"Generating {label} for <code>{System.Net.WebUtility.HtmlEncode(resolvedUrl)}</code>...");
+
+                    // Re-fetch the posting text. Fall back to the stored eval summary if unavailable.
+                    postingText = null;
+                    try
+                    {
+                        postingText = await fetcher.FetchAsync(resolvedUrl);
+                    }
+                    catch when (storedEvalJson is not null)
+                    {
+                        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
+                        if (ev is not null) postingText = EvalFormatter.ToPostingContext(ev);
+                    }
+                    catch
+                    {
+                        // No cached fallback either — postingText stays null, handled below.
+                    }
+
+                    if (postingText is null)
+                    {
+                        await telegram.SendMessageAsync(
+                            "Couldn't fetch that posting — it may have expired or been taken down, " +
+                            "and I don't have a cached copy of it either. Reply to this message with " +
+                            "the job description text and I'll generate it from that instead.\n\n" +
+                            $"{command} {resolvedUrl}", parseMode: null);
+                        return;
+                    }
                 }
 
                 string evalJson = storedEvalJson ?? "{}";
@@ -754,8 +797,20 @@ app.MapPost("/api/v1/whatsapp/webhook", async (
     string? storedTitle = null;
     string? resolvedUrl = null;
     string? repliedNotificationMessage = null;
+    string? pastedPostingText = null;
 
-    if (command is "/cv" or "/letter")
+    // A reply to our own "couldn't fetch, paste the description" prompt — treat this
+    // whole message as the posting content for the command/URL that prompt was about,
+    // bypassing fetch and DB lookups entirely (there's nothing stored, that's why the
+    // prompt was sent in the first place). WhatsApp only gives us context.id, not the
+    // replied-to text, so this is resolved via the in-memory mapping instead.
+    if (whatsapp.TryGetPasteFallback(update.ContextId, out var pasteFallback))
+    {
+        command = pasteFallback.Command;
+        resolvedUrl = pasteFallback.Url;
+        pastedPostingText = text;
+    }
+    else if (command is "/cv" or "/letter")
     {
         resolvedUrl = commandArg is not null ? WhatsAppService.ExtractUrl(commandArg) : null;
 
@@ -831,32 +886,44 @@ app.MapPost("/api/v1/whatsapp/webhook", async (
                 }
 
                 string label = command == "/cv" ? "CV" : "cover letter";
-                await whatsapp.SendTextAsync($"Generating {label} for {resolvedUrl}...");
 
-                // Re-fetch the posting text. Fall back to the stored eval summary if unavailable.
-                string? postingText = null;
-                try
+                string? postingText;
+                if (pastedPostingText is not null)
                 {
-                    postingText = await fetcher.FetchAsync(resolvedUrl);
+                    postingText = pastedPostingText;
+                    await whatsapp.SendTextAsync($"Generating {label} from what you provided...");
                 }
-                catch when (storedEvalJson is not null)
+                else
                 {
-                    var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
-                    if (ev is not null) postingText = EvalFormatter.ToPostingContext(ev);
-                }
-                catch
-                {
-                    // No cached fallback either — postingText stays null, handled below.
-                }
+                    await whatsapp.SendTextAsync($"Generating {label} for {resolvedUrl}...");
 
-                if (postingText is null)
-                {
-                    await whatsapp.SendTextAsync(
-                        "Couldn't fetch that posting — it may have expired or been taken down, " +
-                        "and I don't have a cached copy of it either. Paste the job description " +
-                        "text here and I'll generate from that instead.");
-                    return;
+                    // Re-fetch the posting text. Fall back to the stored eval summary if unavailable.
+                    postingText = null;
+                    try
+                    {
+                        postingText = await fetcher.FetchAsync(resolvedUrl);
+                    }
+                    catch when (storedEvalJson is not null)
+                    {
+                        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
+                        if (ev is not null) postingText = EvalFormatter.ToPostingContext(ev);
+                    }
+                    catch
+                    {
+                        // No cached fallback either — postingText stays null, handled below.
+                    }
+
+                    if (postingText is null)
+                    {
+                        var promptWamid = await whatsapp.SendTextAsync(
+                            "Couldn't fetch that posting — it may have expired or been taken down, " +
+                            "and I don't have a cached copy of it either. Reply to this message with " +
+                            "the job description text and I'll generate it from that instead.");
+                        if (promptWamid is not null)
+                            whatsapp.RememberPasteFallback(promptWamid, command, resolvedUrl);
+                        return;
+                    }
                 }
 
                 string evalJson = storedEvalJson ?? "{}";

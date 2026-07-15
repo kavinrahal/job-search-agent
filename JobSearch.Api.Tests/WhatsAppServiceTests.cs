@@ -257,4 +257,45 @@ public class WhatsAppServiceTests
         Assert.True(svc.TryMarkProcessed("wamid.100"));
         Assert.False(svc.TryMarkProcessed("wamid.100"));
     }
+
+    // -------------------------------------------------------------------------
+    // RememberPasteFallback / TryGetPasteFallback
+    // -------------------------------------------------------------------------
+
+    // TC47 — Remembered wamid resolves to the exact command/url stored against it
+    [Fact]
+    public void TryGetPasteFallback_RememberedWamid_ReturnsCommandAndUrl()
+    {
+        var svc = Make();
+        svc.RememberPasteFallback("wamid.200", "/cv", "https://au.seek.com/job/93300225");
+
+        var found = svc.TryGetPasteFallback("wamid.200", out var result);
+
+        Assert.True(found);
+        Assert.Equal("/cv", result.Command);
+        Assert.Equal("https://au.seek.com/job/93300225", result.Url);
+    }
+
+    // TC48 — Consumed once: a second lookup of the same wamid returns false
+    // Silent failure: if this doesn't consume the entry, a stale reply to the same
+    // prompt could regenerate against a URL the user has since moved on from.
+    [Fact]
+    public void TryGetPasteFallback_SameWamidTwice_SecondCallReturnsFalse()
+    {
+        var svc = Make();
+        svc.RememberPasteFallback("wamid.201", "/letter", "https://au.seek.com/job/1");
+
+        Assert.True(svc.TryGetPasteFallback("wamid.201", out _));
+        Assert.False(svc.TryGetPasteFallback("wamid.201", out _));
+    }
+
+    // TC49 — Unknown or null contextId returns false
+    [Fact]
+    public void TryGetPasteFallback_UnknownOrNullContextId_ReturnsFalse()
+    {
+        var svc = Make();
+
+        Assert.False(svc.TryGetPasteFallback("wamid.never-remembered", out _));
+        Assert.False(svc.TryGetPasteFallback(null, out _));
+    }
 }

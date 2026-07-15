@@ -23,6 +23,13 @@ public class WhatsAppService
     // Tracks processed WhatsApp message ids (wamid) to prevent duplicate processing on retries.
     private readonly ConcurrentDictionary<string, byte> _processed = new();
 
+    // Tracks wamids of "couldn't fetch, paste the description" prompts we've sent, so a
+    // reply to one can be resolved back to the command/URL it was about — WhatsApp's
+    // webhook only gives a context.id, never the replied-to text (unlike Telegram).
+    // In-memory only, like _processed: fine to lose on restart, the user just gets a
+    // normal "please include a job URL" response instead of the paste-fallback continuing.
+    private readonly ConcurrentDictionary<string, (string Command, string Url)> _pendingPasteFallback = new();
+
     // True only if every value needed for both sending and receiving is present.
     // Every public method no-ops (returns null/false) when this is false, so a
     // half-configured or entirely-unset WhatsApp setup never affects Telegram or startup.
@@ -73,6 +80,16 @@ public class WhatsAppService
     // Returns false if the wamid was already seen (duplicate or concurrent retry).
     public bool TryMarkProcessed(string messageId) =>
         _processed.TryAdd(messageId, 0);
+
+    public void RememberPasteFallback(string wamid, string command, string url) =>
+        _pendingPasteFallback[wamid] = (command, url);
+
+    // Consumes the entry so a stale reply to the same prompt can't be reused twice.
+    public bool TryGetPasteFallback(string? contextId, out (string Command, string Url) result)
+    {
+        result = default;
+        return contextId is not null && _pendingPasteFallback.TryRemove(contextId, out result);
+    }
 
     public static WhatsAppUpdate? ParseIncoming(JsonElement body)
     {
