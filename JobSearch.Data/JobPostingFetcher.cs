@@ -7,8 +7,12 @@ namespace JobSearch.Data;
 public class JobPostingFetcher
 {
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
+    // Matches both the real Seek website (what a user copies directly from a job
+    // posting) and au.seek.com (what JobAlertProcessor normalizes extracted URLs
+    // to when storing DiscoveredPostings) — these are different hostnames, not
+    // the same domain with/without "www".
     private static readonly Regex SeekUrlPattern = new(
-        @"au\.seek\.com/job/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"(?:www\.seek\.com\.au|au\.seek\.com)/job/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     static JobPostingFetcher()
     {
@@ -24,7 +28,19 @@ public class JobPostingFetcher
     {
         var seekMatch = SeekUrlPattern.Match(url);
         if (seekMatch.Success)
-            return await FetchSeekAsync(seekMatch.Groups[1].Value);
+        {
+            try
+            {
+                return await FetchSeekAsync(seekMatch.Groups[1].Value);
+            }
+            catch
+            {
+                // chalice-experience.seek.com is an undocumented internal API, not a
+                // stable public contract — it can go unreachable (observed: DNS no longer
+                // resolves it at all) without warning. Fall back to scraping the public
+                // page like every other site, rather than losing the posting entirely.
+            }
+        }
 
         var html = await _http.GetStringAsync(url);
         return StripHtml(html);

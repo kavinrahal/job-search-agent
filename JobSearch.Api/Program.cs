@@ -558,7 +558,6 @@ app.MapPost("/api/v1/telegram/webhook", async (
     // For /cv and /letter commands, look up stored evaluation before going async.
     // DB context is scoped — capture the string values we need, not the context itself.
     string? storedEvalJson = null;
-    string? storedCompany = null;
     string? storedTitle = null;
     string? resolvedUrl = null;
 
@@ -571,11 +570,10 @@ app.MapPost("/api/v1/telegram/webhook", async (
         {
             var posting = await db.DiscoveredPostings
                 .Where(d => d.Url == resolvedUrl)
-                .Select(d => new { d.EvaluationJson, d.Company, d.Title })
+                .Select(d => new { d.EvaluationJson, d.Title })
                 .FirstOrDefaultAsync();
 
             storedEvalJson = posting?.EvaluationJson;
-            storedCompany  = posting?.Company;
             storedTitle    = posting?.Title;
         }
     }
@@ -610,25 +608,29 @@ app.MapPost("/api/v1/telegram/webhook", async (
                     $"Generating {label} for <code>{System.Net.WebUtility.HtmlEncode(resolvedUrl)}</code>...");
 
                 // Re-fetch the posting text. Fall back to the stored eval summary if unavailable.
-                string postingText;
+                string? postingText = null;
                 try
                 {
                     postingText = await fetcher.FetchAsync(resolvedUrl);
                 }
+                catch when (storedEvalJson is not null)
+                {
+                    var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
+                    if (ev is not null) postingText = EvalFormatter.ToPostingContext(ev);
+                }
                 catch
                 {
-                    if (storedEvalJson is not null)
-                    {
-                        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                        var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
-                        postingText = ev is not null
-                            ? EvalFormatter.ToPostingContext(ev)
-                            : $"Company: {storedCompany}\nRole: {storedTitle}\nURL: {resolvedUrl}";
-                    }
-                    else
-                    {
-                        postingText = $"Company: {storedCompany}\nRole: {storedTitle}\nURL: {resolvedUrl}";
-                    }
+                    // No cached fallback either — postingText stays null, handled below.
+                }
+
+                if (postingText is null)
+                {
+                    await telegram.SendMessageAsync(
+                        "Couldn't fetch that posting — it may have expired or been taken down, " +
+                        "and I don't have a cached copy of it either. Paste the job description " +
+                        "text here and I'll generate from that instead.", parseMode: null);
+                    return;
                 }
 
                 string evalJson = storedEvalJson ?? "{}";
@@ -749,7 +751,6 @@ app.MapPost("/api/v1/whatsapp/webhook", async (
 
     // DB context is scoped — resolve and capture strings before the fire-and-forget Task.Run.
     string? storedEvalJson = null;
-    string? storedCompany = null;
     string? storedTitle = null;
     string? resolvedUrl = null;
     string? repliedNotificationMessage = null;
@@ -762,10 +763,9 @@ app.MapPost("/api/v1/whatsapp/webhook", async (
         {
             var posting = await db.DiscoveredPostings
                 .Where(d => d.Url == resolvedUrl)
-                .Select(d => new { d.EvaluationJson, d.Company, d.Title })
+                .Select(d => new { d.EvaluationJson, d.Title })
                 .FirstOrDefaultAsync();
             storedEvalJson = posting?.EvaluationJson;
-            storedCompany  = posting?.Company;
             storedTitle    = posting?.Title;
         }
         else if (update.ContextId is not null)
@@ -773,13 +773,12 @@ app.MapPost("/api/v1/whatsapp/webhook", async (
             // No URL in the command itself — resolve via the message being replied to.
             var posting = await db.DiscoveredPostings
                 .Where(d => d.WhatsAppMessageId == update.ContextId)
-                .Select(d => new { d.Url, d.EvaluationJson, d.Company, d.Title })
+                .Select(d => new { d.Url, d.EvaluationJson, d.Title })
                 .FirstOrDefaultAsync();
             if (posting is not null)
             {
                 resolvedUrl    = posting.Url;
                 storedEvalJson = posting.EvaluationJson;
-                storedCompany  = posting.Company;
                 storedTitle    = posting.Title;
             }
         }
@@ -835,25 +834,29 @@ app.MapPost("/api/v1/whatsapp/webhook", async (
                 await whatsapp.SendTextAsync($"Generating {label} for {resolvedUrl}...");
 
                 // Re-fetch the posting text. Fall back to the stored eval summary if unavailable.
-                string postingText;
+                string? postingText = null;
                 try
                 {
                     postingText = await fetcher.FetchAsync(resolvedUrl);
                 }
+                catch when (storedEvalJson is not null)
+                {
+                    var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
+                    if (ev is not null) postingText = EvalFormatter.ToPostingContext(ev);
+                }
                 catch
                 {
-                    if (storedEvalJson is not null)
-                    {
-                        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                        var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
-                        postingText = ev is not null
-                            ? EvalFormatter.ToPostingContext(ev)
-                            : $"Company: {storedCompany}\nRole: {storedTitle}\nURL: {resolvedUrl}";
-                    }
-                    else
-                    {
-                        postingText = $"Company: {storedCompany}\nRole: {storedTitle}\nURL: {resolvedUrl}";
-                    }
+                    // No cached fallback either — postingText stays null, handled below.
+                }
+
+                if (postingText is null)
+                {
+                    await whatsapp.SendTextAsync(
+                        "Couldn't fetch that posting — it may have expired or been taken down, " +
+                        "and I don't have a cached copy of it either. Paste the job description " +
+                        "text here and I'll generate from that instead.");
+                    return;
                 }
 
                 string evalJson = storedEvalJson ?? "{}";
