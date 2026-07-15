@@ -63,7 +63,9 @@ These are absolute. No exceptions.
 Check the job posting for a named hiring manager or recruiter. If a name is present, address it to them directly: "Dear [Name]," If no name is given, use: "To the Hiring Manager,"
 
 ### Introduction paragraph
-Two sentences maximum. State who the candidate is (Melbourne-based software engineer, years of experience, primary stack) and which role they are applying for. This is purely factual — no enthusiasm, no adjectives. Example register: "I'm a Melbourne-based software engineer with four years of commercial experience across C# .NET, React, TypeScript, and Azure. I'm applying for the [Role Title] position at [Company]."
+Two sentences maximum (three if the relocation note below applies). State who the candidate is (Melbourne-based software engineer, years of experience, primary stack) and which role they are applying for. This is purely factual — no enthusiasm, no adjectives. Example register: "I'm a Melbourne-based software engineer with four years of commercial experience across C# .NET, React, TypeScript, and Azure. I'm applying for the [Role Title] position at [Company]."
+
+**Relocation note.** Check `location_detail` in the evaluation output (and the job posting text) for the role's location. If it names a specific on-site or hybrid location outside Victoria (interstate, another state or territory), add one short factual sentence noting openness to relocating. Matter-of-fact, not eager — e.g. "I'm currently based in Melbourne and open to relocating for the right role." Do not add this for any Victoria-based role (Melbourne or elsewhere in VIC) or for remote roles (nothing to relocate for).
 
 ### Company paragraph
 One or two sentences about what this company is specifically building or solving, drawn from the posting. This must be concrete, not generic praise. Then weave in one genuine observation about the team culture or working environment — use signals from the posting (e.g. Great Place to Work, L&D investment, team size, lean delivery model) to show this was researched, not templated. One sentence connecting both to why this role is the right fit.
