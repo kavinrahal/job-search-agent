@@ -58,7 +58,7 @@ public class JobDiscoveryWorkerTests
         var oldItem = FeedItem(publishedAt: DateTime.UtcNow.AddDays(-15));
         var worker = MakeWorker(db, fetchers: [new FakeFetcher([oldItem])]);
 
-        var (discovered, evaluated, notified) = await worker.RunAsync();
+        var (discovered, evaluated, notified, _) = await worker.RunAsync();
 
         Assert.Equal(0, discovered);
         Assert.Equal(0, evaluated);
@@ -172,7 +172,7 @@ public class JobDiscoveryWorkerTests
             evaluator: new FakeEval(_ => StubEval("strong_match")),
             telegram: telegram);
 
-        var (_, _, notified) = await worker.RunAsync();
+        var (_, _, notified, _) = await worker.RunAsync();
 
         var record = db.DiscoveredPostings.Single();
         Assert.True(record.NotificationSent);

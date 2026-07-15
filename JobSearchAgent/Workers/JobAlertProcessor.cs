@@ -28,17 +28,20 @@ public class JobAlertProcessor
     private readonly JobPostingFetcher _fetcher;
     private readonly PostingEvaluator _evaluator;
     private readonly TelegramNotifier? _telegram;
+    private readonly WhatsAppNotifier? _whatsapp;
 
     public JobAlertProcessor(
         AppDbContext db,
         JobPostingFetcher fetcher,
         PostingEvaluator evaluator,
-        TelegramNotifier? telegram)
+        TelegramNotifier? telegram,
+        WhatsAppNotifier? whatsapp = null)
     {
         _db = db;
         _fetcher = fetcher;
         _evaluator = evaluator;
         _telegram = telegram;
+        _whatsapp = whatsapp;
     }
 
     internal static Dictionary<string, string> ExtractJobUrls(IEnumerable<RawEmail> emails)
@@ -56,7 +59,7 @@ public class JobAlertProcessor
         return urls;
     }
 
-    public async Task<(int Found, int Evaluated, int Notified)> ProcessAsync(
+    public async Task<(int Found, int Evaluated, int Notified, int WhatsAppNotified)> ProcessAsync(
         IEnumerable<RawEmail> alertEmails)
     {
         var emailList = alertEmails.ToList();
@@ -65,7 +68,7 @@ public class JobAlertProcessor
         if (urls.Count == 0)
         {
             Console.WriteLine("Job alerts: no job URLs found in alert emails.");
-            return (0, 0, 0);
+            return (0, 0, 0, 0);
         }
 
         // Build URL → email body index so we can fall back to alert content
@@ -95,9 +98,9 @@ public class JobAlertProcessor
 
         Console.WriteLine($"Job alerts: {urls.Count} URLs found, {newUrls.Count} new.");
 
-        if (newUrls.Count == 0) return (urls.Count, 0, 0);
+        if (newUrls.Count == 0) return (urls.Count, 0, 0, 0);
 
-        int evaluated = 0, notified = 0;
+        int evaluated = 0, notified = 0, whatsappNotified = 0;
 
         foreach (var (url, source) in newUrls)
         {
@@ -142,13 +145,27 @@ public class JobAlertProcessor
                 evaluated++;
                 Console.WriteLine($"    => {eval.Recommendation} | {eval.Company} — {eval.RoleTitle}");
 
-                if (_telegram is not null &&
-                    eval.Recommendation is "strong_match" or "good_match" &&
+                bool isMatch = eval.Recommendation is "strong_match" or "good_match";
+
+                if (_telegram is not null && isMatch &&
                     await _telegram.SendAsync(EvalFormatter.Format(eval, "via job alert"), "HTML"))
                 {
                     record.NotificationSent = true;
                     await _db.SaveChangesAsync();
                     notified++;
+                }
+
+                if (_whatsapp is not null && isMatch)
+                {
+                    var (label, detail) = EvalFormatter.ToWhatsAppTeaser(eval, "via job alert");
+                    var wamid = await _whatsapp.SendTemplateAsync(label, detail);
+                    if (wamid is not null)
+                    {
+                        record.WhatsAppNotificationSent = true;
+                        record.WhatsAppMessageId = wamid;
+                        await _db.SaveChangesAsync();
+                        whatsappNotified++;
+                    }
                 }
             }
             catch (Exception ex)
@@ -162,7 +179,7 @@ public class JobAlertProcessor
             await Task.Delay(1200);
         }
 
-        return (urls.Count, evaluated, notified);
+        return (urls.Count, evaluated, notified, whatsappNotified);
     }
 
 

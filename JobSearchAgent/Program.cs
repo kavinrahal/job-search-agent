@@ -144,6 +144,24 @@ Console.WriteLine($"Fetched {emails.Count} — classifying {emailsToClassify.Cou
 var botToken = config["TELEGRAM_BOT_TOKEN"];
 var chatId   = config["TELEGRAM_CHAT_ID"];
 
+#pragma warning disable S1135 // TODO(whatsapp): pilot paused — blocked on Meta Business Verification
+// (Account Restricted). Fully built and safe to leave as-is: every value below is
+// optional and whatsappConfigured gates every send, so this stays a no-op until the
+// env vars are set. To resume: complete verification, then follow the remaining
+// setup steps (System User token, App Secret, webhook subscription, template
+// submission).
+#pragma warning restore S1135
+//
+// WhatsApp is an optional, parallel channel — Telegram must keep working even if
+// WhatsApp is unset or misconfigured, so every value here is nullable and every
+// construction site is null-checked, mirroring the Telegram pattern above.
+var whatsappToken    = config["WHATSAPP_ACCESS_TOKEN"];
+var whatsappPhoneId  = config["WHATSAPP_PHONE_NUMBER_ID"];
+var whatsappToNumber = config["WHATSAPP_TO_NUMBER"];
+var whatsappTemplate = config["WHATSAPP_TEMPLATE_NAME"] ?? "job_search_alert";
+var whatsappLang     = config["WHATSAPP_TEMPLATE_LANG"] ?? "en_US";
+bool whatsappConfigured = whatsappToken is not null && whatsappPhoneId is not null && whatsappToNumber is not null;
+
 // ---------------------------------------------------------------------------
 // Job discovery — always runs, even when there are no new emails to classify
 // ---------------------------------------------------------------------------
@@ -162,6 +180,9 @@ if (!testMode)
         using var discoveryTelegram = botToken is not null && chatId is not null
             ? new TelegramNotifier(botToken, chatId)
             : null;
+        using var discoveryWhatsApp = whatsappConfigured
+            ? new WhatsAppNotifier(whatsappToken!, whatsappPhoneId!, whatsappToNumber!, whatsappTemplate, whatsappLang)
+            : null;
 
         var discovery = new JobDiscoveryWorker(
             db,
@@ -172,10 +193,11 @@ if (!testMode)
             ],
             new JobPostingFetcher(),
             new PostingEvaluator(apiKey),
-            discoveryTelegram);
+            discoveryTelegram,
+            discoveryWhatsApp);
 
-        var (discovered, evaluated, notified) = await discovery.RunAsync();
-        Console.WriteLine($"Job discovery: {discovered} new, {evaluated} evaluated, {notified} notified.");
+        var (discovered, evaluated, notified, whatsappNotified) = await discovery.RunAsync();
+        Console.WriteLine($"Job discovery: {discovered} new, {evaluated} evaluated, {notified} notified (Telegram), {whatsappNotified} notified (WhatsApp).");
     }
 }
 
@@ -264,6 +286,34 @@ if (botToken is not null && chatId is not null)
     }
 }
 
+if (whatsappConfigured)
+{
+    // Independent of Telegram's SentAt — a row already sent via Telegram still needs
+    // its own WhatsApp attempt, and a WhatsApp failure must not block future retries.
+    var pendingWhatsApp = await db.Notifications.Where(n => n.WhatsAppSentAt == null).ToListAsync();
+    if (pendingWhatsApp.Count > 0)
+    {
+        using var whatsapp = new WhatsAppNotifier(whatsappToken!, whatsappPhoneId!, whatsappToNumber!, whatsappTemplate, whatsappLang);
+        var sentAt = DateTime.UtcNow;
+        int sent = 0;
+        foreach (var notification in pendingWhatsApp)
+        {
+            var parts = notification.Message.Split('\n', 2);
+            var label = parts[0];
+            var detail = parts.Length > 1 ? parts[1] : "";
+            var wamid = await whatsapp.SendTemplateAsync(label, detail);
+            if (wamid is not null)
+            {
+                notification.WhatsAppSentAt = sentAt;
+                notification.WhatsAppMessageId = wamid;
+                sent++;
+            }
+        }
+        await db.SaveChangesAsync();
+        Console.WriteLine($"WhatsApp: {sent}/{pendingWhatsApp.Count} notification(s) sent.");
+    }
+}
+
 if (jobRelated.Count > 0)
 {
     var categoryLabels = new Dictionary<string, string>
@@ -331,10 +381,12 @@ async Task RunAlertProcessing()
     Console.WriteLine();
     using var alertTelegram = botToken is not null && chatId is not null
         ? new TelegramNotifier(botToken, chatId) : null;
+    using var alertWhatsApp = whatsappConfigured
+        ? new WhatsAppNotifier(whatsappToken!, whatsappPhoneId!, whatsappToNumber!, whatsappTemplate, whatsappLang) : null;
     var alertProcessor = new JobAlertProcessor(
-        db, new JobPostingFetcher(), new PostingEvaluator(apiKey), alertTelegram);
-    var (found, evaluated, notified) = await alertProcessor.ProcessAsync(allAlertEmails);
-    Console.WriteLine($"Job alerts: {found} URLs found, {evaluated} evaluated, {notified} notified.");
+        db, new JobPostingFetcher(), new PostingEvaluator(apiKey), alertTelegram, alertWhatsApp);
+    var (found, evaluated, notified, whatsappNotified) = await alertProcessor.ProcessAsync(allAlertEmails);
+    Console.WriteLine($"Job alerts: {found} URLs found, {evaluated} evaluated, {notified} notified (Telegram), {whatsappNotified} notified (WhatsApp).");
 }
 
 // ---------------------------------------------------------------------------

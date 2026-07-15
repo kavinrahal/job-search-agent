@@ -12,5 +12,7 @@ public class DiscoveredPosting
     public string? DisqualifierHit { get; set; }
     public DateTime DiscoveredAt { get; set; }
     public DateTime? EvaluatedAt { get; set; }
-    public bool NotificationSent { get; set; }
+    public bool NotificationSent { get; set; }             // Telegram
+    public bool WhatsAppNotificationSent { get; set; }      // independent of NotificationSent
+    public string? WhatsAppMessageId { get; set; }          // wamid of the sent teaser, for reply-threading
 }

@@ -70,8 +70,12 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ApplicationEvent>()
             .HasIndex(e => e.ApplicationId);
 
-        modelBuilder.Entity<Notification>()
-            .HasIndex(n => n.SentAt);  // fast query for pending notifications
+        modelBuilder.Entity<Notification>(e =>
+        {
+            e.HasIndex(n => n.SentAt);           // fast query for pending notifications (Telegram)
+            e.HasIndex(n => n.WhatsAppSentAt);    // fast query for pending notifications (WhatsApp)
+            e.HasIndex(n => n.WhatsAppMessageId); // reply-threading lookup
+        });
 
         modelBuilder.Entity<SystemHealth>()
             .HasIndex(h => h.CheckedAt);
@@ -81,6 +85,7 @@ public class AppDbContext : DbContext
             e.HasIndex(d => d.Url).IsUnique();
             e.HasIndex(d => d.DiscoveredAt);
             e.HasIndex(d => d.Recommendation);
+            e.HasIndex(d => d.WhatsAppMessageId); // reply-threading lookup
         });
     }
 }

@@ -93,11 +93,33 @@ var telegramWebhookSecret = builder.Configuration["TELEGRAM_WEBHOOK_SECRET"]
 var telegramChatId = builder.Configuration["TELEGRAM_CHAT_ID"]
     ?? throw new InvalidOperationException("TELEGRAM_CHAT_ID not set");
 
+#pragma warning disable S1135 // TODO(whatsapp): pilot paused — blocked on Meta Business Verification
+// (Account Restricted). Fully built and safe to leave as-is: every value below is
+// optional and WhatsAppService.IsConfigured gates every send/receive, so this stays
+// a no-op until the env vars are set. To resume: complete verification, then follow
+// the remaining setup steps (System User token, App Secret, webhook subscription,
+// template submission) — see project_whatsapp_pilot memory / the WhatsApp plan.
+#pragma warning restore S1135
+//
+// WhatsApp is an optional, parallel pilot channel — unlike Telegram above, nothing
+// here throws at startup. WhatsAppService.IsConfigured gates every send/receive so a
+// missing or half-set-up WhatsApp integration never blocks the app or Telegram.
+var whatsappAccessToken = builder.Configuration["WHATSAPP_ACCESS_TOKEN"];
+var whatsappPhoneId     = builder.Configuration["WHATSAPP_PHONE_NUMBER_ID"];
+var whatsappAppSecret   = builder.Configuration["WHATSAPP_APP_SECRET"];
+var whatsappVerifyToken = builder.Configuration["WHATSAPP_WEBHOOK_VERIFY_TOKEN"];
+var whatsappToNumber    = builder.Configuration["WHATSAPP_TO_NUMBER"];
+var whatsappTemplate    = builder.Configuration["WHATSAPP_TEMPLATE_NAME"] ?? "job_search_alert";
+var whatsappLang        = builder.Configuration["WHATSAPP_TEMPLATE_LANG"] ?? "en_US";
+
 builder.Services.AddSingleton(_ => new JobPostingFetcher());
 builder.Services.AddSingleton(_ => new PostingEvaluator(anthropicApiKey));
 builder.Services.AddSingleton(_ => new CoverLetterAgent(anthropicApiKey));
 builder.Services.AddSingleton(_ => new CvTailorAgent(anthropicApiKey));
 builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
+builder.Services.AddSingleton(_ => new WhatsAppService(
+    whatsappAccessToken, whatsappPhoneId, whatsappAppSecret, whatsappVerifyToken,
+    whatsappToNumber, whatsappTemplate, whatsappLang));
 
 // Trust X-Forwarded-Proto from Railway's load balancer regardless of its IP.
 // KnownNetworks/KnownProxies must be cleared — the default (loopback-only) blocks
@@ -661,6 +683,247 @@ app.MapPost("/api/v1/telegram/webhook", async (
         {
 #pragma warning disable S2486, S108 // swallow intentionally — don't let Telegram send failure mask the original error
             try { await telegram.SendMessageAsync($"Unexpected error: {ex.Message}", parseMode: null); } catch { }
+#pragma warning restore S2486, S108
+        }
+    });
+
+    return Results.Ok();
+}).AllowAnonymous();
+
+// ---------------------------------------------------------------------------
+// WhatsApp webhook — GET handshake (subscription) + POST delivery.
+// Unauthenticated but verified: GET by hub.verify_token, POST by HMAC signature.
+// ---------------------------------------------------------------------------
+app.MapGet("/api/v1/whatsapp/webhook", (HttpRequest request, WhatsAppService whatsapp) =>
+{
+    var mode      = request.Query["hub.mode"].FirstOrDefault();
+    var token     = request.Query["hub.verify_token"].FirstOrDefault();
+    var challenge = request.Query["hub.challenge"].FirstOrDefault();
+
+    var result = whatsapp.HandleVerification(mode, token, challenge);
+    return result is not null ? Results.Text(result) : Results.Forbid();
+}).AllowAnonymous();
+
+app.MapPost("/api/v1/whatsapp/webhook", async (
+    HttpRequest request,
+    WhatsAppService whatsapp,
+    JobPostingFetcher fetcher,
+    PostingEvaluator evaluator,
+    CoverLetterAgent letterAgent,
+    CvTailorAgent cvAgent,
+    AppDbContext db) =>
+{
+    if (!whatsapp.IsConfigured) return Results.Ok(); // never wired up — drop silently
+
+    using var ms = new MemoryStream();
+    await request.Body.CopyToAsync(ms);
+    var rawBody = ms.ToArray();
+
+    var sigHeader = request.Headers["X-Hub-Signature-256"].FirstOrDefault();
+    if (!whatsapp.VerifySignature(rawBody, sigHeader))
+        return Results.Unauthorized();
+
+    JsonElement body;
+    try
+    {
+        body = JsonSerializer.Deserialize<JsonElement>(rawBody);
+    }
+    catch
+    {
+        return Results.Ok();
+    }
+
+    var update = WhatsAppService.ParseIncoming(body);
+    if (update is null || update.IsStatusUpdate) return Results.Ok(); // delivery/read receipts — ignore
+
+    if (!whatsapp.TryMarkProcessed(update.MessageId))
+        return Results.Ok();
+
+    var text = update.Text;
+    if (string.IsNullOrWhiteSpace(text))
+        return Results.Ok();
+
+    var parts = text.Trim().Split(' ', 2, StringSplitOptions.TrimEntries);
+    var command = parts[0].ToLowerInvariant();
+    var commandArg = parts.Length > 1 ? parts[1] : null;
+
+    // DB context is scoped — resolve and capture strings before the fire-and-forget Task.Run.
+    string? storedEvalJson = null;
+    string? storedCompany = null;
+    string? storedTitle = null;
+    string? resolvedUrl = null;
+    string? repliedNotificationMessage = null;
+
+    if (command is "/cv" or "/letter")
+    {
+        resolvedUrl = commandArg is not null ? WhatsAppService.ExtractUrl(commandArg) : null;
+
+        if (resolvedUrl is not null)
+        {
+            var posting = await db.DiscoveredPostings
+                .Where(d => d.Url == resolvedUrl)
+                .Select(d => new { d.EvaluationJson, d.Company, d.Title })
+                .FirstOrDefaultAsync();
+            storedEvalJson = posting?.EvaluationJson;
+            storedCompany  = posting?.Company;
+            storedTitle    = posting?.Title;
+        }
+        else if (update.ContextId is not null)
+        {
+            // No URL in the command itself — resolve via the message being replied to.
+            var posting = await db.DiscoveredPostings
+                .Where(d => d.WhatsAppMessageId == update.ContextId)
+                .Select(d => new { d.Url, d.EvaluationJson, d.Company, d.Title })
+                .FirstOrDefaultAsync();
+            if (posting is not null)
+            {
+                resolvedUrl    = posting.Url;
+                storedEvalJson = posting.EvaluationJson;
+                storedCompany  = posting.Company;
+                storedTitle    = posting.Title;
+            }
+        }
+    }
+    else if (update.ContextId is not null)
+    {
+        // Bare reply to a teaser (no /cv or /letter) — resolve the full breakdown to send back.
+        var posting = await db.DiscoveredPostings
+            .Where(d => d.WhatsAppMessageId == update.ContextId)
+            .Select(d => new { d.EvaluationJson })
+            .FirstOrDefaultAsync();
+
+        if (posting?.EvaluationJson is not null)
+        {
+            storedEvalJson = posting.EvaluationJson;
+        }
+        else
+        {
+            var notif = await db.Notifications
+                .Where(n => n.WhatsAppMessageId == update.ContextId)
+                .Select(n => new { n.Message })
+                .FirstOrDefaultAsync();
+            repliedNotificationMessage = notif?.Message;
+        }
+    }
+
+    // Fire-and-forget: respond 200 immediately, process in background.
+    // Only Singletons, value types, and pre-fetched strings are captured.
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            if (command is "/cv" or "/letter")
+            {
+                if (resolvedUrl is null)
+                {
+                    await whatsapp.SendTextAsync(
+                        "Please include a job URL or reply to a job notification.\n" +
+                        "Example: /cv https://au.seek.com/job/12345");
+                    return;
+                }
+
+                if (storedTitle is not null &&
+                    storedTitle.Contains("Senior", StringComparison.OrdinalIgnoreCase))
+                {
+                    await whatsapp.SendTextAsync(
+                        $"Skipped — this posting is Senior-level ({storedTitle}). " +
+                        "No CV or cover letter generated.");
+                    return;
+                }
+
+                string label = command == "/cv" ? "CV" : "cover letter";
+                await whatsapp.SendTextAsync($"Generating {label} for {resolvedUrl}...");
+
+                // Re-fetch the posting text. Fall back to the stored eval summary if unavailable.
+                string postingText;
+                try
+                {
+                    postingText = await fetcher.FetchAsync(resolvedUrl);
+                }
+                catch
+                {
+                    if (storedEvalJson is not null)
+                    {
+                        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
+                        postingText = ev is not null
+                            ? EvalFormatter.ToPostingContext(ev)
+                            : $"Company: {storedCompany}\nRole: {storedTitle}\nURL: {resolvedUrl}";
+                    }
+                    else
+                    {
+                        postingText = $"Company: {storedCompany}\nRole: {storedTitle}\nURL: {resolvedUrl}";
+                    }
+                }
+
+                string evalJson = storedEvalJson ?? "{}";
+
+                if (command == "/cv")
+                {
+                    var cvText = await cvAgent.GenerateAsync(postingText, evalJson);
+                    var pdf = JobSearch.Api.Services.PdfRenderer.RenderCv(cvText);
+                    await whatsapp.SendDocumentAsync(pdf, "Kavin_Abeysinghe_CV.pdf");
+                }
+                else
+                {
+                    var letter = await letterAgent.GenerateAsync(postingText, evalJson);
+                    await whatsapp.SendChunkedAsync(letter);
+                }
+                return;
+            }
+
+            // Reply (no command) to a previously sent teaser → send the full breakdown.
+            if (storedEvalJson is not null)
+            {
+                var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
+                if (ev is not null)
+                {
+                    await whatsapp.SendChunkedAsync(EvalFormatter.ToWhatsApp(EvalFormatter.Format(ev)));
+                    return;
+                }
+            }
+            if (repliedNotificationMessage is not null)
+            {
+                await whatsapp.SendTextAsync(repliedNotificationMessage);
+                return;
+            }
+
+            // Default: bare URL → evaluate the posting.
+            var url = WhatsAppService.ExtractUrl(text);
+            if (url is null)
+            {
+                await whatsapp.SendTextAsync(
+                    "Commands:\n" +
+                    "- Send a job URL to evaluate a posting\n" +
+                    "- /cv <url> — tailored CV\n" +
+                    "- /letter <url> — cover letter\n" +
+                    "Or reply to a job notification to get the full breakdown, or with /cv or /letter.");
+                return;
+            }
+
+            await whatsapp.SendTextAsync($"Fetching {url}...");
+
+            string fetchedText;
+            try
+            {
+                fetchedText = await fetcher.FetchAsync(url);
+            }
+            catch (Exception ex)
+            {
+                await whatsapp.SendTextAsync($"Could not fetch that URL: {ex.Message}");
+                return;
+            }
+
+            await whatsapp.SendTextAsync("Evaluating posting...");
+
+            var evaluation = await evaluator.EvaluateAsync(fetchedText, url);
+            await whatsapp.SendChunkedAsync(EvalFormatter.ToWhatsApp(EvalFormatter.Format(evaluation)));
+        }
+        catch (Exception ex)
+        {
+#pragma warning disable S2486, S108 // swallow intentionally — don't let a WhatsApp send failure mask the original error
+            try { await whatsapp.SendTextAsync($"Unexpected error: {ex.Message}"); } catch { }
 #pragma warning restore S2486, S108
         }
     });
