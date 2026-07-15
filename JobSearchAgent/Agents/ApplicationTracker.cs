@@ -119,10 +119,15 @@ public static class ApplicationTracker
         string company = clf.Company.Trim();
         string role = clf.RoleTitle.Trim();
 
-        // EF Core translates string.Equals with StringComparison.OrdinalIgnoreCase to ILIKE on PostgreSQL
+        // Case-insensitive match — EF Core translates ToLower() to LOWER() in PostgreSQL.
+        // string.Equals(..., StringComparison.OrdinalIgnoreCase) looks equivalent and passes
+        // against the test suite's InMemory provider, but Npgsql cannot translate that overload
+        // to SQL at all and throws InvalidOperationException at runtime against real Postgres.
+#pragma warning disable RCS1155 // ToLower() is required here for SQL translation, not in-memory comparison
         var existing = await db.Applications.FirstOrDefaultAsync(a =>
-            string.Equals(a.Company, company, StringComparison.OrdinalIgnoreCase) &&
-            (role == "" || string.Equals(a.RoleTitle, role, StringComparison.OrdinalIgnoreCase)));
+            a.Company.ToLower() == company.ToLower() &&
+            (role == "" || a.RoleTitle.ToLower() == role.ToLower()));
+#pragma warning restore RCS1155
 
         if (existing is not null)
             return (existing, false);
