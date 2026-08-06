@@ -69,10 +69,19 @@ experience:
         Investigated and resolved production issues using Application Insights and Grafana,
         performing root-cause analysis, structured logging, and distributed tracing.
       - >
-        Embedded AI-assisted tooling deeply into daily workflows — Claude Code for feature
-        delivery, code review, refactoring, and debugging; built custom agents with
-        project-scoped CLAUDE.md files, MCP server integrations, and slash commands to
-        automate recurring tasks including test scaffolding and PR description generation.
+        Embedded AI-assisted tooling deeply into daily engineering workflows, particularly
+        Claude Code, across feature delivery, code review, refactoring, and production
+        debugging. Built and orchestrated custom agents and subagents configured with
+        project-scoped CLAUDE.md context files, MCP server integrations into internal
+        tooling, and tailored slash commands to automate recurring tasks such as test
+        scaffolding, PR description generation, and documentation upkeep. Authored
+        purpose-built skills to enforce engineering discipline — a code-quality reviewer
+        run over every diff before commit to catch redundancy and quality regressions, and
+        a multi-agent pipeline that generates each feature's test suite using separate
+        analyst, designer, implementer, and adversarial-critic roles, so no single agent
+        both writes and judges a test. This meaningfully reduced cycle time on repetitive
+        engineering work while raising the rigour of what shipped, freeing capacity for
+        higher-leverage problems.
       - >
         Collaborated across globally distributed teams in Agile ceremonies — sprint planning,
         backlog refinement, retrospectives, and stand-ups.
@@ -90,6 +99,26 @@ experience:
           - Scope: connectors, sensors, digital twin entity health
           - Impact: contributed to new client acquisition and account retention
           - Process: full lifecycle — design → delivery → iteration based on feedback
+
+      - name: AI-Assisted Engineering Practice
+        type: technical_practice
+        summary: >
+          Built and orchestrated custom Claude Code agents and subagents with
+          project-scoped context files, MCP integrations, and slash commands to
+          automate recurring engineering work. Authored purpose-built skills to
+          enforce engineering discipline, including a code-quality reviewer run over
+          every diff before commit to catch redundancy and quality regressions, and a
+          multi-agent test-generation pipeline that splits analyst, designer,
+          implementer, and adversarial-critic roles across separate agents so no
+          single agent both writes and judges a test. Reduced cycle time on repetitive
+          work while raising the rigour of what shipped. Strong anchor for: "how do you
+          use AI tools", "how do you ensure code quality", "how do you approach
+          testing", "tell me about a process improvement you drove".
+        key_details:
+          - Code-quality reviewer skill runs over every diff pre-commit, catching redundancy and quality regressions before they ship
+          - Multi-agent test pipeline separates analyst/designer/implementer/adversarial-critic roles so no single agent both writes and judges a test
+          - Custom agent/subagent orchestration with project-scoped CLAUDE.md context and MCP integrations into internal tooling
+          - Same practice carried into the Job Search Agent personal project (skill-based diff review, multi-agent test design)
 
   - company: Programmed
     role: Freelance Software Engineer
@@ -250,7 +279,7 @@ skills:
   api: [REST, GraphQL, Swagger/OpenAPI]
   databases: [SQL Server, PostgreSQL, MongoDB, Azure SQL]
   design: [Figma, Adobe Illustrator]
-  ai_tooling: [Claude Code, MCP integrations, custom agent orchestration]
+  ai_tooling: [Claude Code, custom agent/subagent orchestration, MCP integrations, skill-authored code-quality review, multi-agent test-generation pipelines]
 
 # ---------------------------------------------------------------------------
 # PROJECTS
@@ -260,24 +289,33 @@ projects:
     status: active
     description: >
       An always-on, agentic job search management system. Monitors Gmail for
-      job-related emails, classifies them with Claude (Anthropic), tracks
-      application states, and delivers daily digest notifications via Telegram.
-      Features a React dashboard for visibility into the pipeline. Expanding to
-      include automated job discovery, CV tailoring, and cover letter generation.
+      job-related emails, classifies them with Claude, tracks the full application
+      lifecycle, evaluates postings against configurable criteria, and generates
+      tailored CVs and cover letters on demand. Agent behaviour is defined through a
+      versioned skills system of markdown skill files and YAML context loaded at
+      runtime, so evaluation criteria, CV tailoring rules, and cover letter guidelines
+      change without touching application code. Features a React dashboard and
+      Telegram bot as interfaces to the agent.
     tech_stack:
-      backend: [C#, ASP.NET Core, PostgreSQL, Npgsql, EF Core]
+      backend: [C#, ASP.NET Core, PostgreSQL, Npgsql, EF Core, QuestPDF]
       frontend: [React, TypeScript, Vite, Tailwind CSS]
       ai: [Claude (claude-opus-4-8), Anthropic SDK]
       integrations: [Gmail API, Telegram Bot API]
-      auth: [Google OAuth 2.0, cookie sessions]
+      auth: [Google OAuth 2.0, hardened cookie sessions]
       deployment: [Railway, Docker]
     highlights:
       - End-to-end product ownership — designed, built, and deployed independently
       - Layered agentic architecture with structured orchestration
+      - Built with the same AI-assisted engineering practice used professionally at
+        Willow — a skill-authored code-quality and redundancy review over every diff
+        before commit, and a multi-agent pipeline to design and implement each
+        feature's tests
       - Production-deployed with authentication, security headers, API versioning
     notes: >
       Use this as evidence of initiative, self-direction, and practical AI engineering.
-      Strong anchor for roles that value product thinking or agentic/LLM experience.
+      Strong anchor for roles that value product thinking or agentic/LLM experience —
+      and doubles as proof the AI-Assisted Engineering Practice anchor (see Willow) is
+      a genuine personal practice, not just a workplace mandate.
       Do not use if the role explicitly discourages personal projects (rare).
 
 # ---------------------------------------------------------------------------
@@ -288,6 +326,11 @@ narrative:
   strongest_anchors_in_order:
     - App Status at Willow (product ownership, commercial impact, full lifecycle)
     - Kolmeo payments suite (scale, business impact, technical complexity)
+    - AI-Assisted Engineering Practice at Willow (skill-based code-quality review,
+      multi-agent test pipeline) — lead with this over Job Search Agent when the role
+      values AI/agentic engineering, testing rigour, or code quality practice; use
+      Job Search Agent as the supporting proof point that it's a genuine personal
+      practice, not just a workplace mandate
     - Job Search Agent (self-direction, initiative, practical AI engineering)
 
   gap_to_address:

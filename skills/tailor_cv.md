@@ -60,9 +60,10 @@ Replace the summary placeholder with a fresh 2-3 sentence technical summary spec
 
 ## Hard constraints
 
-1. **No colons (:).** Do not use them anywhere in the document. Use an em dash (—) or restructure the sentence. For example, write "Languages — C#, TypeScript" not "Languages: C#, TypeScript".
-2. **No GPA.** Do not include it anywhere.
-3. **Honest.** Never add tools, metrics, or responsibilities not present in the base CV.
+1. **No colons (:).** Do not use them anywhere in the document. Use an en dash (–) or restructure the sentence. For example, write "Languages – C#, TypeScript" not "Languages: C#, TypeScript".
+2. **No em dashes (—).** Do not use them anywhere, including if you rephrase or add a bullet. If the base CV text you are working from contains one, replace it with a comma, semicolon, parentheses, or a restructured sentence when you touch that line. An en dash (–) is not an em dash and is fine for section labels and date ranges.
+3. **No GPA.** Do not include it anywhere.
+4. **Honest.** Never add tools, metrics, or responsibilities not present in the base CV.
 
 ---
 
