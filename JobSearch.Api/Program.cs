@@ -116,6 +116,7 @@ builder.Services.AddSingleton(_ => new JobPostingFetcher());
 builder.Services.AddSingleton(_ => new PostingEvaluator(anthropicApiKey));
 builder.Services.AddSingleton(_ => new CoverLetterAgent(anthropicApiKey));
 builder.Services.AddSingleton(_ => new CvTailorAgent(anthropicApiKey));
+builder.Services.AddSingleton(_ => new AnswerAgent(anthropicApiKey));
 builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
 builder.Services.AddSingleton(_ => new WhatsAppService(
     whatsappAccessToken, whatsappPhoneId, whatsappAppSecret, whatsappVerifyToken,
@@ -544,7 +545,9 @@ app.MapPost("/api/v1/telegram/webhook", async (
     PostingEvaluator evaluator,
     CoverLetterAgent letterAgent,
     CvTailorAgent cvAgent,
-    AppDbContext db) =>
+    AnswerAgent answerAgent,
+    AppDbContext db,
+    IServiceScopeFactory scopeFactory) =>
 {
     var secretHeader = request.Headers["X-Telegram-Bot-Api-Secret-Token"].FirstOrDefault() ?? "";
     if (!telegram.VerifySecretToken(secretHeader))
@@ -560,7 +563,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
         return Results.Ok();
     }
 
-    var (updateId, text, replyToText) = TelegramService.ParseUpdate(update);
+    var (updateId, text, replyToText, replyToMessageId) = TelegramService.ParseUpdate(update);
 
     // Prevent duplicate processing — Telegram retries if we don't respond within 5 seconds.
     if (!telegram.TryMarkProcessed(updateId))
@@ -609,6 +612,95 @@ app.MapPost("/api/v1/telegram/webhook", async (
             storedTitle    = posting?.Title;
         }
     }
+    else if (command == "/answer" && replyToText is not null)
+    {
+        // /answer has no URL of its own — commandArg is the question. Job context (if any)
+        // only comes from replying to a job notification.
+        var answerUrl = TelegramService.ExtractUrl(replyToText);
+        if (answerUrl is not null)
+        {
+            storedEvalJson = await db.DiscoveredPostings
+                .Where(d => d.Url == answerUrl)
+                .Select(d => d.EvaluationJson)
+                .FirstOrDefaultAsync();
+        }
+    }
+
+    // A reply to a prior bot message that's part of an AgentThread (an open Q&A
+    // conversation, or a finished CV/cover letter/answer that /edit can revise).
+    int? threadId = null;
+    string? threadType = null;
+    string? threadStatus = null;
+    string? threadHistoryJson = null;
+    if (replyToMessageId is not null)
+    {
+        var thread = await db.AgentThreads
+            .Where(t => t.LastMessageId == replyToMessageId)
+            .Select(t => new { t.Id, t.ArtifactType, t.Status, t.HistoryJson })
+            .FirstOrDefaultAsync();
+
+        if (thread is not null)
+        {
+            threadId = thread.Id;
+            threadType = thread.ArtifactType;
+            threadStatus = thread.Status;
+            threadHistoryJson = thread.HistoryJson;
+        }
+    }
+
+    // Inserts or updates an AgentThread from inside the fire-and-forget block below, where
+    // the request-scoped `db` above is no longer safe to use. No-ops if the send failed
+    // (nothing to correlate a future reply to).
+    async Task SaveThreadAsync(int? id, string artifactType, List<AgentThreadTurn> history,
+        string? currentContent, string status, string? lastMessageId)
+    {
+        if (lastMessageId is null) return;
+
+        using var scope = scopeFactory.CreateScope();
+        var scopedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var historyJson = JsonSerializer.Serialize(history);
+
+        if (id is int existingId)
+        {
+            var existing = await scopedDb.AgentThreads.FindAsync(existingId);
+            if (existing is not null)
+            {
+                existing.HistoryJson = historyJson;
+                existing.CurrentContent = currentContent;
+                existing.Status = status;
+                existing.LastMessageId = lastMessageId;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+        else
+        {
+            scopedDb.AgentThreads.Add(new AgentThread
+            {
+                ArtifactType = artifactType,
+                HistoryJson = historyJson,
+                CurrentContent = currentContent,
+                Status = status,
+                LastMessageId = lastMessageId,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+        }
+
+        await scopedDb.SaveChangesAsync();
+    }
+
+    // Sends an AnswerAgent response (a clarifying question or a final answer) and saves the
+    // thread accordingly. Shared by the Q&A continuation, /edit-on-answer, and new-/answer paths.
+    async Task SendAnswerAsync(int? id, List<AgentThreadTurn> history, string mode, string content)
+    {
+        var sentId = mode == "ask_followup"
+            ? await telegram.SendMessageAsync(content, parseMode: null)
+            : await telegram.SendChunkedAsync(content, parseMode: null);
+        await SaveThreadAsync(id, AgentThreadType.Answer, history,
+            mode == "final_answer" ? content : null,
+            mode == "final_answer" ? AgentThreadStatus.Complete : AgentThreadStatus.AwaitingContext,
+            sentId);
+    }
 
     // Fire-and-forget: respond 200 immediately, process in background.
     // Only Singletons, value types, and pre-fetched strings are captured.
@@ -616,6 +708,98 @@ app.MapPost("/api/v1/telegram/webhook", async (
     {
         try
         {
+            // A reply that continues an open Q&A conversation — the whole message is the
+            // candidate's answer to our clarifying question, not a new command.
+            if (threadId is not null && threadStatus == AgentThreadStatus.AwaitingContext)
+            {
+                var history = JsonSerializer.Deserialize<List<AgentThreadTurn>>(threadHistoryJson!) ?? [];
+                var followupRounds = history.Count(t => t.Role == "assistant");
+                var userTurn = followupRounds >= 3
+                    ? $"{text}\n\n(Please give your best answer now instead of asking another question.)"
+                    : text;
+                history.Add(new AgentThreadTurn("user", userTurn));
+
+                var (mode, content) = await answerAgent.RespondAsync(history);
+                history.Add(new AgentThreadTurn("assistant", content));
+                await SendAnswerAsync(threadId, history, mode, content);
+                return;
+            }
+
+            // A reply asking to revise a previously delivered CV, cover letter, or answer.
+            if (threadId is not null && threadStatus == AgentThreadStatus.Complete && command == "/edit")
+            {
+                if (string.IsNullOrWhiteSpace(commandArg))
+                {
+                    await telegram.SendMessageAsync("Reply with <code>/edit &lt;what to change&gt;</code> to revise this.");
+                    return;
+                }
+
+                var history = JsonSerializer.Deserialize<List<AgentThreadTurn>>(threadHistoryJson!) ?? [];
+                history.Add(new AgentThreadTurn("user",
+                    $"Please revise the previous draft with this feedback: {commandArg}\n\n" +
+                    "Keep following all the rules in your instructions unless the feedback specifically asks to change them."));
+
+                if (threadType == AgentThreadType.Cv)
+                {
+                    var revisedCv = await cvAgent.ReviseAsync(history);
+                    history.Add(new AgentThreadTurn("assistant", revisedCv));
+                    var pdf = JobSearch.Api.Services.PdfRenderer.RenderCv(revisedCv);
+                    var sentId = await telegram.SendDocumentAsync(pdf, "Kavin_Abeysinghe_CV.pdf");
+                    await SaveThreadAsync(threadId, threadType, history, revisedCv, AgentThreadStatus.Complete, sentId);
+                }
+                else if (threadType == AgentThreadType.CoverLetter)
+                {
+                    var revisedLetter = await letterAgent.ReviseAsync(history);
+                    history.Add(new AgentThreadTurn("assistant", revisedLetter));
+                    var sentId = await telegram.SendChunkedAsync(revisedLetter);
+                    await SaveThreadAsync(threadId, threadType, history, revisedLetter, AgentThreadStatus.Complete, sentId);
+                }
+                else
+                {
+                    var (mode, content) = await answerAgent.RespondAsync(history);
+                    history.Add(new AgentThreadTurn("assistant", content));
+                    await SendAnswerAsync(threadId, history, mode, content);
+                }
+                return;
+            }
+
+            if (command == "/answer")
+            {
+                if (string.IsNullOrWhiteSpace(commandArg))
+                {
+                    await telegram.SendMessageAsync(
+                        "Please include a question.\n" +
+                        "Example: <code>/answer What made you want to apply for this role?</code>\n" +
+                        "Or reply to a job notification with <code>/answer &lt;question&gt;</code> for context on that role.");
+                    return;
+                }
+
+                string? jobContext = null;
+                if (storedEvalJson is not null)
+                {
+                    try
+                    {
+                        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
+                        if (ev is not null) jobContext = EvalFormatter.ToPostingContext(ev);
+                    }
+                    catch (JsonException)
+                    {
+                        // No job context — answer from background alone.
+                    }
+                }
+
+                var history = new List<AgentThreadTurn>
+                {
+                    new("user", AnswerAgent.BuildInitialUserContent(commandArg, jobContext)),
+                };
+
+                var (mode, content) = await answerAgent.RespondAsync(history);
+                history.Add(new AgentThreadTurn("assistant", content));
+                await SendAnswerAsync(null, history, mode, content);
+                return;
+            }
+
             if (command is "/cv" or "/letter")
             {
                 if (resolvedUrl is null)
@@ -677,17 +861,27 @@ app.MapPost("/api/v1/telegram/webhook", async (
                 }
 
                 string evalJson = storedEvalJson ?? "{}";
+                var initialUserTurn = new AgentThreadTurn("user",
+                    command == "/cv"
+                        ? CvTailorAgent.BuildInitialUserContent(postingText, evalJson)
+                        : CoverLetterAgent.BuildInitialUserContent(postingText, evalJson));
 
                 if (command == "/cv")
                 {
                     var cvText = await cvAgent.GenerateAsync(postingText, evalJson);
                     var pdf = JobSearch.Api.Services.PdfRenderer.RenderCv(cvText);
-                    await telegram.SendDocumentAsync(pdf, "Kavin_Abeysinghe_CV.pdf");
+                    var sentId = await telegram.SendDocumentAsync(pdf, "Kavin_Abeysinghe_CV.pdf");
+                    await SaveThreadAsync(null, AgentThreadType.Cv,
+                        [initialUserTurn, new AgentThreadTurn("assistant", cvText)],
+                        cvText, AgentThreadStatus.Complete, sentId);
                 }
                 else
                 {
                     var letter = await letterAgent.GenerateAsync(postingText, evalJson);
-                    await telegram.SendChunkedAsync(letter);
+                    var sentId = await telegram.SendChunkedAsync(letter);
+                    await SaveThreadAsync(null, AgentThreadType.CoverLetter,
+                        [initialUserTurn, new AgentThreadTurn("assistant", letter)],
+                        letter, AgentThreadStatus.Complete, sentId);
                 }
                 return;
             }

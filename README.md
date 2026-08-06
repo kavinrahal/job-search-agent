@@ -19,7 +19,9 @@ Telegram webhook ──────────────┐
                        ├── POST /api/v1/telegram/webhook
                        │   ├── URL evaluation (Claude)
                        │   ├── /cv — tailored CV → PDF
-                       │   └── /letter — cover letter
+                       │   ├── /letter — cover letter
+                       │   ├── /answer — conversational application Q&A
+                       │   └── /edit — revise a previous CV, letter, or answer
                        └── React SPA (served from wwwroot)
 ```
 
@@ -43,7 +45,9 @@ Both projects share the same PostgreSQL database and the same `skills/` director
 - **Send a URL** — evaluate the posting, get a structured breakdown
 - **`/cv <url>`** — generate a tailored CV as a PDF download
 - **`/letter <url>`** — generate a tailored cover letter
-- Both `/cv` and `/letter` also work by replying to a job notification
+- **`/answer <question>`** — get a human-sounding answer to an application question, grounded in the candidate's real background
+- **`/edit <feedback>`** — reply to a CV, cover letter, or answer to get a revised version
+- `/cv`, `/letter`, and `/answer` all work by replying to a job notification for context; `/edit` always works by replying to whatever it should revise
 
 ### CV generation
 - Starts from a full base CV (`skills/context/cv_base.md`) and makes only targeted keyword/phrase additions for the specific role — preserving all existing content rather than regenerating from scratch
@@ -54,6 +58,12 @@ Both projects share the same PostgreSQL database and the same `skills/` director
 ### Cover letter generation
 - Tailored per role using candidate anchors and narrative guidelines from `skills/context/background.yaml`
 - Writing rules (tone, structure, length, banned phrases) are defined in `skills/write_cover_letter.md`
+
+### Conversational application Q&A and revisions
+- `/answer <question>` answers free-text application questions ("What made you want to apply for this role?") in the candidate's voice — grounded in `skills/context/background.yaml`, never generic. If there isn't enough context to answer honestly, the bot asks one clarifying question back instead of guessing, and the conversation continues over Telegram replies.
+- `/edit <feedback>`, sent as a reply to any CV, cover letter, or answer the bot has produced, regenerates it with that feedback applied rather than starting over.
+- Both are backed by `AgentThread` (`JobSearch.Data/AgentThread.cs`), which tracks a conversation's turn history against the Telegram message id of the bot's latest reply, so a follow-up reply can always find its way back to the right thread — including replies to a CV, which arrives as a PDF document rather than text.
+- Writing rules and the ask-vs-answer decision logic are defined in `skills/answer_application_question.md`.
 
 ### React dashboard
 - Browse classified emails with filters
@@ -72,6 +82,7 @@ skills/
 ├── evaluate_posting.md       # Evaluates job postings against criteria
 ├── tailor_cv.md              # Adapts base CV for a specific role
 ├── write_cover_letter.md     # Generates tailored cover letters
+├── answer_application_question.md  # Answers/asks about application questions
 ├── classify_email.md         # Classifies job-related emails
 └── context/
     ├── background.yaml       # Candidate data, anchors, narrative guidelines
@@ -113,6 +124,8 @@ job-search/
 │   ├── AppDbContext.cs
 │   ├── CvTailorAgent.cs
 │   ├── CoverLetterAgent.cs
+│   ├── AnswerAgent.cs        # Conversational application Q&A
+│   ├── AgentThread.cs        # Tracks multi-turn Q&A / edit threads by Telegram message id
 │   ├── PostingEvaluator.cs
 │   ├── SkillLoader.cs        # Loads skill files from skills/ directory
 │   └── Migrations/

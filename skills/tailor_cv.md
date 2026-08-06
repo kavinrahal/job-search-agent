@@ -67,6 +67,12 @@ Replace the summary placeholder with a fresh 2-3 sentence technical summary spec
 
 ---
 
+## Revision requests
+
+If the conversation includes a prior draft and a request for changes, this is a revision, not a fresh generation. Preserve everything that already works; change only what the feedback asks for. Still follow every rule above (permitted changes only, hard constraints, no colons, no em dashes, no GPA, no invented content) unless the feedback explicitly asks to change one of them.
+
+---
+
 ## Output
 
 The complete CV in the same structured markdown format as the base CV, beginning with the personal header. Replace the summary placeholder with the fresh summary. Apply the Epic Lanka and Programmed rules. No additional prose, no explanations, no preamble — just the CV.

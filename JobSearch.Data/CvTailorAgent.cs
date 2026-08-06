@@ -29,15 +29,17 @@ public class CvTailorAgent
             """;
     }
 
+    public static string BuildInitialUserContent(string postingText, string evaluationJson) => $"""
+        Job posting:
+        {postingText}
+
+        --- EVALUATION ---
+        {evaluationJson}
+        """;
+
     public async Task<string> GenerateAsync(string postingText, string evaluationJson)
     {
-        var userContent = $"""
-            Job posting:
-            {postingText}
-
-            --- EVALUATION ---
-            {evaluationJson}
-            """;
+        var userContent = BuildInitialUserContent(postingText, evaluationJson);
 
         var response = await _client.Messages.Create(new MessageCreateParams
         {
@@ -48,6 +50,22 @@ public class CvTailorAgent
                 new() { Text = _systemPrompt, CacheControl = new CacheControlEphemeral() },
             },
             Messages = [new() { Role = Role.User, Content = userContent }],
+        });
+
+        return ExtractText(response.Content);
+    }
+
+    public async Task<string> ReviseAsync(IReadOnlyList<AgentThreadTurn> history)
+    {
+        var response = await _client.Messages.Create(new MessageCreateParams
+        {
+            Model = OpusModel,
+            MaxTokens = 4000,
+            System = new List<TextBlockParam>
+            {
+                new() { Text = _systemPrompt, CacheControl = new CacheControlEphemeral() },
+            },
+            Messages = history.ToMessages(),
         });
 
         return ExtractText(response.Content);

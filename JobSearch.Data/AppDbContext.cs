@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<SystemHealth> SystemHealth { get; set; }
     public DbSet<DiscoveredPosting> DiscoveredPostings { get; set; }
+    public DbSet<AgentThread> AgentThreads { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -87,5 +88,8 @@ public class AppDbContext : DbContext
             e.HasIndex(d => d.Recommendation);
             e.HasIndex(d => d.WhatsAppMessageId); // reply-threading lookup
         });
+
+        modelBuilder.Entity<AgentThread>()
+            .HasIndex(t => t.LastMessageId).IsUnique(); // reply-threading lookup
     }
 }

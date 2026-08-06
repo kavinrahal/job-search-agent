@@ -29,7 +29,7 @@ public class TelegramService
     public bool TryMarkProcessed(long updateId) =>
         _processed.TryAdd(updateId, 0);
 
-    public static (long UpdateId, string? Text, string? ReplyToText) ParseUpdate(JsonElement update)
+    public static (long UpdateId, string? Text, string? ReplyToText, string? ReplyToMessageId) ParseUpdate(JsonElement update)
     {
         var updateId = update.TryGetProperty("update_id", out var idEl)
             ? idEl.GetInt64()
@@ -37,18 +37,24 @@ public class TelegramService
 
         string? text = null;
         string? replyToText = null;
+        string? replyToMessageId = null;
 
         if (update.TryGetProperty("message", out var msg))
         {
             if (msg.TryGetProperty("text", out var textEl))
                 text = textEl.GetString();
 
-            if (msg.TryGetProperty("reply_to_message", out var reply) &&
-                reply.TryGetProperty("text", out var replyTextEl))
-                replyToText = replyTextEl.GetString();
+            if (msg.TryGetProperty("reply_to_message", out var reply))
+            {
+                if (reply.TryGetProperty("text", out var replyTextEl))
+                    replyToText = replyTextEl.GetString();
+
+                if (reply.TryGetProperty("message_id", out var replyIdEl))
+                    replyToMessageId = replyIdEl.GetInt64().ToString();
+            }
         }
 
-        return (updateId, text, replyToText);
+        return (updateId, text, replyToText, replyToMessageId);
     }
 
     public static string? ExtractUrl(string text)
@@ -57,7 +63,8 @@ public class TelegramService
         return match.Success ? match.Value.TrimEnd('.', ',', ')', '>') : null;
     }
 
-    public async Task SendMessageAsync(string text, string? parseMode = "HTML")
+    // Returns the sent message's message_id (as a string, for reply-threading lookups), or null on failure.
+    public async Task<string?> SendMessageAsync(string text, string? parseMode = "HTML")
     {
         // Telegram's limit is 4096 chars — truncate silently here; use SendChunkedAsync for long content.
         if (text.Length > 4096)
@@ -70,14 +77,17 @@ public class TelegramService
         using var content = new StringContent(
             JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
         var resp = await _http.PostAsync($"{_apiBase}/sendMessage", content);
+        var body = await resp.Content.ReadAsStringAsync();
         if (!resp.IsSuccessStatusCode)
         {
-            var body = await resp.Content.ReadAsStringAsync();
             await Console.Error.WriteLineAsync($"[Telegram] sendMessage {(int)resp.StatusCode}: {body}");
+            return null;
         }
+
+        return ExtractMessageId(body);
     }
 
-    public async Task SendDocumentAsync(byte[] fileBytes, string filename)
+    public async Task<string?> SendDocumentAsync(byte[] fileBytes, string filename)
     {
         using var form = new MultipartFormDataContent();
         form.Add(new StringContent(_chatId), "chat_id");
@@ -87,25 +97,27 @@ public class TelegramService
         form.Add(fileContent, "document", filename);
 
         var resp = await _http.PostAsync($"{_apiBase}/sendDocument", form);
+        var body = await resp.Content.ReadAsStringAsync();
         if (!resp.IsSuccessStatusCode)
         {
-            var body = await resp.Content.ReadAsStringAsync();
             await Console.Error.WriteLineAsync($"[Telegram] sendDocument {(int)resp.StatusCode}: {body}");
+            return null;
         }
+
+        return ExtractMessageId(body);
     }
 
     // Splits long output across multiple messages, breaking at newlines where possible.
-    public async Task SendChunkedAsync(string text, string? parseMode = null)
+    // Returns the message_id of the last chunk sent, since that's the message a reply naturally targets.
+    public async Task<string?> SendChunkedAsync(string text, string? parseMode = null)
     {
         const int Limit = 3800;
 
         if (text.Length <= Limit)
-        {
-            await SendMessageAsync(text, parseMode);
-            return;
-        }
+            return await SendMessageAsync(text, parseMode);
 
         int start = 0;
+        string? lastMessageId = null;
         while (start < text.Length)
         {
             int end = Math.Min(start + Limit, text.Length);
@@ -117,8 +129,26 @@ public class TelegramService
                 if (nl > start) end = nl + 1;
             }
 
-            await SendMessageAsync(text[start..end], parseMode);
+            lastMessageId = await SendMessageAsync(text[start..end], parseMode);
             start = end;
+        }
+
+        return lastMessageId;
+    }
+
+    private static string? ExtractMessageId(string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            return doc.RootElement.TryGetProperty("result", out var result) &&
+                   result.TryGetProperty("message_id", out var idEl)
+                ? idEl.GetInt64().ToString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 }

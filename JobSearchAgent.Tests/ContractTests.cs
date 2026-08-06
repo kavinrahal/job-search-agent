@@ -132,4 +132,70 @@ public class ContractTests
         Assert.False(string.IsNullOrWhiteSpace(result));
         Assert.True(result.Length >= 200, $"Expected ≥200 chars, got {result.Length}");
     }
+
+    // Verifies structural contract: a prior draft + feedback turn produces changed, non-empty output.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task CvTailorAgent_ReviseAsync_ProducesChangedOutput()
+    {
+        if (ApiKey is null) return;
+
+        var agent = new CvTailorAgent(ApiKey);
+        var evalJson = JsonSerializer.Serialize(new { recommendation = "good_match", backend_match = "strong" });
+        var original = await agent.GenerateAsync(SamplePosting, evalJson);
+
+        var history = new List<AgentThreadTurn>
+        {
+            new("user", CvTailorAgent.BuildInitialUserContent(SamplePosting, evalJson)),
+            new("assistant", original),
+            new("user", "Please revise the previous draft with this feedback: mention Docker experience in the summary."),
+        };
+        var revised = await agent.ReviseAsync(history);
+
+        Assert.False(string.IsNullOrWhiteSpace(revised));
+        Assert.NotEqual(original, revised);
+    }
+
+    // =========================================================================
+    // AnswerAgent
+    // =========================================================================
+
+    // A vague question with no job context should trigger a clarifying question, not a guess.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task AnswerAgent_VagueQuestionNoContext_AsksFollowup()
+    {
+        if (ApiKey is null) return;
+
+        var agent = new AnswerAgent(ApiKey);
+        var history = new List<AgentThreadTurn>
+        {
+            new("user", AnswerAgent.BuildInitialUserContent("Why do you want to work here specifically?", null)),
+        };
+
+        var (mode, content) = await agent.RespondAsync(history);
+
+        Assert.Equal("ask_followup", mode);
+        Assert.False(string.IsNullOrWhiteSpace(content));
+    }
+
+    // A specific, well-grounded question should be answerable directly from background.yaml alone.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task AnswerAgent_SpecificQuestion_ReturnsFinalAnswer()
+    {
+        if (ApiKey is null) return;
+
+        var agent = new AnswerAgent(ApiKey);
+        var history = new List<AgentThreadTurn>
+        {
+            new("user", AnswerAgent.BuildInitialUserContent(
+                "Describe a technically challenging feature you owned end to end.", null)),
+        };
+
+        var (mode, content) = await agent.RespondAsync(history);
+
+        Assert.Equal("final_answer", mode);
+        Assert.False(string.IsNullOrWhiteSpace(content));
+    }
 }

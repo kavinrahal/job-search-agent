@@ -20,18 +20,20 @@ public class TelegramServiceTests
             {"update_id":1,"message":{"text":"/cv https://au.seek.com/job/123"}}
             """);
 
-        var (updateId, text, replyToText) = TelegramService.ParseUpdate(doc.RootElement);
+        var (updateId, text, replyToText, replyToMessageId) = TelegramService.ParseUpdate(doc.RootElement);
 
         Assert.Equal(1L, updateId);
         Assert.Equal("/cv https://au.seek.com/job/123", text);
         Assert.Null(replyToText);
+        Assert.Null(replyToMessageId);
     }
 
-    // TC20 — Reply-to message: both text and replyToText extracted
+    // TC20 — Reply-to message: text, replyToText, and replyToMessageId all extracted
     // Silent failure: missing the reply_to_message path means /letter with a replied notification
-    // has no URL to look up, silently responds "no URL found."
+    // has no URL to look up, silently responds "no URL found." Missing message_id means /edit and
+    // Q&A continuation can never find the thread they belong to.
     [Fact]
-    public void ParseUpdate_ReplyToMessage_BothTextsExtracted()
+    public void ParseUpdate_ReplyToMessage_TextAndMessageIdExtracted()
     {
         var svc = Make();
         using var doc = JsonDocument.Parse("""
@@ -40,16 +42,41 @@ public class TelegramServiceTests
                 "message": {
                     "text": "/letter",
                     "reply_to_message": {
+                        "message_id": 999,
                         "text": "Canva — Engineer\nhttps://au.seek.com/job/456"
                     }
                 }
             }
             """);
 
-        var (_, text, replyToText) = TelegramService.ParseUpdate(doc.RootElement);
+        var (_, text, replyToText, replyToMessageId) = TelegramService.ParseUpdate(doc.RootElement);
 
         Assert.Equal("/letter", text);
         Assert.Equal("Canva — Engineer\nhttps://au.seek.com/job/456", replyToText);
+        Assert.Equal("999", replyToMessageId);
+    }
+
+    // TC20b — Reply to a document (e.g. a CV PDF) has a message_id but no text
+    [Fact]
+    public void ParseUpdate_ReplyToDocumentMessage_MessageIdExtractedTextNull()
+    {
+        using var doc = JsonDocument.Parse("""
+            {
+                "update_id": 5,
+                "message": {
+                    "text": "/edit make it punchier",
+                    "reply_to_message": {
+                        "message_id": 1001,
+                        "document": {}
+                    }
+                }
+            }
+            """);
+
+        var (_, _, replyToText, replyToMessageId) = TelegramService.ParseUpdate(doc.RootElement);
+
+        Assert.Null(replyToText);
+        Assert.Equal("1001", replyToMessageId);
     }
 
     // TC21 — No message property (e.g. channel_post): text/replyToText are null, updateId still read
@@ -60,11 +87,12 @@ public class TelegramServiceTests
         var svc = Make();
         using var doc = JsonDocument.Parse("""{"update_id":3}""");
 
-        var (updateId, text, replyToText) = TelegramService.ParseUpdate(doc.RootElement);
+        var (updateId, text, replyToText, replyToMessageId) = TelegramService.ParseUpdate(doc.RootElement);
 
         Assert.Equal(3L, updateId);
         Assert.Null(text);
         Assert.Null(replyToText);
+        Assert.Null(replyToMessageId);
     }
 
     // TC22 — Message with no text property (e.g. photo message): text is null
@@ -74,7 +102,7 @@ public class TelegramServiceTests
         var svc = Make();
         using var doc = JsonDocument.Parse("""{"update_id":4,"message":{"photo":{}}}""");
 
-        var (_, text, _) = TelegramService.ParseUpdate(doc.RootElement);
+        var (_, text, _, _) = TelegramService.ParseUpdate(doc.RootElement);
 
         Assert.Null(text);
     }

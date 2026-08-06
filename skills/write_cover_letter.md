@@ -106,6 +106,12 @@ The candidate's voice is: measured, technically credible, and specific. Not effu
 
 ---
 
+## Revision requests
+
+If the conversation includes a prior draft and a request for changes, this is a revision, not a fresh generation. Preserve everything that already works; change only what the feedback asks for. Still follow every rule above (hard writing rules, banned phrases, length, structure) unless the feedback explicitly asks to change one of them.
+
+---
+
 ## Output
 
 Plain text, letter format. No JSON. No markdown headers. No subject line. No date. Begin with the salutation.
