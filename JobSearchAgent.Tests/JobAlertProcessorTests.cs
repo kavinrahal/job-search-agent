@@ -154,6 +154,39 @@ public class JobAlertProcessorTests
         Assert.Equal(0, evalCallCount);
     }
 
+    // TC-P2b — Two different users' alert emails referencing the same URL each get their own row.
+    // Silent failure: a global (not per-user) unique index on Url would make the second user's
+    // insert throw a duplicate-key exception even though the per-user dedup query correctly
+    // treats the URL as new for them — this is the exact bug this ticket fixes.
+    [Fact]
+    public async Task ProcessAsync_SameUrlAcrossTwoDifferentUsers_EachGetsOwnRow()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var url = "https://au.seek.com/job/30000004";
+        var email = Make.Email(bodyText: $"Job: {url}");
+
+        var dbUser1 = Db.Fresh(dbName);
+        dbUser1.UserProfiles.Add(new UserProfile { UserId = Db.TestUserId, Background = "b", CvBase = "c", JobCriteria = "j" });
+        dbUser1.SaveChanges();
+        var processor1 = MakeProcessor(dbUser1, evaluator: new FakeEvaluator(_ => StubEval("strong_match")));
+        await processor1.ProcessAsync([email]);
+
+        var dbUser2 = Db.Fresh(dbName);
+        dbUser2.CurrentUserId = 2;
+        dbUser2.UserProfiles.Add(new UserProfile { UserId = 2, Background = "b", CvBase = "c", JobCriteria = "j" });
+        dbUser2.SaveChanges();
+        var processor2 = MakeProcessor(dbUser2, evaluator: new FakeEvaluator(_ => StubEval("weak_match")));
+        var (found, evaluated, _) = await processor2.ProcessAsync([email]);
+
+        Assert.Equal(1, found);
+        Assert.Equal(1, evaluated); // not skipped as a duplicate — new for user 2
+
+        var user1Record = dbUser1.DiscoveredPostings.Single(d => d.Url == url);
+        var user2Record = dbUser2.DiscoveredPostings.Single(d => d.Url == url);
+        Assert.Equal("strong_match", user1Record.Recommendation);
+        Assert.Equal("weak_match", user2Record.Recommendation);
+    }
+
     // TC-P3 — URL with "error" recommendation IS included and retried; fields reset before eval
     // Silent failure: if error records aren't reset, a transient 403 permanently blocks a posting.
     [Fact]

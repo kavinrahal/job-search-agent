@@ -88,6 +88,38 @@ public class JobDiscoveryWorkerTests
         Assert.Equal(0, evalCount);
     }
 
+    // TC05b — Two different users discovering the same URL each get their own row.
+    // Silent failure: a global (not per-user) unique index on Url would make the second
+    // user's insert throw a duplicate-key exception even though the per-user dedup query
+    // correctly treats the URL as new for them — this is the exact bug this ticket fixes.
+    [Fact]
+    public async Task RunAsync_SameUrlDiscoveredByTwoDifferentUsers_EachGetsOwnRow()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var item = FeedItem();
+
+        var dbUser1 = Db.Fresh(dbName);
+        dbUser1.UserProfiles.Add(new UserProfile { UserId = Db.TestUserId, Background = "b", CvBase = "c", JobCriteria = "j" });
+        dbUser1.SaveChanges();
+        var worker1 = MakeWorker(dbUser1, fetchers: [new FakeFetcher([item])], evaluator: new FakeEval(_ => StubEval("strong_match")));
+        await worker1.RunAsync();
+
+        var dbUser2 = Db.Fresh(dbName);
+        dbUser2.CurrentUserId = 2;
+        dbUser2.UserProfiles.Add(new UserProfile { UserId = 2, Background = "b", CvBase = "c", JobCriteria = "j" });
+        dbUser2.SaveChanges();
+        var worker2 = MakeWorker(dbUser2, fetchers: [new FakeFetcher([item])], evaluator: new FakeEval(_ => StubEval("weak_match")));
+        var (discovered, evaluated, _) = await worker2.RunAsync();
+
+        Assert.Equal(1, discovered); // not skipped as a duplicate — new for user 2
+        Assert.Equal(1, evaluated);
+
+        var user1Record = dbUser1.DiscoveredPostings.Single(d => d.Url == item.Url);
+        var user2Record = dbUser2.DiscoveredPostings.Single(d => d.Url == item.Url);
+        Assert.Equal("strong_match", user1Record.Recommendation);
+        Assert.Equal("weak_match", user2Record.Recommendation);
+    }
+
     // TC06 — Description ≥ 400 chars → FormatPostingText used (no page fetch attempted)
     [Fact]
     public async Task RunAsync_LongDescription_UsesFeedDescription()

@@ -116,10 +116,13 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<DiscoveredPosting>(e =>
         {
-            e.HasIndex(d => d.Url).IsUnique();
+            // Composite, not a bare Url unique index: two different users matching the same
+            // posting URL must each get their own row — a global Url uniqueness constraint
+            // would throw on the second user's insert even though the per-user LINQ dedup
+            // (query-filtered by UserId) correctly treats it as new for them.
+            e.HasIndex(d => new { d.UserId, d.Url }).IsUnique();
             e.HasIndex(d => d.DiscoveredAt);
             e.HasIndex(d => d.Recommendation);
-            e.HasIndex(d => d.UserId);
             e.HasQueryFilter(d => d.UserId == CurrentUserId);
         });
 
