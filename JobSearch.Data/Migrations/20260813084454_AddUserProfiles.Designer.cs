@@ -3,6 +3,7 @@ using System;
 using JobSearch.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JobSearch.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260813084454_AddUserProfiles")]
+    partial class AddUserProfiles
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -246,6 +249,12 @@ namespace JobSearch.Data.Migrations
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("WhatsAppMessageId")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("WhatsAppNotificationSent")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DiscoveredAt");
@@ -256,6 +265,8 @@ namespace JobSearch.Data.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("WhatsAppMessageId");
 
                     b.ToTable("DiscoveredPostings");
                 });
@@ -288,6 +299,12 @@ namespace JobSearch.Data.Migrations
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("WhatsAppMessageId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("WhatsAppSentAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ApplicationId");
@@ -295,6 +312,10 @@ namespace JobSearch.Data.Migrations
                     b.HasIndex("SentAt");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("WhatsAppMessageId");
+
+                    b.HasIndex("WhatsAppSentAt");
 
                     b.ToTable("Notifications");
                 });

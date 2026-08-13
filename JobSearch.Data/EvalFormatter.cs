@@ -63,27 +63,6 @@ public static class EvalFormatter
         return sb.ToString().TrimEnd();
     }
 
-    // WhatsApp has no HTML parse mode — only *bold*/_italic_. Format() only ever
-    // emits <b>/</b>, so a blanket replace is sufficient.
-    public static string ToWhatsApp(string telegramHtml) =>
-        telegramHtml.Replace("<b>", "*").Replace("</b>", "*");
-
-    // Builds the {{1}}/{{2}} params for the "job_search_alert" WhatsApp template —
-    // built from the raw fields, not by splitting Format()'s HTML output, since the
-    // template body must be plain text (no markup).
-    public static (string Label, string Detail) ToWhatsAppTeaser(PostingEvaluation ev, string? via = null)
-    {
-        var rec = ev.Recommendation switch
-        {
-            "strong_match" => "STRONG MATCH",
-            "good_match"   => "GOOD MATCH",
-            _              => ev.Recommendation.ToUpperInvariant(),
-        };
-        string label = $"{ev.Company} — {ev.RoleTitle} ({rec}{(via is not null ? $", {via}" : "")})";
-        string detail = ev.Rationale.Length > 80 ? ev.Rationale[..80] + "…" : ev.Rationale;
-        return (label, detail);
-    }
-
     // Synthesizes a minimal posting description from stored evaluation fields.
     // Used when the original job page can't be re-fetched (bot protection, DNS, etc.).
     public static string ToPostingContext(PostingEvaluation ev) =>

@@ -7,22 +7,21 @@ public class CoverLetterAgent
 {
     private readonly AnthropicClient _client;
     private const string OpusModel = "claude-opus-4-8";
-    private readonly string _systemPrompt;
+    private readonly string _skillText;
 
     public CoverLetterAgent(string apiKey)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
-
-        string skillText    = SkillLoader.Load("write_cover_letter.md");
-        string background   = SkillLoader.Load("context/background.yaml");
-
-        _systemPrompt = $"""
-            {skillText}
-
-            --- CANDIDATE BACKGROUND ---
-            {background}
-            """;
+        _skillText = SkillLoader.Load("write_cover_letter.md");
     }
+
+    // Per-call, not per-instance — see CvTailorAgent.BuildSystemPrompt for why.
+    private string BuildSystemPrompt(UserProfile profile) => $"""
+        {_skillText}
+
+        --- CANDIDATE BACKGROUND ---
+        {profile.Background}
+        """;
 
     public static string BuildInitialUserContent(string postingText, string evaluationJson) => $"""
         Job posting:
@@ -32,7 +31,7 @@ public class CoverLetterAgent
         {evaluationJson}
         """;
 
-    public async Task<string> GenerateAsync(string postingText, string evaluationJson, string? instruction = null)
+    public async Task<string> GenerateAsync(UserProfile profile, string postingText, string evaluationJson, string? instruction = null)
     {
         string userContent = instruction is not null
             ? $"""
@@ -48,7 +47,7 @@ public class CoverLetterAgent
             MaxTokens = 2048,
             System = new List<TextBlockParam>
             {
-                new() { Text = _systemPrompt, CacheControl = new CacheControlEphemeral() },
+                new() { Text = BuildSystemPrompt(profile), CacheControl = new CacheControlEphemeral() },
             },
             Messages = [new() { Role = Role.User, Content = userContent }],
         });
@@ -56,7 +55,7 @@ public class CoverLetterAgent
         return ExtractText(response.Content);
     }
 
-    public async Task<string> ReviseAsync(IReadOnlyList<AgentThreadTurn> history)
+    public async Task<string> ReviseAsync(UserProfile profile, IReadOnlyList<AgentThreadTurn> history)
     {
         var response = await _client.Messages.Create(new MessageCreateParams
         {
@@ -64,7 +63,7 @@ public class CoverLetterAgent
             MaxTokens = 2048,
             System = new List<TextBlockParam>
             {
-                new() { Text = _systemPrompt, CacheControl = new CacheControlEphemeral() },
+                new() { Text = BuildSystemPrompt(profile), CacheControl = new CacheControlEphemeral() },
             },
             Messages = history.ToMessages(),
         });

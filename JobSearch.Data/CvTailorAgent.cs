@@ -8,26 +8,26 @@ public class CvTailorAgent
 {
     private readonly AnthropicClient _client;
     private const string OpusModel = "claude-opus-4-8";
-    private readonly string _systemPrompt;
+    private readonly string _skillText;
 
     public CvTailorAgent(string apiKey)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
-
-        string skillText  = SkillLoader.Load("tailor_cv.md");
-        string background = SkillLoader.Load("context/background.yaml");
-        string cvBase     = SkillLoader.Load("context/cv_base.md");
-
-        _systemPrompt = $"""
-            {skillText}
-
-            --- CANDIDATE BACKGROUND ---
-            {background}
-
-            --- BASE CV ---
-            {cvBase}
-            """;
+        _skillText = SkillLoader.Load("tailor_cv.md");
     }
+
+    // Per-call, not per-instance: this agent is a DI singleton shared by every request, but
+    // the candidate's background/CV base is per-user data (UserProfile), not something that
+    // can be baked into the prompt once at construction.
+    private string BuildSystemPrompt(UserProfile profile) => $"""
+        {_skillText}
+
+        --- CANDIDATE BACKGROUND ---
+        {profile.Background}
+
+        --- BASE CV ---
+        {profile.CvBase}
+        """;
 
     public static string BuildInitialUserContent(string postingText, string evaluationJson) => $"""
         Job posting:
@@ -37,7 +37,7 @@ public class CvTailorAgent
         {evaluationJson}
         """;
 
-    public async Task<string> GenerateAsync(string postingText, string evaluationJson)
+    public async Task<string> GenerateAsync(UserProfile profile, string postingText, string evaluationJson)
     {
         var userContent = BuildInitialUserContent(postingText, evaluationJson);
 
@@ -47,7 +47,7 @@ public class CvTailorAgent
             MaxTokens = 4000,
             System = new List<TextBlockParam>
             {
-                new() { Text = _systemPrompt, CacheControl = new CacheControlEphemeral() },
+                new() { Text = BuildSystemPrompt(profile), CacheControl = new CacheControlEphemeral() },
             },
             Messages = [new() { Role = Role.User, Content = userContent }],
         });
@@ -55,7 +55,7 @@ public class CvTailorAgent
         return ExtractText(response.Content);
     }
 
-    public async Task<string> ReviseAsync(IReadOnlyList<AgentThreadTurn> history)
+    public async Task<string> ReviseAsync(UserProfile profile, IReadOnlyList<AgentThreadTurn> history)
     {
         var response = await _client.Messages.Create(new MessageCreateParams
         {
@@ -63,7 +63,7 @@ public class CvTailorAgent
             MaxTokens = 4000,
             System = new List<TextBlockParam>
             {
-                new() { Text = _systemPrompt, CacheControl = new CacheControlEphemeral() },
+                new() { Text = BuildSystemPrompt(profile), CacheControl = new CacheControlEphemeral() },
             },
             Messages = history.ToMessages(),
         });

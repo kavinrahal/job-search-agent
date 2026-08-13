@@ -149,14 +149,6 @@ Set these in Railway (production) or `dotnet user-secrets` / `.env` (local).
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token from BotFather |
 | `TELEGRAM_WEBHOOK_SECRET` | Alphanumeric secret for webhook verification |
 | `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
-| _(WhatsApp rows below — TODO, pilot paused pending Meta Business Verification; safe to leave unset, everything no-ops until they're set)_ | |
-| `WHATSAPP_ACCESS_TOKEN` | WhatsApp Cloud API permanent access token (optional — parallel pilot channel) |
-| `WHATSAPP_PHONE_NUMBER_ID` | Meta Phone Number ID (optional) |
-| `WHATSAPP_APP_SECRET` | Meta app secret, verifies incoming webhook signatures (optional, API only) |
-| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Arbitrary string chosen at webhook-subscribe time (optional, API only) |
-| `WHATSAPP_TO_NUMBER` | Recipient's WhatsApp number, E.164 format (optional) |
-| `WHATSAPP_TEMPLATE_NAME` | Approved template name for proactive alerts (optional, defaults to `job_search_alert`) |
-| `WHATSAPP_TEMPLATE_LANG` | Template language code (optional, defaults to `en_US`) |
 | `ALLOWED_EMAIL` | Google account seeded as the owner's permanent Tier 1 + Tier 2 account at startup (sign-in itself is open to any Google account, which creates its own `Users` row) |
 | `GMAIL_CLIENT_ID` | Gmail API OAuth client ID (worker only) |
 | `GMAIL_CLIENT_SECRET` | Gmail API OAuth client secret (worker only) |

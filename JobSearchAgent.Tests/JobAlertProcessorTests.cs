@@ -117,7 +117,7 @@ public class JobAlertProcessorTests
         var email = Make.Email(bodyText: "Nothing interesting here.");
         var processor = MakeProcessor(db);
 
-        var (found, evaluated, notified, _) = await processor.ProcessAsync([email]);
+        var (found, evaluated, notified) = await processor.ProcessAsync([email]);
 
         Assert.Equal(0, found);
         Assert.Equal(0, evaluated);
@@ -147,7 +147,7 @@ public class JobAlertProcessorTests
         }));
         var email = Make.Email(bodyText: $"Job: {url}");
 
-        var (found, evaluated, _, _) = await processor.ProcessAsync([email]);
+        var (found, evaluated, _) = await processor.ProcessAsync([email]);
 
         Assert.Equal(1, found);
         Assert.Equal(0, evaluated);
@@ -257,7 +257,7 @@ public class JobAlertProcessorTests
             telegram: telegram);
         var email = Make.Email(bodyText: $"Job: {url}");
 
-        var (_, _, notified, _) = await processor.ProcessAsync([email]);
+        var (_, _, notified) = await processor.ProcessAsync([email]);
 
         var record = db.DiscoveredPostings.Single(d => d.Url == url);
         Assert.True(record.NotificationSent);
@@ -277,7 +277,7 @@ public class JobAlertProcessorTests
             telegram: telegram);
         var email = Make.Email(bodyText: $"Job: {url}");
 
-        var (_, _, notified, _) = await processor.ProcessAsync([email]);
+        var (_, _, notified) = await processor.ProcessAsync([email]);
 
         Assert.Equal(0, notified);
         Assert.Equal(0, telegram.CallCount);
@@ -293,7 +293,7 @@ public class JobAlertProcessorTests
             "Job A: https://au.seek.com/job/80000008\n" +
             "Job B: https://au.seek.com/job/80000009");
 
-        var (found, evaluated, notified, _) = await processor.ProcessAsync([email]);
+        var (found, evaluated, notified) = await processor.ProcessAsync([email]);
 
         Assert.Equal(2, found);
         Assert.Equal(2, evaluated);
@@ -346,7 +346,7 @@ public class JobAlertProcessorTests
     {
         private readonly Func<string, PostingEvaluation> _fn;
         public FakeEvaluator(Func<string, PostingEvaluation> fn) : base() => _fn = fn;
-        public override Task<PostingEvaluation> EvaluateAsync(string postingText, string? sourceUrl = null)
+        public override Task<PostingEvaluation> EvaluateAsync(UserProfile profile, string postingText, string? sourceUrl = null)
             => Task.FromResult(_fn(postingText));
     }
 

@@ -9,22 +9,13 @@ public class PostingEvaluator
     private readonly AnthropicClient _client;
     private const string OpusModel = "claude-opus-4-8";
 
-    private readonly string _systemPrompt;
+    private readonly string _skillText;
     private readonly Tool _tool;
 
     public PostingEvaluator(string apiKey)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
-
-        string skillText = SkillLoader.Load("evaluate_posting.md");
-        string criteriaText = SkillLoader.Load("context/job_criteria.yaml");
-
-        _systemPrompt = $"""
-            {skillText}
-
-            --- JOB CRITERIA ---
-            {criteriaText}
-            """;
+        _skillText = SkillLoader.Load("evaluate_posting.md");
 
         _tool = new Tool
         {
@@ -72,9 +63,17 @@ public class PostingEvaluator
         };
     }
 
-    protected PostingEvaluator() { _client = null!; _systemPrompt = ""; _tool = null!; }
+    protected PostingEvaluator() { _client = null!; _skillText = ""; _tool = null!; }
 
-    public virtual async Task<PostingEvaluation> EvaluateAsync(string postingText, string? sourceUrl = null)
+    // Per-call, not per-instance — see CvTailorAgent.BuildSystemPrompt for why.
+    private string BuildSystemPrompt(UserProfile profile) => $"""
+        {_skillText}
+
+        --- JOB CRITERIA ---
+        {profile.JobCriteria}
+        """;
+
+    public virtual async Task<PostingEvaluation> EvaluateAsync(UserProfile profile, string postingText, string? sourceUrl = null)
     {
         string userContent = sourceUrl is not null
             ? $"Source URL: {sourceUrl}\n\n{postingText}"
@@ -88,7 +87,7 @@ public class PostingEvaluator
             {
                 new()
                 {
-                    Text = _systemPrompt,
+                    Text = BuildSystemPrompt(profile),
                     CacheControl = new CacheControlEphemeral(),
                 },
             },

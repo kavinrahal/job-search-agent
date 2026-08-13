@@ -18,26 +18,26 @@ public class JobDiscoveryWorker
     private readonly JobPostingFetcher _pageFetcher;
     private readonly PostingEvaluator _evaluator;
     private readonly TelegramNotifier? _telegram;
-    private readonly WhatsAppNotifier? _whatsapp;
 
     public JobDiscoveryWorker(
         AppDbContext db,
         IEnumerable<IJobFetcher> fetchers,
         JobPostingFetcher pageFetcher,
         PostingEvaluator evaluator,
-        TelegramNotifier? telegram,
-        WhatsAppNotifier? whatsapp = null)
+        TelegramNotifier? telegram)
     {
         _db = db;
         _fetchers = fetchers;
         _pageFetcher = pageFetcher;
         _evaluator = evaluator;
         _telegram = telegram;
-        _whatsapp = whatsapp;
     }
 
-    public async Task<(int Discovered, int Evaluated, int Notified, int WhatsAppNotified)> RunAsync()
+    public async Task<(int Discovered, int Evaluated, int Notified)> RunAsync()
     {
+        var profile = await _db.UserProfiles.FindAsync(_db.CurrentUserId!.Value)
+            ?? throw new InvalidOperationException("UserProfile not seeded for the current user.");
+
         Console.WriteLine("Job discovery: fetching from all sources...");
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var feedItems = new List<JobFeedItem>();
@@ -65,12 +65,12 @@ public class JobDiscoveryWorker
         if (newItems.Count == 0)
         {
             Console.WriteLine("Job discovery: nothing new.");
-            return (0, 0, 0, 0);
+            return (0, 0, 0);
         }
 
         Console.WriteLine($"Job discovery: {newItems.Count} new postings to evaluate.");
 
-        int evaluated = 0, notified = 0, whatsappNotified = 0;
+        int evaluated = 0, notified = 0;
 
         foreach (var item in newItems)
         {
@@ -110,7 +110,7 @@ public class JobDiscoveryWorker
                 {
                     postingText = FormatPostingText(item);
                 }
-                var eval = await _evaluator.EvaluateAsync(postingText, item.Url);
+                var eval = await _evaluator.EvaluateAsync(profile, postingText, item.Url);
 
                 record.Company = eval.Company;
                 record.Title = string.IsNullOrEmpty(eval.RoleTitle) ? item.Title : eval.RoleTitle;
@@ -132,19 +132,6 @@ public class JobDiscoveryWorker
                     await _db.SaveChangesAsync();
                     notified++;
                 }
-
-                if (_whatsapp is not null && isMatch)
-                {
-                    var (label, detail) = EvalFormatter.ToWhatsAppTeaser(eval);
-                    var wamid = await _whatsapp.SendTemplateAsync(label, detail);
-                    if (wamid is not null)
-                    {
-                        record.WhatsAppNotificationSent = true;
-                        record.WhatsAppMessageId = wamid;
-                        await _db.SaveChangesAsync();
-                        whatsappNotified++;
-                    }
-                }
             }
             catch (Exception ex)
             {
@@ -157,7 +144,7 @@ public class JobDiscoveryWorker
             await Task.Delay(1200); // throttle between Claude calls
         }
 
-        return (newItems.Count, evaluated, notified, whatsappNotified);
+        return (newItems.Count, evaluated, notified);
     }
 
     internal static string FormatPostingText(JobFeedItem item)

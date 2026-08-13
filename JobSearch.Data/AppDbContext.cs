@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public int? CurrentUserId { get; set; }
 
     public DbSet<User> Users { get; set; }
+    public DbSet<UserProfile> UserProfiles { get; set; }
     public DbSet<RawEmailRecord> RawEmails { get; set; }
     public DbSet<ClassificationRecord> Classifications { get; set; }
     public DbSet<Application> Applications { get; set; }
@@ -58,6 +59,15 @@ public class AppDbContext : DbContext
             .HasIndex(u => u.Email)
             .IsUnique();
 
+        modelBuilder.Entity<UserProfile>(e =>
+        {
+            e.HasKey(p => p.UserId);
+            e.HasOne(p => p.User)
+             .WithOne()
+             .HasForeignKey<UserProfile>(p => p.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<RawEmailRecord>(e =>
         {
             e.HasIndex(r => r.MessageId).IsUnique();
@@ -97,8 +107,6 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Notification>(e =>
         {
             e.HasIndex(n => n.SentAt);           // fast query for pending notifications (Telegram)
-            e.HasIndex(n => n.WhatsAppSentAt);    // fast query for pending notifications (WhatsApp)
-            e.HasIndex(n => n.WhatsAppMessageId); // reply-threading lookup
             e.HasIndex(n => n.UserId);
             e.HasQueryFilter(n => n.UserId == CurrentUserId);
         });
@@ -111,7 +119,6 @@ public class AppDbContext : DbContext
             e.HasIndex(d => d.Url).IsUnique();
             e.HasIndex(d => d.DiscoveredAt);
             e.HasIndex(d => d.Recommendation);
-            e.HasIndex(d => d.WhatsAppMessageId); // reply-threading lookup
             e.HasIndex(d => d.UserId);
             e.HasQueryFilter(d => d.UserId == CurrentUserId);
         });

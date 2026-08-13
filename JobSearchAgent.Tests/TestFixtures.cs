@@ -13,13 +13,27 @@ public static class Db
 
     // dbName lets a test open a second, independently-tracked context against the same
     // underlying InMemory database — needed to simulate "a different request/tenant" rather
-    // than reusing a context that already has the row in its local change tracker.
+    // than reusing a context that already has the row in its local change tracker. Only the
+    // first Fresh() call against a given dbName should seed the UserProfile row (a second
+    // context opened against the same dbName would otherwise try to insert a duplicate).
     public static AppDbContext Fresh(string? dbName = null)
     {
+        bool isNewDb = dbName is null;
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(dbName ?? Guid.NewGuid().ToString())
             .Options;
-        return new AppDbContext(options) { CurrentUserId = TestUserId };
+        var db = new AppDbContext(options) { CurrentUserId = TestUserId };
+
+        if (isNewDb)
+        {
+            // PostingEvaluator.EvaluateAsync (and CvTailorAgent/CoverLetterAgent/AnswerAgent)
+            // now take a UserProfile — worker classes fetch it via CurrentUserId, so it must
+            // exist for any test that exercises JobDiscoveryWorker/JobAlertProcessor.
+            db.UserProfiles.Add(new UserProfile { UserId = TestUserId, Background = "Test background.", CvBase = "Test CV.", JobCriteria = "Test criteria." });
+            db.SaveChanges();
+        }
+
+        return db;
     }
 }
 
@@ -39,6 +53,16 @@ public static class Make
             RoleTitle = roleTitle,
             Confidence = confidence,
         };
+
+    // Loads the real context files, mirroring what the agent constructors used to load
+    // once at startup — contract tests hit the real API and want realistic content.
+    public static UserProfile OwnerProfile() => new()
+    {
+        UserId = Db.TestUserId,
+        Background = SkillLoader.Load("context/background.yaml"),
+        CvBase = SkillLoader.Load("context/cv_base.md"),
+        JobCriteria = SkillLoader.Load("context/job_criteria.yaml"),
+    };
 
     public static RawEmail Email(
         string messageId = "msg-1",

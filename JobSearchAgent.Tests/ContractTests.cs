@@ -35,7 +35,7 @@ public class ContractTests
         if (ApiKey is null) return;
 
         var evaluator = new PostingEvaluator(ApiKey);
-        var result = await evaluator.EvaluateAsync(SamplePosting, "https://example.com/job/1");
+        var result = await evaluator.EvaluateAsync(Make.OwnerProfile(), SamplePosting, "https://example.com/job/1");
 
         Assert.False(string.IsNullOrEmpty(result.Company));
         Assert.False(string.IsNullOrEmpty(result.RoleTitle));
@@ -101,7 +101,7 @@ public class ContractTests
             rationale = "Strong C# match, payments domain relevant.",
         });
 
-        var result = await agent.GenerateAsync(SamplePosting, evalJson);
+        var result = await agent.GenerateAsync(Make.OwnerProfile(), SamplePosting, evalJson);
 
         Assert.False(string.IsNullOrWhiteSpace(result));
         Assert.True(result.Length >= 100, $"Expected ≥100 chars, got {result.Length}");
@@ -127,7 +127,7 @@ public class ContractTests
             role_type_match = "preferred",
         });
 
-        var result = await agent.GenerateAsync(SamplePosting, evalJson);
+        var result = await agent.GenerateAsync(Make.OwnerProfile(), SamplePosting, evalJson);
 
         Assert.False(string.IsNullOrWhiteSpace(result));
         Assert.True(result.Length >= 200, $"Expected ≥200 chars, got {result.Length}");
@@ -142,7 +142,8 @@ public class ContractTests
 
         var agent = new CvTailorAgent(ApiKey);
         var evalJson = JsonSerializer.Serialize(new { recommendation = "good_match", backend_match = "strong" });
-        var original = await agent.GenerateAsync(SamplePosting, evalJson);
+        var profile = Make.OwnerProfile();
+        var original = await agent.GenerateAsync(profile, SamplePosting, evalJson);
 
         var history = new List<AgentThreadTurn>
         {
@@ -150,7 +151,7 @@ public class ContractTests
             new("assistant", original),
             new("user", "Please revise the previous draft with this feedback: mention Docker experience in the summary."),
         };
-        var revised = await agent.ReviseAsync(history);
+        var revised = await agent.ReviseAsync(profile, history);
 
         Assert.False(string.IsNullOrWhiteSpace(revised));
         Assert.NotEqual(original, revised);
@@ -173,7 +174,7 @@ public class ContractTests
             new("user", AnswerAgent.BuildInitialUserContent("Why do you want to work here specifically?", null)),
         };
 
-        var (mode, content) = await agent.RespondAsync(history);
+        var (mode, content) = await agent.RespondAsync(Make.OwnerProfile(), history);
 
         Assert.Equal("ask_followup", mode);
         Assert.False(string.IsNullOrWhiteSpace(content));
@@ -193,7 +194,7 @@ public class ContractTests
                 "Describe a technically challenging feature you owned end to end.", null)),
         };
 
-        var (mode, content) = await agent.RespondAsync(history);
+        var (mode, content) = await agent.RespondAsync(Make.OwnerProfile(), history);
 
         Assert.Equal("final_answer", mode);
         Assert.False(string.IsNullOrWhiteSpace(content));

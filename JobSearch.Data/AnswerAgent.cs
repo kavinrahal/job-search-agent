@@ -9,22 +9,13 @@ public class AnswerAgent
     private readonly AnthropicClient _client;
     private const string OpusModel = "claude-opus-4-8";
 
-    private readonly string _systemPrompt;
+    private readonly string _skillText;
     private readonly Tool _tool;
 
     public AnswerAgent(string apiKey)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
-
-        string skillText  = SkillLoader.Load("answer_application_question.md");
-        string background = SkillLoader.Load("context/background.yaml");
-
-        _systemPrompt = $"""
-            {skillText}
-
-            --- CANDIDATE BACKGROUND ---
-            {background}
-            """;
+        _skillText = SkillLoader.Load("answer_application_question.md");
 
         _tool = new Tool
         {
@@ -44,6 +35,14 @@ public class AnswerAgent
         };
     }
 
+    // Per-call, not per-instance — see CvTailorAgent.BuildSystemPrompt for why.
+    private string BuildSystemPrompt(UserProfile profile) => $"""
+        {_skillText}
+
+        --- CANDIDATE BACKGROUND ---
+        {profile.Background}
+        """;
+
     public static string BuildInitialUserContent(string question, string? jobContext) => jobContext is not null
         ? $"""
           Application question: {question}
@@ -53,7 +52,7 @@ public class AnswerAgent
           """
         : $"Application question: {question}";
 
-    public async Task<(string Mode, string Content)> RespondAsync(IReadOnlyList<AgentThreadTurn> history)
+    public async Task<(string Mode, string Content)> RespondAsync(UserProfile profile, IReadOnlyList<AgentThreadTurn> history)
     {
         var response = await _client.Messages.Create(new MessageCreateParams
         {
@@ -61,7 +60,7 @@ public class AnswerAgent
             MaxTokens = 1024,
             System = new List<TextBlockParam>
             {
-                new() { Text = _systemPrompt, CacheControl = new CacheControlEphemeral() },
+                new() { Text = BuildSystemPrompt(profile), CacheControl = new CacheControlEphemeral() },
             },
             Tools = [_tool],
             ToolChoice = new ToolChoiceAny(),
