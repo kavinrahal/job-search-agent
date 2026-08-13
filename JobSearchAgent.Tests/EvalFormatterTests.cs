@@ -8,7 +8,7 @@ public class EvalFormatterTests
         string recommendation = "strong_match",
         string[]? orangeFlags = null,
         string? sourceUrl = "https://au.seek.com/job/123",
-        string[]? backendTech = null,
+        SkillMatch[]? skillMatches = null,
         string? salaryDetail = "$130k") => new()
     {
         Company             = "Canva",
@@ -20,10 +20,7 @@ public class EvalFormatterTests
         LocationDetail      = "Melbourne hybrid",
         ExperienceMatch     = "ideal",
         ExperienceDetail    = "3-5 years",
-        BackendMatch        = "strong",
-        BackendTechnologies = backendTech ?? ["C#", ".NET"],
-        FrontendMatch       = "strong",
-        FrontendTechnologies= ["React", "TypeScript"],
+        SkillMatches        = skillMatches ?? [new SkillMatch("Backend stack", "strong", "C#, .NET")],
         SalaryAssessment    = "target",
         SalaryDetail        = salaryDetail,
         CompanyAssessment   = "preferred",
@@ -95,22 +92,22 @@ public class EvalFormatterTests
     // ToPostingContext
     // -------------------------------------------------------------------------
 
-    // TC14 — Non-empty backend tech array is joined with ", "
+    // TC14 — A skill match's dimension name and detail both appear in the output
     [Fact]
-    public void ToPostingContext_NonEmptyBackendTech_JoinedWithComma()
+    public void ToPostingContext_NonEmptySkillMatches_DimensionAndDetailAppear()
     {
-        var ev = Sample(backendTech: ["C#", ".NET", "Azure"]);
+        var ev = Sample(skillMatches: [new SkillMatch("Backend stack", "strong", "C#, .NET, Azure")]);
 
         var output = EvalFormatter.ToPostingContext(ev);
 
-        Assert.Contains("C#, .NET, Azure", output);
+        Assert.Contains("Backend stack: C#, .NET, Azure", output);
     }
 
-    // TC15 — Empty backend tech array shows fallback "not stated"
+    // TC15 — Empty skill matches array shows fallback "not stated"
     [Fact]
-    public void ToPostingContext_EmptyBackendTech_ShowsNotStated()
+    public void ToPostingContext_EmptySkillMatches_ShowsNotStated()
     {
-        var ev = Sample(backendTech: []);
+        var ev = Sample(skillMatches: []);
 
         var output = EvalFormatter.ToPostingContext(ev);
 

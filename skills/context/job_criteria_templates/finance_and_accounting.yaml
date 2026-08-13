@@ -1,0 +1,105 @@
+# STARTER TEMPLATE — finance_and_accounting.yaml
+# Seed content for a Finance/Accounting candidate's job criteria. Placeholder
+# thresholds throughout — adjust before relying on evaluations driven by this
+# file. Same shape as context/job_criteria.yaml.
+version: "2.0"
+profession_category: "Finance and Accounting"
+
+employment_type_preference: [full_time]
+
+hard_disqualifiers:
+  - id: sponsorship_excluded
+    description: Explicitly excludes candidates requiring visa sponsorship
+    signals:
+      - "no visa sponsorship"
+      - "must be an Australian citizen or permanent resident"
+      - "full working rights required"
+
+  - id: non_australian
+    description: Role is not based in Australia
+
+  - id: qualification_required_unheld
+    description: Role explicitly requires a professional qualification (CA/CPA/CFA) the candidate does not hold
+    notes: >
+      Only disqualifies if the qualification is stated as a hard requirement,
+      not "preferred" or "working towards".
+
+location:
+  preferred:
+    - country: Australia
+  remote:
+    accepted: true
+    condition: Must be AU-based.
+  hybrid:
+    accepted: true
+
+sponsorship:
+  model: binary
+
+experience:
+  ranges:
+    ideal:
+      max_required: 5 years
+    acceptable:
+      min_required: 5 years
+      max_required: 8 years
+    excluded:
+      min_required: 8 years
+
+salary:
+  currency: AUD
+  target_base: 95_000
+  thresholds:
+    flag_below: 75_000
+    acceptable_minimum: 75_000
+    target_range: [95_000, 120_000]
+    flag_above: 150_000
+
+skill_dimensions:
+  - name: "Functional specialization"
+    priority: 1
+    strong_match: ["Financial accounting", "Management accounting", "Tax", "Audit", "FP&A"]
+    notes: Match against the candidate's actual specialization, not just "accounting" generically.
+
+  - name: "Systems proficiency"
+    priority: 2
+    strong_match: ["Xero", "MYOB", "SAP", "NetSuite", "Excel (advanced)"]
+    good_match: ["Power BI", "QuickBooks"]
+
+  - name: "Professional qualification"
+    priority: 3
+    strong_match: ["CA", "CPA", "CFA (completed)"]
+    acceptable: ["Currently studying towards CA/CPA"]
+
+company:
+  preferred:
+    - Established mid-sized or larger organisation with a stable finance function
+  acceptable:
+    - Public practice firm with a clear career progression path
+  weaker:
+    - Very small business with a one-person finance function and unclear scope
+
+role_type:
+  preferred:
+    - Role with clear ownership of a function or ledger, not purely data-entry
+  weaker:
+    - Purely transactional processing role with no analysis component
+
+team:
+  minimum_engineers: 1
+
+orange_flags:
+  - Salary below target range
+  - Required experience at the upper boundary of acceptable
+  - Qualification requirement stated ambiguously
+
+fyi_context:
+  - Firm/company financial stability and reputation
+  - Study support offered for CA/CPA, if applicable
+
+evaluation_output:
+  recommendation_thresholds:
+    strong_match: Passes all gates, strong on functional specialization and experience, no significant orange flags
+    good_match: Passes all gates, acceptable on primary dimensions, minor orange flags only
+    weak_match: Passes gates but has meaningful orange flags or weak primary dimensions
+    discard: Fails any hard disqualifier

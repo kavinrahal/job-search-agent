@@ -1,7 +1,16 @@
 # job_criteria.yaml
 # Source of truth for all evaluation and application skills.
 # Update this document — do not hardcode criteria in individual skills.
-version: "1.0"
+version: "2.0"
+profession_category: "Engineering — Software"
+
+# ---------------------------------------------------------------------------
+# EMPLOYMENT TYPE
+# ---------------------------------------------------------------------------
+employment_type_preference: [full_time]
+# If a posting's employment type isn't in this list, evaluate_posting.md
+# disqualifies it — unless employment type is unstated, in which case
+# full-time is assumed (the majority case, not a flag).
 
 # ---------------------------------------------------------------------------
 # HARD DISQUALIFIERS
@@ -36,25 +45,9 @@ hard_disqualifiers:
       Backend must be C#/.NET (ASP.NET Core or .NET Framework). Any other
       primary backend language or framework disqualifies, regardless of
       frontend stack. Only applies to the backend/server language — frontend
-      JS/TS frameworks are a separate, flexible dimension (see stack.frontend).
+      JS/TS frameworks are a separate, flexible dimension (see skill_dimensions).
       A secondary/legacy mention alongside a dominant .NET backend may be
       reviewed case by case; it is only a disqualifier when it is primary.
-
-  - id: contract_role
-    description: Role is contract, fixed-term, temporary, or casual — not permanent full-time
-    signals:
-      - "contract role"
-      - "fixed-term contract"
-      - "12-month contract"
-      - "6-month contract"
-      - "temporary position"
-      - "casual position"
-      - "contract-to-hire"
-      - "day rate"
-    notes: >
-      Only permanent full-time roles are in scope. If employment type is
-      unstated, assume full-time (the majority case) rather than flagging.
-      Only disqualify on explicit contract/temporary/casual language.
 
   - id: gambling_industry
     description: Company operates in gambling, betting, or related sectors
@@ -192,29 +185,23 @@ salary:
       Many Australian listings omit salary. Absence is not a signal either way.
 
 # ---------------------------------------------------------------------------
-# TECHNICAL STACK
+# SKILL DIMENSIONS
+# evaluate_posting.md emits one skill_matches[] entry per dimension listed
+# here, in this priority order — "name" is echoed back verbatim in output.
 # ---------------------------------------------------------------------------
-stack:
-  principle: >
-    Backend is a hard requirement, not a soft preference — C#/.NET only (see
-    hard_disqualifiers.backend_not_dotnet). Frontend is fully flexible and does
-    not meaningfully differentiate candidates. Cloud platform is a minor signal.
-    Priority order for evaluation: backend, then frontend, then cloud.
-
-  dimension_weights:
-    backend: 0.65
-    frontend: 0.25
-    cloud_and_infra: 0.10
-
-  backend:
+skill_dimensions:
+  - name: "Backend stack"
+    priority: 1
     strong_match: [C#, .NET, ASP.NET Core]
     excluded: [Java, Spring Boot, Python, Node.js server-side, Ruby, Go, PHP, Laravel, Symfony]
     notes: >
       No good/acceptable tier — backend stack is binary. Anything other than
       C#/.NET as the primary backend is a hard disqualifier
-      (hard_disqualifiers.backend_not_dotnet), not a scored dimension.
+      (hard_disqualifiers.backend_not_dotnet), not a scored dimension — this
+      only appears in skill_matches[] for postings that passed Step 1.
 
-  frontend:
+  - name: "Frontend stack"
+    priority: 2
     strong_match: [React, Angular, TypeScript, JavaScript]
     good_match: [Vue.js, Next.js]
     acceptable: ["Other modern JS frameworks"]
@@ -222,18 +209,20 @@ stack:
       Fully flexible — JS, TS, React, and Angular are all fair game and do not
       affect the recommendation tier. Frontend match is secondary to backend.
 
-  cloud:
-    strong_match: [Azure]
-    good_match: [AWS]
-    acceptable: [GCP, "Any other major cloud platform"]
-    notes: Slightly flexible — Azure preferred, then AWS, then GCP. Minor signal only.
+# Cloud platform and AI tooling are minor signals only — not part of the
+# skill_matches[] output, just context to weigh into the rationale.
+cloud_platform:
+  strong_match: [Azure]
+  good_match: [AWS]
+  acceptable: [GCP, "Any other major cloud platform"]
+  notes: Slightly flexible — Azure preferred, then AWS, then GCP. Minor signal only.
 
-  ai_tooling:
-    weight: low
-    notes: >
-      Do not weight AI features or tooling mentions heavily in evaluation.
-      Most companies use AI tooling. It is not a meaningful differentiator.
-      Note if mentioned but do not use as a positive or negative scoring factor.
+ai_tooling:
+  weight: low
+  notes: >
+    Do not weight AI features or tooling mentions heavily in evaluation.
+    Most companies use AI tooling. It is not a meaningful differentiator.
+    Note if mentioned but do not use as a positive or negative scoring factor.
 
 # ---------------------------------------------------------------------------
 # COMPANY
@@ -365,8 +354,7 @@ evaluation_output:
     - sponsorship_verdict: "pass | discard — with quoted evidence from posting"
     - location_match: "preferred | acceptable | weak — with city and arrangement (anywhere in Australia is preferred)"
     - experience_match: "ideal | acceptable | excluded — with quoted years requirement"
-    - backend_match: "strong | good | acceptable | excluded — with named technologies"
-    - frontend_match: "strong | good | acceptable"
+    - skill_matches: "one entry per dimension in skill_dimensions, each strong | good | acceptable | excluded"
     - salary_assessment: "target | acceptable | flagged_low | flagged_high | missing"
     - company_assessment: "preferred | acceptable | weaker | excluded"
     - role_type_match: "preferred | acceptable | weaker | excluded"
@@ -376,7 +364,7 @@ evaluation_output:
     - recommendation_rationale: "2-3 sentences on key factors"
 
   recommendation_thresholds:
-    strong_match: Passes all gates, strong or good on backend and experience, no significant orange flags
+    strong_match: Passes all gates, strong or good on primary skill dimension(s) and experience, no significant orange flags
     good_match: Passes all gates, acceptable on primary dimensions, minor orange flags only
     weak_match: Passes gates but has meaningful orange flags or weak primary dimensions — surface for human review
     discard: Fails any hard disqualifier

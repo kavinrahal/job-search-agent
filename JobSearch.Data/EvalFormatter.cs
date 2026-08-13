@@ -30,13 +30,8 @@ public static class EvalFormatter
         sb.AppendLine($"Location: {ev.LocationDetail} ({ev.LocationMatch})");
         sb.AppendLine($"Experience: {ev.ExperienceDetail} ({ev.ExperienceMatch})");
 
-        var backend = ev.BackendTechnologies.Length > 0
-            ? string.Join(", ", ev.BackendTechnologies) : "not stated";
-        sb.AppendLine($"Backend: {backend} ({ev.BackendMatch})");
-
-        var frontend = ev.FrontendTechnologies.Length > 0
-            ? string.Join(", ", ev.FrontendTechnologies) : "not stated";
-        sb.AppendLine($"Frontend: {frontend} ({ev.FrontendMatch})");
+        foreach (var skill in ev.SkillMatches)
+            sb.AppendLine($"{skill.Dimension}: {(skill.Detail.Length > 0 ? skill.Detail : "not stated")} ({skill.Match})");
 
         sb.AppendLine($"Salary: {ev.SalaryDetail ?? "not stated"} ({ev.SalaryAssessment})");
         sb.AppendLine($"Company: {ev.CompanyAssessment}");
@@ -65,13 +60,16 @@ public static class EvalFormatter
 
     // Synthesizes a minimal posting description from stored evaluation fields.
     // Used when the original job page can't be re-fetched (bot protection, DNS, etc.).
-    public static string ToPostingContext(PostingEvaluation ev) =>
-        $"""
+    public static string ToPostingContext(PostingEvaluation ev)
+    {
+        var skills = ev.SkillMatches.Length > 0
+            ? string.Join("\n", ev.SkillMatches.Select(s => $"{s.Dimension}: {(s.Detail.Length > 0 ? s.Detail : "not stated")}"))
+            : "not stated";
+        return $"""
         Company: {ev.Company}
         Role: {ev.RoleTitle}
         Source URL: {ev.SourceUrl ?? "not available"}
-        Backend technologies: {(ev.BackendTechnologies.Length > 0 ? string.Join(", ", ev.BackendTechnologies) : "not stated")}
-        Frontend technologies: {(ev.FrontendTechnologies.Length > 0 ? string.Join(", ", ev.FrontendTechnologies) : "not stated")}
+        {skills}
         Location: {ev.LocationDetail}
         Salary: {ev.SalaryDetail ?? "not stated"}
         Experience required: {ev.ExperienceDetail}
@@ -80,4 +78,5 @@ public static class EvalFormatter
 
         [Full posting text unavailable — generate from the structured data above and the evaluation JSON.]
         """;
+    }
 }

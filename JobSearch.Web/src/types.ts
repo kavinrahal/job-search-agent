@@ -71,6 +71,12 @@ export interface ActivityItem {
   occurredAt: string;
 }
 
+export interface SkillMatch {
+  dimension: string;
+  match: string;
+  detail: string;
+}
+
 export interface DiscoveredPosting {
   id: number;
   url: string;
@@ -86,9 +92,7 @@ export interface DiscoveredPosting {
   locationDetail: string | null;
   experienceMatch: string | null;
   experienceDetail: string | null;
-  backendMatch: string | null;
-  backendTechnologies: string[];
-  frontendMatch: string | null;
+  skillMatches: SkillMatch[];
   salaryAssessment: string | null;
   salaryDetail: string | null;
   companyAssessment: string | null;

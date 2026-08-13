@@ -43,8 +43,8 @@ public class ContractTests
         Assert.Contains(result.SponsorshipVerdict, new List<string> { "pass", "discard" });
         Assert.Contains(result.LocationMatch, new List<string> { "preferred", "acceptable", "weak" });
         Assert.Contains(result.ExperienceMatch, new List<string> { "ideal", "acceptable", "excluded" });
-        Assert.Contains(result.BackendMatch, new List<string> { "strong", "good", "acceptable", "excluded" });
-        Assert.Contains(result.FrontendMatch, new List<string> { "strong", "good", "acceptable" });
+        Assert.NotEmpty(result.SkillMatches);
+        Assert.All(result.SkillMatches, s => Assert.Contains(s.Match, new List<string> { "strong", "good", "acceptable", "excluded" }));
         Assert.Contains(result.SalaryAssessment, new List<string> { "target", "acceptable", "flagged_low", "flagged_high", "missing" });
         Assert.NotNull(result.OrangeFlags);
         Assert.False(string.IsNullOrEmpty(result.Rationale));

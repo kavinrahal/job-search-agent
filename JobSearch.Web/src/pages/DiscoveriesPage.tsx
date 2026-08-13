@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { fetchDiscoveries } from "../api";
 import type { DiscoveredPosting } from "../types";
 
@@ -64,7 +64,8 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
   const [expanded, setExpanded] = useState(false);
 
   const hasFlags = posting.orangeFlags.length > 0;
-  const hasDetail = posting.backendTechnologies.length > 0
+  const [primarySkill, ...otherSkills] = posting.skillMatches;
+  const hasDetail = posting.skillMatches.length > 0
     || posting.locationDetail
     || posting.salaryDetail;
 
@@ -98,11 +99,11 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
               </dd>
             </>
           )}
-          {posting.backendTechnologies.length > 0 && (
+          {primarySkill && (
             <>
-              <dt className="text-gray-400">Backend</dt>
-              <dd className={matchStyle(posting.backendMatch)}>
-                {posting.backendTechnologies.join(", ")}
+              <dt className="text-gray-400">{primarySkill.dimension}</dt>
+              <dd className={matchStyle(primarySkill.match)}>
+                {primarySkill.detail || "not stated"}
               </dd>
             </>
           )}
@@ -154,14 +155,14 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
               </dd>
             </>
           )}
-          {posting.frontendMatch && (
-            <>
-              <dt className="text-gray-400">Frontend</dt>
-              <dd className={matchStyle(posting.frontendMatch)}>
-                {posting.frontendMatch}
+          {otherSkills.map(skill => (
+            <Fragment key={skill.dimension}>
+              <dt className="text-gray-400">{skill.dimension}</dt>
+              <dd className={matchStyle(skill.match)}>
+                {skill.detail || "not stated"}
               </dd>
-            </>
-          )}
+            </Fragment>
+          ))}
           {posting.companyAssessment && (
             <>
               <dt className="text-gray-400">Company</dt>

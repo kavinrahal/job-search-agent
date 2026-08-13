@@ -1,0 +1,114 @@
+# STARTER TEMPLATE — engineering_civil.yaml
+# Seed content for a Civil Engineering candidate's job criteria. Placeholder
+# thresholds throughout (salary, experience, software) — a real user should
+# adjust these to their own situation via the profile/criteria settings UI
+# before relying on evaluations driven by this file. Same shape as
+# context/job_criteria.yaml so it's a drop-in UserProfile.JobCriteria value.
+version: "2.0"
+profession_category: "Engineering — Civil"
+
+employment_type_preference: [full_time]
+
+hard_disqualifiers:
+  - id: sponsorship_excluded
+    description: Explicitly excludes candidates requiring visa sponsorship
+    signals:
+      - "no visa sponsorship"
+      - "must be an Australian citizen or permanent resident"
+      - "full working rights required"
+    notes: >
+      Silence is not a disqualifier. Only explicit exclusion language counts.
+
+  - id: non_australian
+    description: Role is not based in Australia
+    notes: Remote roles must be AU-based.
+
+  - id: unlicensed_practice
+    description: Role requires chartered/RPEQ status the candidate does not yet hold
+    notes: >
+      Only disqualifies if the posting explicitly requires current
+      chartered/RPEQ (or equivalent state registration) status as a hard
+      condition of employment, not as a "working towards" pathway.
+
+location:
+  preferred:
+    - country: Australia
+  remote:
+    accepted: false
+    notes: Civil engineering is largely site- and office-based; remote-only roles are rare and should be reviewed case by case.
+  hybrid:
+    accepted: true
+  on_site:
+    anywhere_in_australia: acceptable
+
+sponsorship:
+  model: binary
+  principle: Silence is not a negative signal — only explicit exclusion disqualifies.
+
+experience:
+  ranges:
+    ideal:
+      max_required: 5 years
+    acceptable:
+      min_required: 5 years
+      max_required: 8 years
+    excluded:
+      min_required: 8 years
+  when_range_stated: When a posting states a range, evaluate the midpoint.
+
+salary:
+  currency: AUD
+  target_base: 100_000
+  thresholds:
+    flag_below: 80_000
+    acceptable_minimum: 80_000
+    target_range: [100_000, 125_000]
+    flag_above: 150_000
+
+skill_dimensions:
+  - name: "Discipline specialization"
+    priority: 1
+    strong_match: ["Structural", "Geotechnical", "Water/hydraulics", "Transport"]
+    notes: Match against the candidate's actual specialization, not just "civil engineering" generically.
+
+  - name: "Design software proficiency"
+    priority: 2
+    strong_match: ["AutoCAD Civil 3D", "Revit", "12d Model", "MicroStation"]
+    good_match: ["AutoCAD (general)", "SAP2000", "Space Gass"]
+    notes: Named tools carry more weight than a bare "CAD experience" mention.
+
+company:
+  preferred:
+    - Consulting engineering firm with a track record of delivered infrastructure projects
+    - Government/public infrastructure body
+  acceptable:
+    - Construction contractor with an in-house engineering team
+  weaker:
+    - Small/unestablished firm with no visible project portfolio
+
+role_type:
+  preferred:
+    - Design engineer with project ownership through detailed design
+  acceptable:
+    - Site/construction engineering with design input
+  weaker:
+    - Pure site supervision with no design involvement
+
+team:
+  minimum_engineers: 2
+
+orange_flags:
+  - Salary below target range
+  - Required experience at the upper boundary of acceptable
+  - Chartered/RPEQ status implied but not explicitly required (clarify before applying)
+
+fyi_context:
+  - Firm's project portfolio and reputation
+  - Career progression path toward chartered status, if not yet held
+
+evaluation_output:
+  recommendation_thresholds:
+    strong_match: Passes all gates, strong on specialization and experience, no significant orange flags
+    good_match: Passes all gates, acceptable on primary dimensions, minor orange flags only
+    weak_match: Passes gates but has meaningful orange flags or weak primary dimensions
+    discard: Fails any hard disqualifier

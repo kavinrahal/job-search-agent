@@ -37,10 +37,10 @@ public class PostingEvaluator
                     ["location_detail"]      = Prop("string", "City and arrangement."),
                     ["experience_match"]     = PropEnum("Experience fit.", "ideal", "acceptable", "excluded"),
                     ["experience_detail"]    = Prop("string", "Quoted years requirement."),
-                    ["backend_match"]        = PropEnum("Backend fit.", "strong", "good", "acceptable", "excluded"),
-                    ["backend_technologies"] = PropArray("Backend technologies named in posting."),
-                    ["frontend_match"]       = PropEnum("Frontend fit.", "strong", "good", "acceptable"),
-                    ["frontend_technologies"]= PropArray("Frontend technologies named in posting."),
+                    ["skill_matches"]        = PropSkillMatchArray(
+                                                  "One entry per skill dimension defined in the candidate's job " +
+                                                  "criteria (e.g. \"Backend stack\", \"Clinical specialty\") — not " +
+                                                  "fixed fields, the dimensions come from the criteria itself."),
                     ["salary_assessment"]    = PropEnum("Salary fit.",
                                                   "target", "acceptable", "flagged_low", "flagged_high", "missing"),
                     ["salary_detail"]        = Prop("string", "Quoted salary figure or range, or null."),
@@ -54,8 +54,7 @@ public class PostingEvaluator
                 Required = [
                     "company", "role_title", "recommendation", "sponsorship_verdict",
                     "location_match", "location_detail", "experience_match", "experience_detail",
-                    "backend_match", "backend_technologies", "frontend_match", "frontend_technologies",
-                    "salary_assessment", "company_assessment", "role_type_match",
+                    "skill_matches", "salary_assessment", "company_assessment", "role_type_match",
                     "orange_flags", "rationale",
                 ],
             },
@@ -114,10 +113,7 @@ public class PostingEvaluator
                     LocationDetail      = i["location_detail"].GetString() ?? "",
                     ExperienceMatch     = i["experience_match"].GetString() ?? "",
                     ExperienceDetail    = i["experience_detail"].GetString() ?? "",
-                    BackendMatch        = i["backend_match"].GetString() ?? "",
-                    BackendTechnologies = GetStringArray(i, "backend_technologies"),
-                    FrontendMatch       = i["frontend_match"].GetString() ?? "",
-                    FrontendTechnologies= GetStringArray(i, "frontend_technologies"),
+                    SkillMatches        = GetSkillMatches(i, "skill_matches"),
                     SalaryAssessment    = i["salary_assessment"].GetString() ?? "",
                     SalaryDetail        = i.TryGetValue("salary_detail", out var sd) ? sd.GetString() : null,
                     CompanyAssessment   = i["company_assessment"].GetString() ?? "",
@@ -138,6 +134,16 @@ public class PostingEvaluator
         return [.. el.EnumerateArray().Select(e => e.GetString() ?? "").Where(s => s.Length > 0)];
     }
 
+    private static SkillMatch[] GetSkillMatches(IReadOnlyDictionary<string, JsonElement> input, string key)
+    {
+        if (!input.TryGetValue(key, out var el) || el.ValueKind != JsonValueKind.Array)
+            return [];
+        return [.. el.EnumerateArray().Select(e => new SkillMatch(
+            e.TryGetProperty("dimension", out var d) ? d.GetString() ?? "" : "",
+            e.TryGetProperty("match", out var m) ? m.GetString() ?? "" : "",
+            e.TryGetProperty("detail", out var det) ? det.GetString() ?? "" : ""))];
+    }
+
     private static JsonElement Prop(string type, string description) =>
         JsonSerializer.SerializeToElement(new { type, description });
 
@@ -150,5 +156,23 @@ public class PostingEvaluator
             type = "array",
             description,
             items = new { type = "string" },
+        });
+
+    private static JsonElement PropSkillMatchArray(string description) =>
+        JsonSerializer.SerializeToElement(new
+        {
+            type = "array",
+            description,
+            items = new
+            {
+                type = "object",
+                properties = new
+                {
+                    dimension = new { type = "string", description = "Skill dimension name, as defined in the candidate's job criteria." },
+                    match = new { type = "string", @enum = new[] { "strong", "good", "acceptable", "excluded" }, description = "Fit tier for this dimension." },
+                    detail = new { type = "string", description = "Specific technologies/qualifications/etc. named in the posting for this dimension." },
+                },
+                required = new[] { "dimension", "match", "detail" },
+            },
         });
 }

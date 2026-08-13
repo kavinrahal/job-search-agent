@@ -1,0 +1,108 @@
+# STARTER TEMPLATE — health_care_and_social_assistance.yaml
+# Seed content for a Health Care and Social Assistance candidate's job
+# criteria. Placeholder thresholds throughout — adjust before relying on
+# evaluations driven by this file. Same shape as context/job_criteria.yaml.
+version: "2.0"
+profession_category: "Health Care and Social Assistance"
+
+employment_type_preference: [full_time, part_time]
+# Health care rosters legitimately span full-time and part-time — unlike most
+# other templates, part_time is included by default here.
+
+hard_disqualifiers:
+  - id: sponsorship_excluded
+    description: Explicitly excludes candidates requiring visa sponsorship
+    signals:
+      - "no visa sponsorship"
+      - "must be an Australian citizen or permanent resident"
+      - "full working rights required"
+
+  - id: non_australian
+    description: Role is not based in Australia
+
+  - id: registration_required_unheld
+    description: Role requires current AHPRA (or equivalent) registration the candidate does not hold
+    notes: Only disqualifies if stated as a hard requirement, not "eligible to obtain".
+
+  - id: wwcc_or_npc_disqualifying
+    description: Role requires a Working with Children Check or National Police Check the candidate cannot hold
+    notes: Only relevant if the candidate's own criteria flags a check issue — otherwise not a disqualifier.
+
+location:
+  preferred:
+    - country: Australia
+  remote:
+    accepted: false
+    notes: Direct-care health roles are inherently in-person; some allied health/telehealth roles are an exception — treat case by case.
+  on_site:
+    anywhere_in_australia: acceptable
+
+sponsorship:
+  model: binary
+
+experience:
+  ranges:
+    ideal:
+      max_required: 5 years
+    acceptable:
+      min_required: 5 years
+      max_required: 10 years
+    excluded:
+      min_required: 10 years
+
+salary:
+  currency: AUD
+  target_base: 85_000
+  thresholds:
+    flag_below: 70_000
+    acceptable_minimum: 70_000
+    target_range: [85_000, 110_000]
+    flag_above: 140_000
+  notes: Health sector pay is often award/EBA-driven with penalty rates and allowances — treat a stated classification/rate as authoritative over a generic range.
+
+skill_dimensions:
+  - name: "Clinical/functional specialty"
+    priority: 1
+    strong_match: ["ICU/critical care", "Aged care", "Mental health", "Disability support", "Allied health — specify discipline"]
+    notes: Match against the candidate's actual specialty, not just "health care" generically.
+
+  - name: "Registration/qualification level"
+    priority: 2
+    strong_match: ["Registered Nurse (Div 1)", "Enrolled Nurse (Div 2)", "AHPRA-registered allied health professional"]
+    acceptable: ["Certificate III/IV in Individual Support", "Currently studying towards registration"]
+
+company:
+  preferred:
+    - Established hospital, health service, or provider with clear structure and support
+  acceptable:
+    - Community/aged-care provider with clear staffing ratios and support systems
+  weaker:
+    - Agency/casual pool with no ongoing role clarity
+
+role_type:
+  preferred:
+    - Ongoing/permanent role with a defined caseload or ward
+  acceptable:
+    - Fixed-term role covering a defined period
+  weaker:
+    - Casual/agency-only with no path to ongoing work
+
+team:
+  minimum_engineers: 1
+
+orange_flags:
+  - Salary/rate below target range
+  - Staffing ratios or roster pattern not stated
+  - Registration status unclear from the posting
+  - Casual/agency-only with no stated pathway to ongoing work
+
+fyi_context:
+  - Facility reputation and accreditation status
+  - Support systems (supervision, EAP, professional development) mentioned
+
+evaluation_output:
+  recommendation_thresholds:
+    strong_match: Passes all gates, strong match on specialty and registration level, no significant orange flags
+    good_match: Passes all gates, acceptable on primary dimensions, minor orange flags only
+    weak_match: Passes gates but has meaningful orange flags or weak primary dimensions
+    discard: Fails any hard disqualifier

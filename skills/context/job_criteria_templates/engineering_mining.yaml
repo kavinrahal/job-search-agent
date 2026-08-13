@@ -1,0 +1,100 @@
+# STARTER TEMPLATE — engineering_mining.yaml
+# Seed content for a Mining Engineering candidate's job criteria. Placeholder
+# thresholds throughout — adjust before relying on evaluations driven by this
+# file. Same shape as context/job_criteria.yaml.
+version: "2.0"
+profession_category: "Engineering — Mining"
+
+employment_type_preference: [full_time]
+
+hard_disqualifiers:
+  - id: sponsorship_excluded
+    description: Explicitly excludes candidates requiring visa sponsorship
+    signals:
+      - "no visa sponsorship"
+      - "must be an Australian citizen or permanent resident"
+      - "full working rights required"
+
+  - id: non_australian
+    description: Role is not based in Australia
+
+  - id: roster_incompatible
+    description: FIFO/DIDO roster the candidate cannot accommodate
+    notes: >
+      Only disqualifies if the posting states a specific roster pattern (e.g.
+      "8/6 FIFO") and the candidate's criteria marks that pattern unacceptable.
+
+location:
+  fifo_acceptable: true
+  fifo_roster_acceptable: ["8/6", "2/1"]
+  hybrid:
+    accepted: false
+    notes: Mining engineering roles are predominantly site-based or FIFO.
+
+sponsorship:
+  model: binary
+
+experience:
+  ranges:
+    ideal:
+      max_required: 6 years
+    acceptable:
+      min_required: 6 years
+      max_required: 10 years
+    excluded:
+      min_required: 10 years
+
+salary:
+  currency: AUD
+  target_base: 130_000
+  thresholds:
+    flag_below: 110_000
+    acceptable_minimum: 110_000
+    target_range: [130_000, 170_000]
+    flag_above: 200_000
+  notes: >
+    FIFO mining salaries run well above office-based engineering roles — thresholds
+    reflect that, not a directly comparable civil/mechanical/electrical band.
+
+skill_dimensions:
+  - name: "Discipline specialization"
+    priority: 1
+    strong_match: ["Mine planning", "Geotechnical", "Ventilation", "Production/operations"]
+    notes: Match against the candidate's actual specialization.
+
+  - name: "Mine planning software proficiency"
+    priority: 2
+    strong_match: ["Deswik", "Surpac", "Vulcan", "MineSched"]
+
+company:
+  preferred:
+    - Established operator with producing assets
+  acceptable:
+    - Developer with a fully-funded project at or near construction
+  weaker:
+    - Explorer/junior with no funded development pathway
+
+role_type:
+  preferred:
+    - Site-based operational or planning role with clear scope
+  weaker:
+    - Purely administrative/compliance role with no technical scope
+
+team:
+  minimum_engineers: 1
+
+orange_flags:
+  - Salary below target range
+  - Roster pattern not clearly stated
+  - Company stage (explorer/junior) not clearly funded
+
+fyi_context:
+  - Company's asset stage and funding position
+  - Camp/accommodation standard, if mentioned
+
+evaluation_output:
+  recommendation_thresholds:
+    strong_match: Passes all gates, strong on specialization and experience, no significant orange flags
+    good_match: Passes all gates, acceptable on primary dimensions, minor orange flags only
+    weak_match: Passes gates but has meaningful orange flags or weak primary dimensions
+    discard: Fails any hard disqualifier

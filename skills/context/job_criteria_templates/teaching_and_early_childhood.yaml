@@ -1,0 +1,107 @@
+# STARTER TEMPLATE — teaching_and_early_childhood.yaml
+# Seed content for a Teaching/Early Childhood candidate's job criteria.
+# Placeholder thresholds throughout — adjust before relying on evaluations
+# driven by this file. Same shape as context/job_criteria.yaml.
+version: "2.0"
+profession_category: "Teaching and Early Childhood"
+
+employment_type_preference: [full_time, part_time]
+# Teaching roles legitimately span full-time and part-time (e.g. 0.6 FTE) —
+# unlike most other templates, part_time is included by default here.
+
+hard_disqualifiers:
+  - id: sponsorship_excluded
+    description: Explicitly excludes candidates requiring visa sponsorship
+    signals:
+      - "no visa sponsorship"
+      - "must be an Australian citizen or permanent resident"
+      - "full working rights required"
+
+  - id: non_australian
+    description: Role is not based in Australia
+
+  - id: registration_required_unheld
+    description: Role requires current teacher registration (e.g. VIT, NESA) the candidate does not hold
+    notes: Only disqualifies if stated as a hard requirement, not "eligible to obtain".
+
+  - id: wwcc_disqualifying
+    description: Role requires a current Working with Children Check the candidate cannot hold
+    notes: Only relevant if the candidate's own criteria flags a WWCC issue — otherwise not a disqualifier.
+
+location:
+  preferred:
+    - country: Australia
+  remote:
+    accepted: false
+    notes: Teaching and early childhood roles are inherently in-person.
+  on_site:
+    anywhere_in_australia: acceptable
+
+sponsorship:
+  model: binary
+
+experience:
+  ranges:
+    ideal:
+      max_required: 5 years
+    acceptable:
+      min_required: 5 years
+      max_required: 10 years
+    excluded:
+      min_required: 10 years
+  notes: Years of service, graduate to experienced-teacher band.
+
+salary:
+  currency: AUD
+  target_base: 80_000
+  thresholds:
+    flag_below: 65_000
+    acceptable_minimum: 65_000
+    target_range: [80_000, 100_000]
+    flag_above: 120_000
+  notes: Government pay scales are typically fixed by classification/step — treat stated award/EBA rates as authoritative over a generic range.
+
+skill_dimensions:
+  - name: "Age group / year level specialization"
+    priority: 1
+    strong_match: ["Early childhood (0-5)", "Primary", "Secondary — specific subject match"]
+    notes: Match against the candidate's actual specialization and, for secondary, subject area.
+
+  - name: "Curriculum framework familiarity"
+    priority: 2
+    strong_match: ["Australian Curriculum", "EYLF", "IB", "State-specific curriculum"]
+
+company:
+  preferred:
+    - Government school or established early learning centre with clear structure
+  acceptable:
+    - Independent/Catholic school with clear structure
+  weaker:
+    - Casual/relief pool with no ongoing role clarity
+
+role_type:
+  preferred:
+    - Ongoing/permanent classroom or centre-based role
+  acceptable:
+    - Fixed-term role covering a defined period (leave replacement, etc.)
+  weaker:
+    - Casual relief teaching with no path to ongoing work
+
+team:
+  minimum_engineers: 1
+
+orange_flags:
+  - Salary/rate below target range
+  - Registration or WWCC status unclear from the posting
+  - Casual/relief-only with no stated pathway to ongoing work
+
+fyi_context:
+  - School/centre reputation and culture
+  - Class size and support staff ratios, if mentioned
+
+evaluation_output:
+  recommendation_thresholds:
+    strong_match: Passes all gates, strong match on age group/subject specialization, no significant orange flags
+    good_match: Passes all gates, acceptable on primary dimensions, minor orange flags only
+    weak_match: Passes gates but has meaningful orange flags or weak primary dimensions
+    discard: Fails any hard disqualifier

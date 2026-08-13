@@ -208,8 +208,7 @@ public class JobDiscoveryWorkerTests
         Company = "Test Corp", RoleTitle = "Software Engineer", Recommendation = rec,
         SponsorshipVerdict = "pass", LocationMatch = "preferred", LocationDetail = "Melbourne",
         ExperienceMatch = "ideal", ExperienceDetail = "3+ years",
-        BackendMatch = "strong", BackendTechnologies = ["C#"],
-        FrontendMatch = "acceptable", FrontendTechnologies = [],
+        SkillMatches = [new SkillMatch("Backend stack", "strong", "C#")],
         SalaryAssessment = "missing", CompanyAssessment = "preferred",
         RoleTypeMatch = "preferred", OrangeFlags = [], Rationale = "Fine.",
     };

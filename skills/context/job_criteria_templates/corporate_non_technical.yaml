@@ -1,0 +1,104 @@
+# STARTER TEMPLATE — corporate_non_technical.yaml
+# Seed content for a non-technical corporate candidate's job criteria (business
+# analyst, project manager, and similar roles). Placeholder thresholds
+# throughout — adjust before relying on evaluations driven by this file. Same
+# shape as context/job_criteria.yaml.
+version: "2.0"
+profession_category: "Corporate — Non-Technical (Business Analyst, Project Manager, similar)"
+
+employment_type_preference: [full_time]
+
+hard_disqualifiers:
+  - id: sponsorship_excluded
+    description: Explicitly excludes candidates requiring visa sponsorship
+    signals:
+      - "no visa sponsorship"
+      - "must be an Australian citizen or permanent resident"
+      - "full working rights required"
+
+  - id: non_australian
+    description: Role is not based in Australia
+
+  - id: sales_required
+    description: Role includes cold-calling, direct sales duties, or significant client acquisition
+    notes: Customer-facing roles without sales targets are not excluded — this covers roles where selling is core to the job.
+
+location:
+  preferred:
+    - country: Australia
+  remote:
+    accepted: true
+    condition: Must be AU-based.
+  hybrid:
+    accepted: true
+
+sponsorship:
+  model: binary
+
+experience:
+  ranges:
+    ideal:
+      max_required: 5 years
+    acceptable:
+      min_required: 5 years
+      max_required: 8 years
+    excluded:
+      min_required: 8 years
+
+salary:
+  currency: AUD
+  target_base: 100_000
+  thresholds:
+    flag_below: 80_000
+    acceptable_minimum: 80_000
+    target_range: [100_000, 130_000]
+    flag_above: 160_000
+
+skill_dimensions:
+  - name: "Functional specialization"
+    priority: 1
+    strong_match: ["Business analysis", "Project management", "Program management", "Change management"]
+    notes: Match against the candidate's actual specialization, not just "corporate" generically.
+
+  - name: "Methodology/tooling proficiency"
+    priority: 2
+    strong_match: ["Agile/Scrum", "Jira", "Confluence", "PMBOK/Prince2"]
+    good_match: ["Waterfall", "MS Project", "Smartsheet"]
+
+  - name: "Professional certification"
+    priority: 3
+    strong_match: ["PMP", "CBAP", "PRINCE2 Practitioner", "CSM"]
+    acceptable: ["Currently studying towards a relevant certification"]
+
+company:
+  preferred:
+    - Established mid-sized or larger organisation with a structured PMO/BA function
+  acceptable:
+    - Consultancy placing the candidate on a long-term embedded engagement
+  weaker:
+    - Agency/consultancy with short, rotating placements
+
+role_type:
+  preferred:
+    - Role with clear ownership of a project, program, or process end-to-end
+  weaker:
+    - Purely coordination/administrative role with no analysis or delivery ownership
+
+team:
+  minimum_engineers: 1
+
+orange_flags:
+  - Salary below target range
+  - Required experience at the upper boundary of acceptable
+  - Sales targets or KPIs mentioned without being the core stated duty
+
+fyi_context:
+  - Company financial stability and reputation
+  - Team structure and reporting line
+
+evaluation_output:
+  recommendation_thresholds:
+    strong_match: Passes all gates, strong on functional specialization and experience, no significant orange flags
+    good_match: Passes all gates, acceptable on primary dimensions, minor orange flags only
+    weak_match: Passes gates but has meaningful orange flags or weak primary dimensions
+    discard: Fails any hard disqualifier

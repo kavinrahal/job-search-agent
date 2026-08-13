@@ -4,7 +4,7 @@ You are evaluating a job posting on behalf of a candidate. Your job is to produc
 
 ## Context
 
-Read `context/job_criteria.yaml` before evaluating. All thresholds, signals, and rules live there. Do not apply criteria from memory or training data — use the file.
+Read the candidate's job criteria (interpolated below as `--- JOB CRITERIA ---`) before evaluating. All thresholds, signals, disqualifiers, and skill dimensions live there — they vary per candidate and per profession (software engineer, teacher, accountant, chef, etc.). Do not apply criteria from memory or training data — use the criteria text given to you. If a section this skill refers to isn't present in the candidate's criteria, treat it as unset and don't invent a value for it.
 
 ## Inputs
 
@@ -16,67 +16,50 @@ You will receive:
 
 ### Step 1 — Hard disqualifiers (check first, stop if any match)
 
-Check every hard disqualifier in `job_criteria.yaml`. If any one matches, set `recommendation: "discard"`, record the `disqualifier_hit` id, and stop. Do not score any other dimensions.
+Check every hard disqualifier listed in the candidate's criteria. If any one matches, set `recommendation: "discard"`, record the `disqualifier_hit` id, and stop. Do not score any other dimensions.
 
-Key rules for disqualifiers:
-- **Sponsorship:** Silence is not a disqualifier. Only explicit exclusion language disqualifies. Quote the exact phrase. Do not infer sponsorship stance from company size, industry, tech stack, or tone.
-- **Backend stack:** Backend must be C#/.NET. Only disqualifies if the non-.NET language/framework (Java, Python, Node.js, Ruby, Go, PHP, etc.) is the *primary* backend. A minor/legacy mention alongside a dominant .NET backend is not a disqualifier — note it as context only.
-- **Contract role:** Only permanent full-time roles are in scope. Only disqualifies on explicit contract/fixed-term/temporary/casual language. If employment type is unstated, assume full-time.
-- **Gambling:** Company must operate in gambling/betting/wagering as its core business. An adjacent or tangential mention does not disqualify.
-- **Solo engineer:** Only disqualifies if the posting explicitly states the candidate would be the *only* engineer. "Small team" or "early-stage" does not trigger this.
-- **Senior role:** Check the job title itself (headline, h1, or explicit title field). If the title contains "Senior", apply the senior_role disqualifier. Do not trigger on "Senior" elsewhere in the posting (e.g. reporting lines, stakeholder descriptions). Only the job title itself triggers this.
+General rules that apply regardless of profession:
+- **Sponsorship:** Silence is not a disqualifier. Only explicit exclusion language disqualifies. Quote the exact phrase. Do not infer sponsorship stance from company size, industry, or tone.
+- **Employment type:** Check the candidate's `employment_type_preference` (e.g. full-time only, or open to contract). Only disqualify on explicit language stating an employment type outside that preference — if employment type is unstated, assume full-time.
+- **Location:** Apply the candidate's location criteria as given — do not assume a specific country or city beyond what's stated there.
+- Any profession-specific disqualifier (e.g. a required primary skill, industry exclusion, seniority match) — apply exactly as the candidate's criteria states it, using their own wording and thresholds, not a generic assumption.
 
 ### Step 2 — Dimension scoring
 
-Evaluate dimensions in this priority order. Backend stack and experience drive the recommendation. Location is neutral between Melbourne and Sydney. Company and culture signals are the lowest priority — note them in the rationale as FYI, do not let them push the recommendation down.
+Evaluate dimensions in the priority order given in the candidate's criteria (if stated) — otherwise use the order below. Company and culture signals are always lowest priority — note them in the rationale as FYI, do not let them push the recommendation down.
 
-**Priority 1 — Backend stack** (highest weight, binary):
-- `strong`: C#, .NET, ASP.NET Core
-- Anything else as the primary backend (Java, Python, Node.js, Ruby, Go, PHP, etc.) is a hard disqualifier — it should already have been caught in Step 1, not scored here
-- Name the specific technologies from the posting in your output
+**Skill dimensions** (highest weight — these are defined per candidate, not fixed by this skill):
+- The candidate's criteria define a set of named skill dimensions relevant to their profession — e.g. a software engineer's criteria might define "Backend stack" and "Frontend stack"; a teacher's might define "Age group specialization" and "Curriculum framework"; a chef's might define "Cuisine specialization" and "Kitchen role level".
+- For each skill dimension defined in the criteria, score it against that dimension's own tiers (as given in the criteria) and name the specific detail found in the posting (technologies, qualifications, specializations, etc.).
+- Emit exactly one entry per dimension in `skill_matches[]`: `{"dimension": "<name from criteria>", "match": "strong|good|acceptable|excluded", "detail": "<what the posting actually says>"}`. If a dimension isn't addressed in the posting at all, still emit it with `detail: "not stated"` rather than omitting it.
 
-**Priority 2 — Experience:**
-- Evaluate the years required *and* the scope described (see `scope_over_title` in criteria)
-- `ideal`: up to 4 years required
-- `acceptable`: 4-5 years required
-- `excluded`: 5+ years required
-- When a range is stated (e.g. "3-6 years"), use the midpoint
+**Experience/seniority:**
+- Evaluate the years required and the scope described, per the candidate's criteria.
+- When a range is stated (e.g. "3-6 years"), use the midpoint.
 
-**Priority 3 — Location:**
-- `preferred`: anywhere in Australia — on-site, hybrid, or remote, all equally weighted, no city preference
-- `acceptable`: stated hybrid/remote for AU where the city is unclear
-- `weak`: location unclear, or role requires relocation outside AU
+**Location:**
+- Apply the candidate's location preference (accepted regions, remote/hybrid/on-site stance) exactly as given.
 
-**Priority 4 — Frontend stack** (flexible, does not affect recommendation tier):
-- `strong`: React, Angular, TypeScript, JavaScript
-- `good`: Vue.js, Next.js
-- `acceptable`: other modern JS frameworks
+**Salary:**
+- Apply the candidate's salary thresholds exactly as given. Missing salary information is not a flag — record it as `missing`, do not treat absence as a signal either way.
 
-**Priority 5 — Salary:**
-- `target`: $120k-$140k AUD
-- `acceptable`: $100k-$120k
-- `flagged_low`: below $100k (surface, do not auto-discard)
-- `flagged_high`: above $160k (flag as potential level mismatch)
-- `missing`: record as missing — do not flag as orange
-
-**Priority 6 — Company and role type (lowest — FYI only):**
-- Record `company_assessment` and `role_type_match` as normal output fields
-- Company stability, culture signals, agency/consultancy, equity emphasis — mention these in the rationale as FYI context
-- Do not include any company or culture signal in `orange_flags[]`
+**Company and role type (lowest — FYI only):**
+- Record `company_assessment` and `role_type_match` as normal output fields, using the candidate's criteria for what counts as preferred/acceptable/weaker/excluded.
+- Company stability, culture signals, agency/consultancy status — mention these in the rationale as FYI context, never in `orange_flags[]`.
 
 ### Step 3 — Collect orange flags
 
-Review the `orange_flags` list in `job_criteria.yaml`. Only items listed there go into `orange_flags[]`. Company/culture signals belong in the rationale, not here. An empty list is valid and expected for many postings.
+Review the orange flags list in the candidate's criteria. Only items listed there go into `orange_flags[]`. Company/culture signals belong in the rationale, not here. An empty list is valid and expected for many postings.
 
 ### Step 4 — Recommendation
 
-Apply the thresholds from `evaluation_output.recommendation_thresholds` in the criteria file:
-- `strong_match`: passes all gates, strong or good on backend and experience, no significant orange flags
+Apply the recommendation thresholds from the candidate's criteria. If the criteria doesn't define its own thresholds, use this default:
+- `strong_match`: passes all gates, strong or good on the primary skill dimension(s) and on experience, no significant orange flags
 - `good_match`: passes all gates, acceptable on primary dimensions, minor orange flags only
 - `weak_match`: passes gates but has meaningful orange flags or weak primary dimensions
 - `discard`: any hard disqualifier triggered
 
-Write a 2-3 sentence rationale covering the key factors that determined the recommendation. Name the technologies, the location, and the one or two things that pushed it toward its tier.
+Write a 2-3 sentence rationale covering the key factors that determined the recommendation. Name the specific skills/qualifications, the location, and the one or two things that pushed it toward its tier.
 
 ## Output
 
@@ -95,10 +78,9 @@ Return a single JSON object. No prose outside the JSON.
   "location_detail": "city, arrangement (e.g. Melbourne hybrid)",
   "experience_match": "ideal|acceptable|excluded",
   "experience_detail": "quoted requirement from posting",
-  "backend_match": "strong|good|acceptable|excluded",
-  "backend_technologies": ["list of named technologies from posting"],
-  "frontend_match": "strong|good|acceptable",
-  "frontend_technologies": ["list"],
+  "skill_matches": [
+    { "dimension": "name from candidate's criteria", "match": "strong|good|acceptable|excluded", "detail": "what the posting says, or 'not stated'" }
+  ],
   "salary_assessment": "target|acceptable|flagged_low|flagged_high|missing",
   "salary_detail": "quoted figure or range, or null",
   "company_assessment": "preferred|acceptable|weaker|excluded",
