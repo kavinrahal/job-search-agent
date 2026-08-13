@@ -7,6 +7,7 @@ public class AppDbContext : DbContext
     public AppDbContext() { }
     public AppDbContext(DbContextOptions<AppDbContext> optionsBuilder) : base(optionsBuilder) { }
 
+    public DbSet<User> Users { get; set; }
     public DbSet<RawEmailRecord> RawEmails { get; set; }
     public DbSet<ClassificationRecord> Classifications { get; set; }
     public DbSet<Application> Applications { get; set; }
@@ -47,6 +48,10 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.Email)
+            .IsUnique();
+
         modelBuilder.Entity<RawEmailRecord>()
             .HasIndex(e => e.MessageId)
             .IsUnique();

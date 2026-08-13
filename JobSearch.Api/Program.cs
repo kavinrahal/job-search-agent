@@ -26,7 +26,10 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 // ---------------------------------------------------------------------------
 // Authentication — Google OAuth + cookie session
 // ---------------------------------------------------------------------------
-var allowedEmail = builder.Configuration["ALLOWED_EMAIL"] ?? "kavinrahal@gmail.com";
+// Reused only to seed the owner's own account as User #1 at startup — sign-in itself is
+// now open to any Google account, which creates/looks up a Users row (see OnCreatingTicket).
+var ownerEmail = builder.Configuration["ALLOWED_EMAIL"] ?? "kavinrahal@gmail.com";
+const string UserIdClaimType = "jobfindr:uid";
 
 builder.Services.AddAuthentication(o =>
 {
@@ -62,13 +65,22 @@ builder.Services.AddAuthentication(o =>
     o.ClientSecret = builder.Configuration["GOOGLE_CLIENT_SECRET"]
         ?? throw new InvalidOperationException("GOOGLE_CLIENT_SECRET not set");
     o.CallbackPath = "/api/v1/auth/callback/google";
-    // Reject any Google account that isn't the owner's.
-    o.Events.OnCreatingTicket = ctx =>
+    // Any Google account may sign in — creates or looks up a Users row, then stamps the
+    // user's own id onto the session as a distinct claim type (Google already populates
+    // ClaimTypes.NameIdentifier with its own "sub" claim, so this can't reuse that type).
+    o.Events.OnCreatingTicket = async ctx =>
     {
         var email = ctx.Identity?.FindFirst(ClaimTypes.Email)?.Value;
-        if (!string.Equals(email, allowedEmail, StringComparison.OrdinalIgnoreCase))
-            ctx.Fail("Unauthorized email");
-        return Task.CompletedTask;
+        if (string.IsNullOrEmpty(email))
+        {
+            ctx.Fail("Google account has no email");
+            return;
+        }
+
+        var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+        var user = await UserProvisioningService.GetOrCreateAsync(db, email);
+
+        ctx.Identity!.AddClaim(new Claim(UserIdClaimType, user.Id.ToString(CultureInfo.InvariantCulture)));
     };
     o.Events.OnRemoteFailure = ctx =>
     {
@@ -195,6 +207,15 @@ catch (Exception ex)
     throw;
 }
 
+// Seed the owner's own account as User #1 — permanent personal testing account with
+// full Tier 1 + Tier 2 access, no paywall, separate from the beta cohort.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await UserProvisioningService.GetOrCreateAsync(db, ownerEmail, UserTier.Tier2, 1_000_000);
+    Console.WriteLine($"[Startup] Owner account ready: {ownerEmail}");
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -211,10 +232,12 @@ app.MapGet("/api/v1/auth/login", (HttpContext ctx) =>
         [GoogleDefaults.AuthenticationScheme]);
 }).AllowAnonymous();
 
-app.MapGet("/api/v1/auth/me", (HttpContext ctx) =>
+app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
 {
-    var email = ctx.User.FindFirst(ClaimTypes.Email)?.Value;
-    return Results.Ok(new { email });
+    var userId = int.Parse(ctx.User.FindFirstValue(UserIdClaimType)!, CultureInfo.InvariantCulture);
+    var user = await db.Users.FindAsync(userId);
+    if (user is null) return Results.Unauthorized();
+    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance });
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>
@@ -224,7 +247,7 @@ app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>
 }).RequireAuthorization();
 
 app.MapGet("/api/v1/auth/denied", () =>
-    Results.Text("Access denied. Only the account owner can access this dashboard.")
+    Results.Text("Access denied. Sign-in failed — please try again.")
 ).AllowAnonymous();
 
 // ---------------------------------------------------------------------------
