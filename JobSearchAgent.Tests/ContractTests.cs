@@ -69,7 +69,7 @@ public class ContractTests
             "Thank you for applying for the Software Engineer role at Acme Software. We will be in touch.",
             DateTimeOffset.UtcNow);
 
-        var result = await classifier.ClassifyAsync(email);
+        var result = await classifier.ClassifyAsync(email, userId: 1);
 
         Assert.Contains(result.Category, new List<string>
         {

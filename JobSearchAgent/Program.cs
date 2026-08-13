@@ -56,6 +56,10 @@ dataProtectionServices.AddDbContext<AppDbContext>(o => o.UseNpgsql(connStr));
 dataProtectionServices.AddDataProtection().PersistKeysToDbContext<AppDbContext>().SetApplicationName("JobFindr");
 var userSecrets = new UserSecretService(dataProtectionServices.BuildServiceProvider().GetRequiredService<IDataProtectionProvider>());
 
+// Shared across every user processed this run — creates its own fresh AppDbContext per
+// log write, so it's safe to reuse across the whole loop below.
+var usageLogger = new ClaudeUsageLogger(dbOptions);
+
 // clientId/clientSecret are the app's own Gmail OAuth client (shared across every user's
 // Gmail connection, like GOOGLE_CLIENT_ID for the web login) — stays an env var. Each
 // user's own refresh token lives encrypted in UserSecrets.
@@ -235,7 +239,7 @@ async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> Proce
                     new LeverFetcher(),
                 ],
                 new JobPostingFetcher(),
-                new PostingEvaluator(apiKey),
+                new PostingEvaluator(apiKey, usageLogger),
                 discoveryTelegram);
 
             var (discovered, evaluated, notified) = await discovery.RunAsync();
@@ -273,8 +277,8 @@ async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> Proce
         return (emails.Count, 0, 0);
     }
 
-    var classifier = new EmailClassifier(apiKey);
-    var results = await classifier.ClassifyBatchAsync(emailsToClassify);
+    var classifier = new EmailClassifier(apiKey, usageLogger);
+    var results = await classifier.ClassifyBatchAsync(emailsToClassify, user.Id);
 
     var now = DateTime.UtcNow;
     foreach (var (email, clf) in results)
@@ -400,7 +404,7 @@ async Task RunAlertProcessingAsync(AppDbContext userDb, bool sendTelegram)
     Console.WriteLine();
     using var alertTelegram = sendTelegram ? new TelegramNotifier(botToken!, chatId!) : null;
     var alertProcessor = new JobAlertProcessor(
-        userDb, new JobPostingFetcher(), new PostingEvaluator(apiKey), alertTelegram);
+        userDb, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), alertTelegram);
     var (found, evaluated, notified) = await alertProcessor.ProcessAsync(allAlertEmails);
     Console.WriteLine($"Job alerts: {found} URLs found, {evaluated} evaluated, {notified} notified.");
 }

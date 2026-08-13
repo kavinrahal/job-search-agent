@@ -11,11 +11,13 @@ public class AnswerAgent
 
     private readonly string _skillText;
     private readonly Tool _tool;
+    private readonly ClaudeUsageLogger? _usageLogger;
 
-    public AnswerAgent(string apiKey)
+    public AnswerAgent(string apiKey, ClaudeUsageLogger? usageLogger = null)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("answer_application_question.md");
+        _usageLogger = usageLogger;
 
         _tool = new Tool
         {
@@ -66,6 +68,9 @@ public class AnswerAgent
             ToolChoice = new ToolChoiceAny(),
             Messages = history.ToMessages(),
         });
+
+        if (_usageLogger is not null)
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.AnswerAgent, OpusModel, response.Usage);
 
         foreach (var block in response.Content)
         {

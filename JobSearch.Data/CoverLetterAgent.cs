@@ -8,11 +8,13 @@ public class CoverLetterAgent
     private readonly AnthropicClient _client;
     private const string OpusModel = "claude-opus-4-8";
     private readonly string _skillText;
+    private readonly ClaudeUsageLogger? _usageLogger;
 
-    public CoverLetterAgent(string apiKey)
+    public CoverLetterAgent(string apiKey, ClaudeUsageLogger? usageLogger = null)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("write_cover_letter.md");
+        _usageLogger = usageLogger;
     }
 
     // Per-call, not per-instance — see CvTailorAgent.BuildSystemPrompt for why.
@@ -52,6 +54,9 @@ public class CoverLetterAgent
             Messages = [new() { Role = Role.User, Content = userContent }],
         });
 
+        if (_usageLogger is not null)
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CoverLetterAgent, OpusModel, response.Usage);
+
         return ExtractText(response.Content);
     }
 
@@ -67,6 +72,9 @@ public class CoverLetterAgent
             },
             Messages = history.ToMessages(),
         });
+
+        if (_usageLogger is not null)
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CoverLetterAgent, OpusModel, response.Usage);
 
         return ExtractText(response.Content);
     }

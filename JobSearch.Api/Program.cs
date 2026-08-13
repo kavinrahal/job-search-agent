@@ -106,10 +106,11 @@ var telegramChatId = builder.Configuration["TELEGRAM_CHAT_ID"]
     ?? throw new InvalidOperationException("TELEGRAM_CHAT_ID not set");
 
 builder.Services.AddSingleton(_ => new JobPostingFetcher());
-builder.Services.AddSingleton(_ => new PostingEvaluator(anthropicApiKey));
-builder.Services.AddSingleton(_ => new CoverLetterAgent(anthropicApiKey));
-builder.Services.AddSingleton(_ => new CvTailorAgent(anthropicApiKey));
-builder.Services.AddSingleton(_ => new AnswerAgent(anthropicApiKey));
+builder.Services.AddSingleton(sp => new ClaudeUsageLogger(sp.GetRequiredService<DbContextOptions<AppDbContext>>()));
+builder.Services.AddSingleton(sp => new PostingEvaluator(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(sp => new CoverLetterAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(sp => new CvTailorAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(sp => new AnswerAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
 
 // Trust X-Forwarded-Proto from Railway's load balancer regardless of its IP.

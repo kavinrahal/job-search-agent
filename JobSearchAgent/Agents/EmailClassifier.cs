@@ -22,10 +22,12 @@ public class EmailClassifier
 
     private readonly string _systemPrompt;
     private readonly Tool _tool;
+    private readonly ClaudeUsageLogger? _usageLogger;
 
-    public EmailClassifier(string apiKey)
+    public EmailClassifier(string apiKey, ClaudeUsageLogger? usageLogger = null)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
+        _usageLogger = usageLogger;
 
         string categoriesText = SkillLoader.Load("email_categories.md");
         _systemPrompt = $"""
@@ -86,7 +88,7 @@ public class EmailClassifier
         };
     }
 
-    public async Task<EmailClassification> ClassifyAsync(RawEmail email)
+    public async Task<EmailClassification> ClassifyAsync(RawEmail email, int userId)
     {
         string body = email.BodyText.Length > 1500
             ? email.BodyText[..1500]
@@ -116,6 +118,9 @@ public class EmailClassifier
             Messages = [new() { Role = Role.User, Content = userContent }],
         });
 
+        if (_usageLogger is not null)
+            await _usageLogger.LogAsync(userId, ClaudeAgentName.EmailClassifier, HaikuModel, response.Usage);
+
         foreach (var block in response.Content)
         {
             if (block.TryPickToolUse(out ToolUseBlock? toolUse))
@@ -136,7 +141,7 @@ public class EmailClassifier
     }
 
     public async Task<List<(RawEmail Email, EmailClassification Classification)>> ClassifyBatchAsync(
-        List<RawEmail> emails, int maxConcurrency = 15)
+        List<RawEmail> emails, int userId, int maxConcurrency = 15)
     {
         var results = new (RawEmail Email, EmailClassification Classification)[emails.Count];
         int completed = 0;
@@ -146,7 +151,7 @@ public class EmailClassifier
             new ParallelOptions { MaxDegreeOfParallelism = maxConcurrency },
             async (pair, _) =>
             {
-                results[pair.Index] = (pair.Item, await ClassifyAsync(pair.Item));
+                results[pair.Index] = (pair.Item, await ClassifyAsync(pair.Item, userId));
                 int n = Interlocked.Increment(ref completed);
                 if (n % 10 == 0 || n == emails.Count)
                     Console.WriteLine($"  classified {n}/{emails.Count}...");

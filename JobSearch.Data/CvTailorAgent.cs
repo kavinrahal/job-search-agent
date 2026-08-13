@@ -9,11 +9,13 @@ public class CvTailorAgent
     private readonly AnthropicClient _client;
     private const string OpusModel = "claude-opus-4-8";
     private readonly string _skillText;
+    private readonly ClaudeUsageLogger? _usageLogger;
 
-    public CvTailorAgent(string apiKey)
+    public CvTailorAgent(string apiKey, ClaudeUsageLogger? usageLogger = null)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("tailor_cv.md");
+        _usageLogger = usageLogger;
     }
 
     // Per-call, not per-instance: this agent is a DI singleton shared by every request, but
@@ -52,6 +54,9 @@ public class CvTailorAgent
             Messages = [new() { Role = Role.User, Content = userContent }],
         });
 
+        if (_usageLogger is not null)
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CvTailorAgent, OpusModel, response.Usage);
+
         return ExtractText(response.Content);
     }
 
@@ -67,6 +72,9 @@ public class CvTailorAgent
             },
             Messages = history.ToMessages(),
         });
+
+        if (_usageLogger is not null)
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CvTailorAgent, OpusModel, response.Usage);
 
         return ExtractText(response.Content);
     }

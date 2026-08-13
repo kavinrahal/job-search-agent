@@ -29,6 +29,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<SystemHealth> SystemHealth { get; set; }
     public DbSet<DiscoveredPosting> DiscoveredPostings { get; set; }
     public DbSet<AgentThread> AgentThreads { get; set; }
+    public DbSet<ClaudeUsageLog> ClaudeUsageLogs { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -147,6 +148,13 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasIndex(t => t.LastMessageId).IsUnique(); // reply-threading lookup
             e.HasIndex(t => t.UserId);
             e.HasQueryFilter(t => t.UserId == CurrentUserId);
+        });
+
+        modelBuilder.Entity<ClaudeUsageLog>(e =>
+        {
+            e.HasIndex(l => l.UserId);
+            e.HasIndex(l => l.CreatedAt);
+            e.HasQueryFilter(l => l.UserId == CurrentUserId);
         });
     }
 }
