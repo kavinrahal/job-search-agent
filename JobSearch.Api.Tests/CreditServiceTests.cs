@@ -88,4 +88,39 @@ public class CreditServiceTests
 
         Assert.False(await CreditService.HasCreditAsync(db, user.Id));
     }
+
+    // TC07 — Two simultaneous spends against a balance of 1 credit: exactly one succeeds,
+    // and the balance never goes negative. Uses two independent contexts against the same
+    // InMemory database (mirroring two separate HTTP requests, each with their own scoped
+    // DbContext) rather than two calls sharing one context's tracker, which wouldn't
+    // exercise the concurrency guard at all.
+    // Silent failure: without CreditVersion as a concurrency token, both calls would load
+    // balance=1, both decrement to 0 independently, and the second save would silently
+    // overwrite the first — a real double-spend that no exception would ever surface.
+    [Fact]
+    public async Task SpendCreditAsync_TwoConcurrentSpendsWithOneCredit_OnlyOneSucceeds()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        int userId;
+        await using (var seedDb = new AppDbContext(options))
+        {
+            userId = (await SeedUser(seedDb, creditBalance: 1)).Id;
+        }
+
+        await using var db1 = new AppDbContext(options);
+        await using var db2 = new AppDbContext(options);
+
+        var results = await Task.WhenAll(
+            CreditService.SpendCreditAsync(db1, userId),
+            CreditService.SpendCreditAsync(db2, userId));
+
+        Assert.Equal(1, results.Count(r => r));
+
+        await using var verifyDb = new AppDbContext(options);
+        var finalUser = await verifyDb.Users.FindAsync(userId);
+        Assert.Equal(0, finalUser!.CreditBalance);
+    }
 }

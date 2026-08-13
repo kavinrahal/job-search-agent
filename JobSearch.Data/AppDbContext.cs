@@ -64,9 +64,11 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<User>()
-            .HasIndex(u => u.Email)
-            .IsUnique();
+        modelBuilder.Entity<User>(e =>
+        {
+            e.HasIndex(u => u.Email).IsUnique();
+            e.Property(u => u.CreditVersion).IsConcurrencyToken();
+        });
 
         modelBuilder.Entity<UserProfile>(e =>
         {

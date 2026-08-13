@@ -6,6 +6,12 @@ public class User
     public string Email { get; set; } = "";
     public string Tier { get; set; } = UserTier.Tier1;
     public int CreditBalance { get; set; }
+
+    // Optimistic concurrency token for CreditBalance writes (see CreditService.SpendCreditAsync)
+    // — not a general row version, just enough to make two simultaneous spends against the
+    // same balance detectable instead of silently overwriting each other.
+    public int CreditVersion { get; set; }
+
     public DateTime CreatedAt { get; set; }
 }
 
