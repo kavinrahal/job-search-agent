@@ -8,6 +8,11 @@
 
   <ItemGroup>
     <PackageReference Include="Anthropic" Version="12.29.0" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="9.0.5" />
+    <!-- Direct pin: Microsoft.AspNetCore.DataProtection.EntityFrameworkCore 9.0.5 pulls in
+         System.Security.Cryptography.Xml 9.0.5, which has known high-severity advisories
+         (GHSA-37gx-xxp4-5rgx and others). Patched in 9.0.19. -->
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="9.0.19" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.5">
       <PrivateAssets>all</PrivateAssets>

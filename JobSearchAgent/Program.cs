@@ -4,8 +4,10 @@ using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
 using JobSearchAgent.Models;
 using JobSearchAgent.Workers;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 // Parse arguments
 //   --days N            last N days (test mode — classifies all fetched)
@@ -45,6 +47,14 @@ var dbOptions = new DbContextOptionsBuilder<AppDbContext>()
 await using var db = new AppDbContext(dbOptions);
 await db.Database.MigrateAsync();
 
+// Data Protection key ring persisted to Postgres (not the framework's local-disk default)
+// since this worker and JobSearch.Api are separate processes on ephemeral containers that
+// both need to decrypt UserSecrets encrypted by either one.
+var dataProtectionServices = new ServiceCollection();
+dataProtectionServices.AddDbContext<AppDbContext>(o => o.UseNpgsql(connStr));
+dataProtectionServices.AddDataProtection().PersistKeysToDbContext<AppDbContext>().SetApplicationName("JobFindr");
+var userSecrets = new UserSecretService(dataProtectionServices.BuildServiceProvider().GetRequiredService<IDataProtectionProvider>());
+
 // Not yet looped over multiple users (see the "Adapt the worker to loop over all active
 // users" ticket) — for now the whole run acts as the single owner account.
 var ownerEmail = config["ALLOWED_EMAIL"] ?? "kavinrahal@gmail.com";
@@ -59,10 +69,20 @@ await UserProfileProvisioningService.GetOrSeedAsync(db, owner.Id,
     cvBase: SkillLoader.Load("context/cv_base.md"),
     jobCriteria: SkillLoader.Load("context/job_criteria.yaml"));
 
-// Auth Gmail — headless if secrets are present, browser flow as first-time fallback
+// Auth Gmail — headless if secrets are present, browser flow as first-time fallback.
+// clientId/clientSecret are the app's own OAuth client (shared across every user's Gmail
+// connection, like GOOGLE_CLIENT_ID for the web login) — stays an env var. The refresh
+// token is per-user and lives encrypted in UserSecrets; GMAIL_REFRESH_TOKEN is only read
+// once, as a migration bridge from the pre-multi-tenant env-var setup, then persisted.
 var clientId     = config["GMAIL_CLIENT_ID"];
 var clientSecret = config["GMAIL_CLIENT_SECRET"];
-var refreshToken = config["GMAIL_REFRESH_TOKEN"];
+var refreshToken = await userSecrets.GetAsync(db, owner.Id, UserSecretKey.GmailRefreshToken);
+if (refreshToken is null && config["GMAIL_REFRESH_TOKEN"] is string envRefreshToken)
+{
+    await userSecrets.SetAsync(db, owner.Id, UserSecretKey.GmailRefreshToken, envRefreshToken);
+    refreshToken = envRefreshToken;
+    Console.WriteLine("Migrated GMAIL_REFRESH_TOKEN into encrypted per-user storage.");
+}
 
 GmailClient gmail;
 if (clientId is not null && clientSecret is not null && refreshToken is not null)

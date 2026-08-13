@@ -152,6 +152,7 @@ Set these in Railway (production) or `dotnet user-secrets` / `.env` (local).
 | `ALLOWED_EMAIL` | Google account seeded as the owner's permanent Tier 1 + Tier 2 account at startup (sign-in itself is open to any Google account, which creates its own `Users` row) |
 | `GMAIL_CLIENT_ID` | Gmail API OAuth client ID (worker only) |
 | `GMAIL_CLIENT_SECRET` | Gmail API OAuth client secret (worker only) |
+| `GMAIL_REFRESH_TOKEN` | One-time bridge only (worker only) — read once on first run to migrate the owner's refresh token into encrypted `UserSecrets` storage, then ignored on every run after. Safe to unset once you see "Migrated GMAIL_REFRESH_TOKEN..." in the worker's startup log. |
 
 ---
 

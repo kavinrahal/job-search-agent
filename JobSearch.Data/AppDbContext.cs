@@ -1,8 +1,13 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace JobSearch.Data;
 
-public class AppDbContext : DbContext
+// IDataProtectionKeyContext: both JobSearch.Api and JobSearchAgent persist their Data
+// Protection key ring here (PersistKeysToDbContext) instead of the framework's local-disk
+// default, since Railway containers are ephemeral and the API and worker are separate
+// processes that both need to decrypt UserSecrets encrypted by either one.
+public class AppDbContext : DbContext, IDataProtectionKeyContext
 {
     public AppDbContext() { }
     public AppDbContext(DbContextOptions<AppDbContext> optionsBuilder) : base(optionsBuilder) { }
@@ -15,6 +20,7 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users { get; set; }
     public DbSet<UserProfile> UserProfiles { get; set; }
+    public DbSet<UserSecret> UserSecrets { get; set; }
     public DbSet<RawEmailRecord> RawEmails { get; set; }
     public DbSet<ClassificationRecord> Classifications { get; set; }
     public DbSet<Application> Applications { get; set; }
@@ -23,6 +29,7 @@ public class AppDbContext : DbContext
     public DbSet<SystemHealth> SystemHealth { get; set; }
     public DbSet<DiscoveredPosting> DiscoveredPostings { get; set; }
     public DbSet<AgentThread> AgentThreads { get; set; }
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -67,6 +74,15 @@ public class AppDbContext : DbContext
              .HasForeignKey<UserProfile>(p => p.UserId)
              .OnDelete(DeleteBehavior.Cascade);
         });
+
+        // No query filter, same reasoning as UserProfile: UserSecretService always looks
+        // this up by an exact, explicitly-passed userId, never a broad list query — a
+        // filter here would just risk silently returning null when CurrentUserId doesn't
+        // happen to match the userId argument, for no real safety gain over the explicit
+        // WHERE clause UserSecretService already applies.
+        modelBuilder.Entity<UserSecret>()
+            .HasIndex(s => new { s.UserId, s.Key })
+            .IsUnique();
 
         modelBuilder.Entity<RawEmailRecord>(e =>
         {
