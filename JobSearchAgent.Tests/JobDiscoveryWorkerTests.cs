@@ -73,6 +73,7 @@ public class JobDiscoveryWorkerTests
         var item = FeedItem();
         db.DiscoveredPostings.Add(new DiscoveredPosting
         {
+            UserId = Db.TestUserId,
             Url = item.Url, Source = "greenhouse", Title = item.Title,
             Recommendation = "good_match", DiscoveredAt = DateTime.UtcNow, EvaluatedAt = DateTime.UtcNow,
         });

@@ -3,6 +3,7 @@ namespace JobSearch.Data;
 public class Application
 {
     public int Id { get; set; }
+    public int UserId { get; set; }
     public string Company { get; set; } = "";
     public string RoleTitle { get; set; } = "";
     public string? JobUrl { get; set; }

@@ -3,6 +3,7 @@ namespace JobSearch.Data;
 public class Notification
 {
     public int Id { get; set; }
+    public int UserId { get; set; }
     public string Type { get; set; } = "";        // see NotificationType
     public string Message { get; set; } = "";
     public int? ApplicationId { get; set; }

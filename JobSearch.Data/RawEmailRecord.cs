@@ -3,6 +3,7 @@ namespace JobSearch.Data;
 public class RawEmailRecord
 {
     public int Id { get; set; }
+    public int UserId { get; set; }
     public string MessageId { get; set; } = "";
     public string ThreadId { get; set; } = "";
     public string FromAddress { get; set; } = "";

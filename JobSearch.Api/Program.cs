@@ -208,16 +208,34 @@ catch (Exception ex)
 }
 
 // Seed the owner's own account as User #1 — permanent personal testing account with
-// full Tier 1 + Tier 2 access, no paywall, separate from the beta cohort.
+// full Tier 1 + Tier 2 access, no paywall, separate from the beta cohort. Captured here
+// because the Telegram/WhatsApp webhooks have no logged-in session to derive a tenant
+// from — they act as this owner for every DB read/write (see CurrentUserId usages below).
+int ownerUserId;
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await UserProvisioningService.GetOrCreateAsync(db, ownerEmail, UserTier.Tier2, 1_000_000);
+    var owner = await UserProvisioningService.GetOrCreateAsync(db, ownerEmail, UserTier.Tier2, 1_000_000);
+    ownerUserId = owner.Id;
     Console.WriteLine($"[Startup] Owner account ready: {ownerEmail}");
 }
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Stamp the authenticated user's id onto their scoped AppDbContext so every tenant-scoped
+// query/write in this request is automatically bounded to their own data (see
+// AppDbContext.CurrentUserId and the HasQueryFilter calls in OnModelCreating).
+app.Use(async (ctx, next) =>
+{
+    var claim = ctx.User.FindFirstValue(UserIdClaimType);
+    if (claim is not null)
+    {
+        var db = ctx.RequestServices.GetRequiredService<AppDbContext>();
+        db.CurrentUserId = int.Parse(claim, CultureInfo.InvariantCulture);
+    }
+    await next();
+});
 
 // ---------------------------------------------------------------------------
 // Auth endpoints
@@ -576,6 +594,10 @@ app.MapPost("/api/v1/telegram/webhook", async (
     if (!telegram.VerifySecretToken(secretHeader))
         return Results.Unauthorized();
 
+    // No logged-in session on a bot webhook — Telegram stays personal-use-only, so it
+    // always acts as the owner.
+    db.CurrentUserId = ownerUserId;
+
     JsonElement update;
     try
     {
@@ -681,6 +703,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
 
         using var scope = scopeFactory.CreateScope();
         var scopedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        scopedDb.CurrentUserId = ownerUserId;
         var historyJson = JsonSerializer.Serialize(history);
 
         if (id is int existingId)
@@ -699,6 +722,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
         {
             scopedDb.AgentThreads.Add(new AgentThread
             {
+                UserId = ownerUserId,
                 ArtifactType = artifactType,
                 HistoryJson = historyJson,
                 CurrentContent = currentContent,
@@ -976,6 +1000,10 @@ app.MapPost("/api/v1/whatsapp/webhook", async (
     AppDbContext db) =>
 {
     if (!whatsapp.IsConfigured) return Results.Ok(); // never wired up — drop silently
+
+    // No logged-in session on a bot webhook — WhatsApp stays personal-use-only, so it
+    // always acts as the owner.
+    db.CurrentUserId = ownerUserId;
 
     using var ms = new MemoryStream();
     await request.Body.CopyToAsync(ms);

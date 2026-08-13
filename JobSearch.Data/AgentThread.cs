@@ -9,6 +9,7 @@ namespace JobSearch.Data;
 public class AgentThread
 {
     public int Id { get; set; }
+    public int UserId { get; set; }
     public string ArtifactType { get; set; } = "";   // AgentThreadType
     public string HistoryJson { get; set; } = "[]";  // List<AgentThreadTurn>, System.Text.Json
     public string? CurrentContent { get; set; }       // latest assistant turn's content; null while AwaitingContext

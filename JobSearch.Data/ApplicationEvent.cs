@@ -3,6 +3,7 @@ namespace JobSearch.Data;
 public class ApplicationEvent
 {
     public int Id { get; set; }
+    public int UserId { get; set; }
     public int ApplicationId { get; set; }
     public string EventType { get; set; } = "";   // see ApplicationEventType
     public string? FromStatus { get; set; }

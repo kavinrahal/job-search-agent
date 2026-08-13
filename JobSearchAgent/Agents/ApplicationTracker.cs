@@ -65,6 +65,7 @@ public static class ApplicationTracker
             {
                 var ev = new ApplicationEvent
                 {
+                    UserId = db.CurrentUserId!.Value,
                     ApplicationId = app.Id,
                     EventType = ApplicationEventType.StatusChanged,
                     FromStatus = app.Status,
@@ -83,6 +84,7 @@ public static class ApplicationTracker
                 // Log the email even if status didn't change
                 db.ApplicationEvents.Add(new ApplicationEvent
                 {
+                    UserId = db.CurrentUserId!.Value,
                     ApplicationId = app.Id,
                     EventType = ApplicationEventType.EmailReceived,
                     MessageId = email.MessageId,
@@ -97,6 +99,7 @@ public static class ApplicationTracker
             {
                 db.Notifications.Add(new Notification
                 {
+                    UserId = db.CurrentUserId!.Value,
                     Type = notifType,
                     Message = BuildMessage(clf, email),
                     ApplicationId = app.Id,
@@ -140,6 +143,7 @@ public static class ApplicationTracker
 
         var app = new Application
         {
+            UserId = db.CurrentUserId!.Value,
             Company = company,
             RoleTitle = role,
             Status = ApplicationStatus.Applied,
@@ -151,6 +155,7 @@ public static class ApplicationTracker
 
         db.ApplicationEvents.Add(new ApplicationEvent
         {
+            UserId = db.CurrentUserId!.Value,
             ApplicationId = app.Id,
             EventType = ApplicationEventType.StatusChanged,
             FromStatus = null,

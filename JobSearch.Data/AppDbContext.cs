@@ -7,6 +7,12 @@ public class AppDbContext : DbContext
     public AppDbContext() { }
     public AppDbContext(DbContextOptions<AppDbContext> optionsBuilder) : base(optionsBuilder) { }
 
+    // The tenant every tenant-scoped query and write in this unit of work is for. Null by
+    // default so a caller that forgets to set it gets zero rows back, not every tenant's
+    // data — global query filters below compare UserId to this, and `a.UserId == null`
+    // matches nothing. Set once per web request (auth middleware) or once per worker run.
+    public int? CurrentUserId { get; set; }
+
     public DbSet<User> Users { get; set; }
     public DbSet<RawEmailRecord> RawEmails { get; set; }
     public DbSet<ClassificationRecord> Classifications { get; set; }
@@ -52,17 +58,25 @@ public class AppDbContext : DbContext
             .HasIndex(u => u.Email)
             .IsUnique();
 
-        modelBuilder.Entity<RawEmailRecord>()
-            .HasIndex(e => e.MessageId)
-            .IsUnique();
+        modelBuilder.Entity<RawEmailRecord>(e =>
+        {
+            e.HasIndex(r => r.MessageId).IsUnique();
+            e.HasIndex(r => r.UserId);
+            e.HasQueryFilter(r => r.UserId == CurrentUserId);
+        });
 
-        modelBuilder.Entity<ClassificationRecord>()
-            .HasIndex(c => c.MessageId)
-            .IsUnique();
+        modelBuilder.Entity<ClassificationRecord>(e =>
+        {
+            e.HasIndex(c => c.MessageId).IsUnique();
+            e.HasIndex(c => c.UserId);
+            e.HasQueryFilter(c => c.UserId == CurrentUserId);
+        });
 
         modelBuilder.Entity<Application>(e =>
         {
             e.HasIndex(a => new { a.Company, a.RoleTitle });
+            e.HasIndex(a => a.UserId);
+            e.HasQueryFilter(a => a.UserId == CurrentUserId);
             e.HasMany(a => a.Events)
              .WithOne(ev => ev.Application)
              .HasForeignKey(ev => ev.ApplicationId)
@@ -73,14 +87,20 @@ public class AppDbContext : DbContext
              .OnDelete(DeleteBehavior.SetNull);
         });
 
-        modelBuilder.Entity<ApplicationEvent>()
-            .HasIndex(e => e.ApplicationId);
+        modelBuilder.Entity<ApplicationEvent>(e =>
+        {
+            e.HasIndex(ev => ev.ApplicationId);
+            e.HasIndex(ev => ev.UserId);
+            e.HasQueryFilter(ev => ev.UserId == CurrentUserId);
+        });
 
         modelBuilder.Entity<Notification>(e =>
         {
             e.HasIndex(n => n.SentAt);           // fast query for pending notifications (Telegram)
             e.HasIndex(n => n.WhatsAppSentAt);    // fast query for pending notifications (WhatsApp)
             e.HasIndex(n => n.WhatsAppMessageId); // reply-threading lookup
+            e.HasIndex(n => n.UserId);
+            e.HasQueryFilter(n => n.UserId == CurrentUserId);
         });
 
         modelBuilder.Entity<SystemHealth>()
@@ -92,9 +112,15 @@ public class AppDbContext : DbContext
             e.HasIndex(d => d.DiscoveredAt);
             e.HasIndex(d => d.Recommendation);
             e.HasIndex(d => d.WhatsAppMessageId); // reply-threading lookup
+            e.HasIndex(d => d.UserId);
+            e.HasQueryFilter(d => d.UserId == CurrentUserId);
         });
 
-        modelBuilder.Entity<AgentThread>()
-            .HasIndex(t => t.LastMessageId).IsUnique(); // reply-threading lookup
+        modelBuilder.Entity<AgentThread>(e =>
+        {
+            e.HasIndex(t => t.LastMessageId).IsUnique(); // reply-threading lookup
+            e.HasIndex(t => t.UserId);
+            e.HasQueryFilter(t => t.UserId == CurrentUserId);
+        });
     }
 }

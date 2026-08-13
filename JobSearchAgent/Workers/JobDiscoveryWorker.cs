@@ -78,7 +78,7 @@ public class JobDiscoveryWorker
             var record = await _db.DiscoveredPostings.FirstOrDefaultAsync(d => d.Url == item.Url);
             if (record is null)
             {
-                record = new DiscoveredPosting { Url = item.Url, Source = item.Source, Title = item.Title, Company = item.Company, DiscoveredAt = DateTime.UtcNow };
+                record = new DiscoveredPosting { UserId = _db.CurrentUserId!.Value, Url = item.Url, Source = item.Source, Title = item.Title, Company = item.Company, DiscoveredAt = DateTime.UtcNow };
                 _db.DiscoveredPostings.Add(record);
             }
             else

@@ -133,6 +133,7 @@ public class JobAlertProcessorTests
         var url = "https://au.seek.com/job/10000001";
         db.DiscoveredPostings.Add(new DiscoveredPosting
         {
+            UserId = Db.TestUserId,
             Url = url, Source = "seek_alert", Title = "Dev", Recommendation = "good_match",
             DiscoveredAt = DateTime.UtcNow, EvaluatedAt = DateTime.UtcNow,
         });
@@ -162,6 +163,7 @@ public class JobAlertProcessorTests
         var url = "https://au.seek.com/job/20000002";
         db.DiscoveredPostings.Add(new DiscoveredPosting
         {
+            UserId = Db.TestUserId,
             Url = url, Source = "seek_alert", Title = "",
             Recommendation = "error", DiscoveredAt = DateTime.UtcNow,
             EvaluatedAt = DateTime.UtcNow,

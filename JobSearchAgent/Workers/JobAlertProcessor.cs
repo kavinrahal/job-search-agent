@@ -107,7 +107,7 @@ public class JobAlertProcessor
             var record = await _db.DiscoveredPostings.FirstOrDefaultAsync(d => d.Url == url);
             if (record is null)
             {
-                record = new DiscoveredPosting { Url = url, Source = source, Title = "", DiscoveredAt = DateTime.UtcNow };
+                record = new DiscoveredPosting { UserId = _db.CurrentUserId!.Value, Url = url, Source = source, Title = "", DiscoveredAt = DateTime.UtcNow };
                 _db.DiscoveredPostings.Add(record);
             }
             else

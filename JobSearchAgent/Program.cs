@@ -45,6 +45,12 @@ var dbOptions = new DbContextOptionsBuilder<AppDbContext>()
 await using var db = new AppDbContext(dbOptions);
 await db.Database.MigrateAsync();
 
+// Not yet looped over multiple users (see the "Adapt the worker to loop over all active
+// users" ticket) — for now the whole run acts as the single owner account.
+var ownerEmail = config["ALLOWED_EMAIL"] ?? "kavinrahal@gmail.com";
+var owner = await UserProvisioningService.GetOrCreateAsync(db, ownerEmail, UserTier.Tier2, 1_000_000);
+db.CurrentUserId = owner.Id;
+
 // Auth Gmail — headless if secrets are present, browser flow as first-time fallback
 var clientId     = config["GMAIL_CLIENT_ID"];
 var clientSecret = config["GMAIL_CLIENT_SECRET"];
@@ -107,6 +113,7 @@ foreach (var email in emails.Where(e => !existingIds.Contains(e.MessageId)))
 {
     db.RawEmails.Add(new RawEmailRecord
     {
+        UserId      = owner.Id,
         MessageId   = email.MessageId,
         ThreadId    = email.ThreadId,
         FromAddress = email.FromAddress,
@@ -238,6 +245,7 @@ foreach (var (email, clf) in results)
     {
         db.Classifications.Add(new ClassificationRecord
         {
+            UserId       = owner.Id,
             MessageId    = email.MessageId,
             IsJobRelated = clf.IsJobRelated,
             Category     = clf.Category,

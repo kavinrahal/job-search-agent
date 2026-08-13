@@ -7,12 +7,19 @@ namespace JobSearchAgent.Tests;
 
 public static class Db
 {
-    public static AppDbContext Fresh()
+    // Every existing test predates multi-tenancy and implicitly runs as one tenant —
+    // CurrentUserId defaults to this so query filters stay transparent to them.
+    public const int TestUserId = 1;
+
+    // dbName lets a test open a second, independently-tracked context against the same
+    // underlying InMemory database — needed to simulate "a different request/tenant" rather
+    // than reusing a context that already has the row in its local change tracker.
+    public static AppDbContext Fresh(string? dbName = null)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseInMemoryDatabase(dbName ?? Guid.NewGuid().ToString())
             .Options;
-        return new AppDbContext(options);
+        return new AppDbContext(options) { CurrentUserId = TestUserId };
     }
 }
 
@@ -60,6 +67,7 @@ public static class Seed
     {
         var app = new JobSearch.Data.Application
         {
+            UserId = db.CurrentUserId ?? Db.TestUserId,
             Company = company,
             RoleTitle = roleTitle,
             Status = status ?? ApplicationStatus.Applied,

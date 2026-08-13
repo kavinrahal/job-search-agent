@@ -3,6 +3,7 @@ namespace JobSearch.Data;
 public class DiscoveredPosting
 {
     public int Id { get; set; }
+    public int UserId { get; set; }
     public string Url { get; set; } = "";
     public string Source { get; set; } = "";       // "seek"
     public string Title { get; set; } = "";

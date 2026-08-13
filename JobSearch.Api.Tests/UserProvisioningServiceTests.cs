@@ -1,4 +1,3 @@
-using JobSearch.Api.Services;
 using JobSearch.Data;
 using Microsoft.EntityFrameworkCore;
 

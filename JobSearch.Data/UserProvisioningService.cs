@@ -1,10 +1,10 @@
-using JobSearch.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace JobSearch.Api.Services;
+namespace JobSearch.Data;
 
-// Extracted out of Program.cs's OnCreatingTicket/startup-seed so both the login path and
-// the owner seed share one get-or-create, instead of two copies drifting apart.
+// Shared by JobSearch.Api's OnCreatingTicket/startup-seed and JobSearchAgent's worker
+// startup, so every entry point that needs "the User row for this email" uses one
+// get-or-create instead of copies drifting apart.
 public static class UserProvisioningService
 {
     public static async Task<User> GetOrCreateAsync(
