@@ -2,10 +2,12 @@ using Anthropic.Models.Messages;
 
 namespace JobSearch.Data;
 
-// A multi-turn Claude conversation tracked by the Telegram message id of the bot's most
-// recent reply in it, so the next reply from the candidate can be matched back to it.
-// Backs both the /answer conversational Q&A flow and the /edit revision flow for CVs,
-// cover letters, and answers.
+// A multi-turn Claude conversation. Backs both the /answer conversational Q&A flow and the
+// /edit revision flow for CVs, cover letters, and answers, across two different origins:
+// Telegram (tracked by the bot's most recent message id, so a reply can be matched back to
+// it — LastMessageId set) and the web API (the caller already has the thread's own Id from
+// the JSON response, so LastMessageId stays null — Postgres allows any number of NULLs
+// under a unique index, so the two origins don't collide).
 public class AgentThread
 {
     public int Id { get; set; }
@@ -14,7 +16,7 @@ public class AgentThread
     public string HistoryJson { get; set; } = "[]";  // List<AgentThreadTurn>, System.Text.Json
     public string? CurrentContent { get; set; }       // latest assistant turn's content; null while AwaitingContext
     public string Status { get; set; } = AgentThreadStatus.AwaitingContext;
-    public string LastMessageId { get; set; } = "";   // Telegram message_id of the most recent bot message in this thread
+    public string? LastMessageId { get; set; }        // Telegram message_id of the most recent bot message, or null (web-originated)
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

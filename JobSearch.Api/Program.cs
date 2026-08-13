@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
+using JobSearch.Api;
 using JobSearch.Api.Services;
 using JobSearch.Data;
 using Microsoft.AspNetCore.Authentication;
@@ -542,6 +543,238 @@ api.MapGet("/health", (AppDbContext db) =>
         ? Results.Json(result, statusCode: 503)
         : Results.Ok(result);
 }).AllowAnonymous(); // UptimeRobot hits this without a session
+
+// ---------------------------------------------------------------------------
+// CV / cover letter / answer generation — authenticated web endpoints. Telegram is now an
+// optional notification channel layered on top of this same AgentThread mechanism, not the
+// only way to act (see the Telegram webhook section below, which is still its own separate
+// implementation for now — unifying the two is a reasonable later cleanup, not required for
+// this to work correctly).
+// ---------------------------------------------------------------------------
+
+// Resolves posting text from either an existing (per-user) DiscoveredPosting or pasted
+// text. Falls back to the cached evaluation summary if the posting can't be re-fetched —
+// same fallback Telegram uses — but unlike Telegram's reply-to-this-message trick, the
+// caller just retries the same POST with postingText set; no stateful correlation needed.
+static async Task<(string? PostingText, string EvalJson, string? Error)> ResolvePostingTextAsync(
+    AppDbContext db, JobPostingFetcher fetcher, int? discoveryId, string? postingText)
+{
+    if (postingText is not null)
+        return (postingText, "{}", null);
+
+    if (discoveryId is null)
+        return (null, "{}", "Provide either discoveryId or postingText.");
+
+    var posting = await db.DiscoveredPostings.FindAsync(discoveryId.Value);
+    if (posting is null)
+        return (null, "{}", "Discovery not found.");
+
+    string evalJson = posting.EvaluationJson ?? "{}";
+    try
+    {
+        var text = await fetcher.FetchAsync(posting.Url);
+        return (text, evalJson, null);
+    }
+    catch
+    {
+        if (posting.EvaluationJson is not null)
+        {
+            var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var ev = JsonSerializer.Deserialize<PostingEvaluation>(posting.EvaluationJson, opts);
+            if (ev is not null) return (EvalFormatter.ToPostingContext(ev), evalJson, null);
+        }
+        return (null, evalJson, "Could not fetch the posting and no cached copy is available. Retry with postingText.");
+    }
+}
+
+static int CurrentUserId(HttpContext ctx, string claimType) =>
+    int.Parse(ctx.User.FindFirstValue(claimType)!, CultureInfo.InvariantCulture);
+
+// Shared by /cv and /letter — identical shape (resolve posting → generate → save a Complete
+// thread → spend a credit → return { threadId, text }), differing only in which agent
+// generates and how the initial user turn is built.
+static async Task<IResult> GenerateArtifactAsync(
+    AppDbContext db, JobPostingFetcher fetcher, int userId,
+    int? discoveryId, string? postingText, string artifactType,
+    Func<string, string, Task<string>> generate,
+    Func<string, string, string> buildInitialUserContent)
+{
+    var (resolvedText, evalJson, error) = await ResolvePostingTextAsync(db, fetcher, discoveryId, postingText);
+    if (resolvedText is null)
+        return Results.BadRequest(new { error });
+
+    var text = await generate(resolvedText, evalJson);
+
+    var thread = new AgentThread
+    {
+        UserId = userId,
+        ArtifactType = artifactType,
+        HistoryJson = JsonSerializer.Serialize(new List<AgentThreadTurn>
+        {
+            new("user", buildInitialUserContent(resolvedText, evalJson)),
+            new("assistant", text),
+        }),
+        CurrentContent = text,
+        Status = AgentThreadStatus.Complete,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow,
+    };
+    db.AgentThreads.Add(thread);
+    await db.SaveChangesAsync();
+    await CreditService.SpendCreditAsync(db, userId);
+
+    return Results.Ok(new { threadId = thread.Id, text });
+}
+
+// POST /api/v1/cv — body: { discoveryId?: int, postingText?: string }
+api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher, CvTailorAgent cvAgent) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    if (!await CreditService.HasCreditAsync(db, userId))
+        return Results.Json(new { error = "Insufficient credits" }, statusCode: StatusCodes.Status402PaymentRequired);
+
+    var profile = await db.UserProfiles.FindAsync(userId)
+        ?? throw new InvalidOperationException("UserProfile not found for the current user.");
+
+    return await GenerateArtifactAsync(db, fetcher, userId, body.DiscoveryId, body.PostingText,
+        AgentThreadType.Cv,
+        (text, evalJson) => cvAgent.GenerateAsync(profile, text, evalJson),
+        CvTailorAgent.BuildInitialUserContent);
+});
+
+// POST /api/v1/letter — body: { discoveryId?: int, postingText?: string }
+api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher, CoverLetterAgent letterAgent) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    if (!await CreditService.HasCreditAsync(db, userId))
+        return Results.Json(new { error = "Insufficient credits" }, statusCode: StatusCodes.Status402PaymentRequired);
+
+    var profile = await db.UserProfiles.FindAsync(userId)
+        ?? throw new InvalidOperationException("UserProfile not found for the current user.");
+
+    return await GenerateArtifactAsync(db, fetcher, userId, body.DiscoveryId, body.PostingText,
+        AgentThreadType.CoverLetter,
+        (text, evalJson) => letterAgent.GenerateAsync(profile, text, evalJson),
+        CoverLetterAgent.BuildInitialUserContent);
+});
+
+// POST /api/v1/answer — body: { question: string, discoveryId?: int }
+api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext db, AnswerAgent answerAgent) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    if (!await CreditService.HasCreditAsync(db, userId))
+        return Results.Json(new { error = "Insufficient credits" }, statusCode: StatusCodes.Status402PaymentRequired);
+
+    string? jobContext = null;
+    if (body.DiscoveryId is int discoveryId)
+    {
+        var posting = await db.DiscoveredPostings.FindAsync(discoveryId);
+        if (posting?.EvaluationJson is not null)
+        {
+            var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var ev = JsonSerializer.Deserialize<PostingEvaluation>(posting.EvaluationJson, opts);
+            if (ev is not null) jobContext = EvalFormatter.ToPostingContext(ev);
+        }
+    }
+
+    var profile = await db.UserProfiles.FindAsync(userId)
+        ?? throw new InvalidOperationException("UserProfile not found for the current user.");
+
+    var history = new List<AgentThreadTurn> { new("user", AnswerAgent.BuildInitialUserContent(body.Question, jobContext)) };
+    var (mode, content) = await answerAgent.RespondAsync(profile, history);
+    history.Add(new AgentThreadTurn("assistant", content));
+
+    var thread = new AgentThread
+    {
+        UserId = userId,
+        ArtifactType = AgentThreadType.Answer,
+        HistoryJson = JsonSerializer.Serialize(history),
+        CurrentContent = mode == "final_answer" ? content : null,
+        Status = mode == "final_answer" ? AgentThreadStatus.Complete : AgentThreadStatus.AwaitingContext,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow,
+    };
+    db.AgentThreads.Add(thread);
+    await db.SaveChangesAsync();
+    await CreditService.SpendCreditAsync(db, userId);
+
+    return Results.Ok(new { threadId = thread.Id, mode, content });
+});
+
+// POST /api/v1/threads/{id}/edit — body: { message: string }
+// Dual-purpose, same as Telegram's /edit: on an AwaitingContext (Answer) thread this
+// continues the Q&A; on a Complete thread it's a revision request.
+api.MapPost("/threads/{id:int}/edit", async (
+    int id, HttpContext ctx, EditRequest body, AppDbContext db,
+    CvTailorAgent cvAgent, CoverLetterAgent letterAgent, AnswerAgent answerAgent) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var thread = await db.AgentThreads.FindAsync(id);
+    if (thread is null) return Results.NotFound();
+
+    if (!await CreditService.HasCreditAsync(db, userId))
+        return Results.Json(new { error = "Insufficient credits" }, statusCode: StatusCodes.Status402PaymentRequired);
+
+    var profile = await db.UserProfiles.FindAsync(userId)
+        ?? throw new InvalidOperationException("UserProfile not found for the current user.");
+    var history = JsonSerializer.Deserialize<List<AgentThreadTurn>>(thread.HistoryJson) ?? [];
+
+    if (thread.Status == AgentThreadStatus.AwaitingContext)
+    {
+        var followupRounds = history.Count(t => t.Role == "assistant");
+        var userTurn = followupRounds >= 3
+            ? $"{body.Message}\n\n(Please give your best answer now instead of asking another question.)"
+            : body.Message;
+        history.Add(new AgentThreadTurn("user", userTurn));
+
+        var (mode, content) = await answerAgent.RespondAsync(profile, history);
+        history.Add(new AgentThreadTurn("assistant", content));
+
+        thread.HistoryJson = JsonSerializer.Serialize(history);
+        thread.CurrentContent = mode == "final_answer" ? content : null;
+        thread.Status = mode == "final_answer" ? AgentThreadStatus.Complete : AgentThreadStatus.AwaitingContext;
+        thread.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        await CreditService.SpendCreditAsync(db, userId);
+
+        return Results.Ok(new { threadId = thread.Id, mode, content });
+    }
+
+    history.Add(new AgentThreadTurn("user",
+        $"Please revise the previous draft with this feedback: {body.Message}\n\n" +
+        "Keep following all the rules in your instructions unless the feedback specifically asks to change them."));
+
+    string? text = null;
+    string? answerMode = null;
+    string? answerContent = null;
+
+    if (thread.ArtifactType == AgentThreadType.Cv)
+        text = await cvAgent.ReviseAsync(profile, history);
+    else if (thread.ArtifactType == AgentThreadType.CoverLetter)
+        text = await letterAgent.ReviseAsync(profile, history);
+    else
+        (answerMode, answerContent) = await answerAgent.RespondAsync(profile, history);
+
+    history.Add(new AgentThreadTurn("assistant", text ?? answerContent ?? ""));
+    thread.HistoryJson = JsonSerializer.Serialize(history);
+    thread.CurrentContent = text ?? answerContent;
+    thread.UpdatedAt = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    await CreditService.SpendCreditAsync(db, userId);
+
+    return Results.Ok(new { threadId = thread.Id, text, mode = answerMode, content = answerContent });
+});
+
+// GET /api/v1/threads/{id}/pdf — renders a completed CV thread's content as a downloadable PDF
+api.MapGet("/threads/{id:int}/pdf", async (int id, AppDbContext db) =>
+{
+    var thread = await db.AgentThreads.FindAsync(id);
+    if (thread is null || thread.ArtifactType != AgentThreadType.Cv || thread.CurrentContent is null)
+        return Results.NotFound();
+
+    var pdf = JobSearch.Api.Services.PdfRenderer.RenderCv(thread.CurrentContent);
+    return Results.File(pdf, "application/pdf", "CV.pdf");
+});
 
 // Recognizes our own "couldn't fetch, paste the description" prompt (identified by its
 // trailing "/cv <url>" or "/letter <url>" line) so a reply to it can be treated as pasted
