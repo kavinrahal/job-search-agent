@@ -20,6 +20,10 @@ public static class UserProvisioningService
         user = new User { Email = email, Tier = defaultTier, CreditBalance = defaultCreditBalance, CreatedAt = DateTime.UtcNow };
         db.Users.Add(user);
         await db.SaveChangesAsync();
+
+        db.AnalyticsEvents.Add(new AnalyticsEvent { UserId = user.Id, EventType = AnalyticsEventType.Signup, CreatedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+
         return user;
     }
 }

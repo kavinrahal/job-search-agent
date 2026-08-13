@@ -85,6 +85,9 @@ builder.Services.AddAuthentication(o =>
         var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
         var user = await UserProvisioningService.GetOrCreateAsync(db, email);
 
+        db.AnalyticsEvents.Add(new AnalyticsEvent { UserId = user.Id, EventType = AnalyticsEventType.Login, CreatedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+
         ctx.Identity!.AddClaim(new Claim(UserIdClaimType, user.Id.ToString(CultureInfo.InvariantCulture)));
     };
     o.Events.OnRemoteFailure = ctx =>
@@ -576,6 +579,18 @@ api.MapGet("/health", (AppDbContext db) =>
         : Results.Ok(result);
 }).AllowAnonymous(); // UptimeRobot hits this without a session
 
+// GET /api/v1/admin/analytics — owner-only aggregate view: signup/login volume, tier
+// breakdown, generation-tool usage, and a 7-day active-user count as a churn proxy.
+// Gated by ownerUserId instead of a role system, since there is only one admin account
+// today. A proper role column can replace this if a second admin is ever needed.
+api.MapGet("/admin/analytics", async (HttpContext ctx, AppDbContext db) =>
+{
+    if (CurrentUserId(ctx, UserIdClaimType) != ownerUserId)
+        return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+
+    return Results.Ok(await AnalyticsService.GetSummaryAsync(db, DateTime.UtcNow));
+});
+
 // ---------------------------------------------------------------------------
 // CV / cover letter / answer generation — authenticated web endpoints. Telegram is now an
 // optional notification channel layered on top of this same AgentThread mechanism, not the
@@ -652,6 +667,12 @@ static async Task<IResult> GenerateArtifactAsync(
         UpdatedAt = DateTime.UtcNow,
     };
     db.AgentThreads.Add(thread);
+    db.AnalyticsEvents.Add(new AnalyticsEvent
+    {
+        UserId = userId,
+        EventType = artifactType == AgentThreadType.Cv ? AnalyticsEventType.CvGenerated : AnalyticsEventType.LetterGenerated,
+        CreatedAt = DateTime.UtcNow,
+    });
     await db.SaveChangesAsync();
     await CreditService.SpendCreditAsync(db, userId);
 
@@ -727,6 +748,7 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
         UpdatedAt = DateTime.UtcNow,
     };
     db.AgentThreads.Add(thread);
+    db.AnalyticsEvents.Add(new AnalyticsEvent { UserId = userId, EventType = AnalyticsEventType.AnswerGenerated, CreatedAt = DateTime.UtcNow });
     await db.SaveChangesAsync();
     await CreditService.SpendCreditAsync(db, userId);
 

@@ -79,4 +79,31 @@ public class UserProvisioningServiceTests
         Assert.Equal(first.Id, second.Id);
         Assert.Single(db.Users);
     }
+
+    // TC06 — A brand new user fires exactly one Signup analytics event.
+    [Fact]
+    public async Task GetOrCreateAsync_UnseenEmail_RecordsOneSignupEvent()
+    {
+        using var db = FreshDb();
+
+        var user = await UserProvisioningService.GetOrCreateAsync(db, "fresh@example.com");
+
+        var events = db.AnalyticsEvents.Where(e => e.UserId == user.Id).ToList();
+        var signupEvent = Assert.Single(events);
+        Assert.Equal(AnalyticsEventType.Signup, signupEvent.EventType);
+    }
+
+    // TC07 — Repeat logins never fire a second Signup event for the same user.
+    // Silent failure: without this, every login would look like a new signup, and the
+    // funnel data this whole feature exists to produce would be meaningless.
+    [Fact]
+    public async Task GetOrCreateAsync_RepeatEmail_DoesNotRecordAnotherSignupEvent()
+    {
+        using var db = FreshDb();
+        var first = await UserProvisioningService.GetOrCreateAsync(db, "repeat@example.com");
+
+        await UserProvisioningService.GetOrCreateAsync(db, "repeat@example.com");
+
+        Assert.Single(db.AnalyticsEvents.Where(e => e.UserId == first.Id));
+    }
 }
