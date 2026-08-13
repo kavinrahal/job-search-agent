@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using JobSearch.Api;
 using JobSearch.Api.Services;
 using JobSearch.Data;
@@ -8,12 +9,15 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
 builder.WebHost.UseUrls($"http://+:{port}");
+// Applies to every request (webhooks included) — a native Kestrel guard against oversized payloads.
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 1_000_000);
 
 var isDev = builder.Environment.IsDevelopment();
 
@@ -134,6 +138,32 @@ if (!isDev)
 }
 
 // ---------------------------------------------------------------------------
+// Rate limiting — public webhook and cost-incurring generation endpoints
+// ---------------------------------------------------------------------------
+builder.Services.AddRateLimiter(o =>
+{
+    o.OnRejected = (ctx, _) =>
+    {
+        ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        return ValueTask.CompletedTask;
+    };
+
+    // Telegram webhook: unauthenticated (secret-token verified), internet-facing.
+    o.AddFixedWindowLimiter("webhook", w =>
+    {
+        w.PermitLimit = 60;
+        w.Window = TimeSpan.FromMinutes(1);
+    });
+
+    // Generation endpoints: credits already cap cost, this stops one signed-in user's
+    // client from retry-looping or scripted abuse. Partitioned per user, not per IP.
+    o.AddPolicy("generation", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ctx.User.FindFirstValue(UserIdClaimType) ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+});
+
+// ---------------------------------------------------------------------------
 // Pipeline
 // ---------------------------------------------------------------------------
 var app = builder.Build();
@@ -226,6 +256,8 @@ app.Use(async (ctx, next) =>
     }
     await next();
 });
+
+app.UseRateLimiter();
 
 // ---------------------------------------------------------------------------
 // Auth endpoints
@@ -640,7 +672,7 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
         AgentThreadType.Cv,
         (text, evalJson) => cvAgent.GenerateAsync(profile, text, evalJson),
         CvTailorAgent.BuildInitialUserContent);
-});
+}).RequireRateLimiting("generation");
 
 // POST /api/v1/letter — body: { discoveryId?: int, postingText?: string }
 api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher, CoverLetterAgent letterAgent) =>
@@ -656,7 +688,7 @@ api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContex
         AgentThreadType.CoverLetter,
         (text, evalJson) => letterAgent.GenerateAsync(profile, text, evalJson),
         CoverLetterAgent.BuildInitialUserContent);
-});
+}).RequireRateLimiting("generation");
 
 // POST /api/v1/answer — body: { question: string, discoveryId?: int }
 api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext db, AnswerAgent answerAgent) =>
@@ -699,7 +731,7 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
     await CreditService.SpendCreditAsync(db, userId);
 
     return Results.Ok(new { threadId = thread.Id, mode, content });
-});
+}).RequireRateLimiting("generation");
 
 // POST /api/v1/threads/{id}/edit — body: { message: string }
 // Dual-purpose, same as Telegram's /edit: on an AwaitingContext (Answer) thread this
@@ -763,7 +795,7 @@ api.MapPost("/threads/{id:int}/edit", async (
     await CreditService.SpendCreditAsync(db, userId);
 
     return Results.Ok(new { threadId = thread.Id, text, mode = answerMode, content = answerContent });
-});
+}).RequireRateLimiting("generation");
 
 // GET /api/v1/threads/{id}/pdf — renders a completed CV thread's content as a downloadable PDF
 api.MapGet("/threads/{id:int}/pdf", async (int id, AppDbContext db) =>
@@ -1207,7 +1239,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
     });
 
     return Results.Ok();
-}).AllowAnonymous();
+}).AllowAnonymous().RequireRateLimiting("webhook");
 
 // Unknown /api/* paths → 404 (prevents SPA fallback returning index.html for bad API calls)
 app.Map("/api/{**rest}", () => Results.NotFound());
