@@ -26,6 +26,7 @@ for (int i = 0; i < args.Length - 1; i++)
     else if (args[i] == "--to" && DateTimeOffset.TryParse(args[i + 1], CultureInfo.InvariantCulture, out var t))
         toDate = t;
 }
+bool testMode = days.HasValue || fromDate.HasValue;
 
 // Load secrets: dotnet user-secrets first, then environment variables
 var config = new ConfigurationBuilder()
@@ -55,308 +56,340 @@ dataProtectionServices.AddDbContext<AppDbContext>(o => o.UseNpgsql(connStr));
 dataProtectionServices.AddDataProtection().PersistKeysToDbContext<AppDbContext>().SetApplicationName("JobFindr");
 var userSecrets = new UserSecretService(dataProtectionServices.BuildServiceProvider().GetRequiredService<IDataProtectionProvider>());
 
-// Not yet looped over multiple users (see the "Adapt the worker to loop over all active
-// users" ticket) — for now the whole run acts as the single owner account.
+// clientId/clientSecret are the app's own Gmail OAuth client (shared across every user's
+// Gmail connection, like GOOGLE_CLIENT_ID for the web login) — stays an env var. Each
+// user's own refresh token lives encrypted in UserSecrets.
+var clientId     = config["GMAIL_CLIENT_ID"];
+var clientSecret = config["GMAIL_CLIENT_SECRET"];
+
+// Telegram stays personal-use-only, never extended per-user (see the Telegram retirement
+// decision) — only the owner's iteration below actually sends via it.
+var botToken = config["TELEGRAM_BOT_TOKEN"];
+var chatId   = config["TELEGRAM_CHAT_ID"];
+
+var adzunaAppId  = config["ADZUNA_APP_ID"];
+var adzunaAppKey = config["ADZUNA_APP_KEY"];
+
+// ---------------------------------------------------------------------------
+// Owner bootstrap — guarantees the owner is an "active user" (has a UserProfile and a
+// stored Gmail refresh token) by the time the loop below queries for active users. Only
+// the owner goes through this: env-var/file-seeded data and the interactive browser-auth
+// fallback are one-person, local-setup concerns, not something a real second user needs —
+// they'll onboard through a proper OAuth consent flow in a future ticket.
+// ---------------------------------------------------------------------------
 var ownerEmail = config["ALLOWED_EMAIL"] ?? "kavinrahal@gmail.com";
 var owner = await UserProvisioningService.GetOrCreateAsync(db, ownerEmail, UserTier.Tier2, 1_000_000);
-db.CurrentUserId = owner.Id;
 
-// Seed the owner's UserProfile (background/CV base/job criteria) from the same
-// context/*.{yaml,md} files the agent classes used to load once at construction — this is
-// the bridge from the old single-shared-file world into per-user data.
 await UserProfileProvisioningService.GetOrSeedAsync(db, owner.Id,
     background: SkillLoader.Load("context/background.yaml"),
     cvBase: SkillLoader.Load("context/cv_base.md"),
     jobCriteria: SkillLoader.Load("context/job_criteria.yaml"));
 
-// Auth Gmail — headless if secrets are present, browser flow as first-time fallback.
-// clientId/clientSecret are the app's own OAuth client (shared across every user's Gmail
-// connection, like GOOGLE_CLIENT_ID for the web login) — stays an env var. The refresh
-// token is per-user and lives encrypted in UserSecrets; GMAIL_REFRESH_TOKEN is only read
-// once, as a migration bridge from the pre-multi-tenant env-var setup, then persisted.
-var clientId     = config["GMAIL_CLIENT_ID"];
-var clientSecret = config["GMAIL_CLIENT_SECRET"];
-var refreshToken = await userSecrets.GetAsync(db, owner.Id, UserSecretKey.GmailRefreshToken);
-if (refreshToken is null && config["GMAIL_REFRESH_TOKEN"] is string envRefreshToken)
+var ownerRefreshToken = await userSecrets.GetAsync(db, owner.Id, UserSecretKey.GmailRefreshToken);
+if (ownerRefreshToken is null && config["GMAIL_REFRESH_TOKEN"] is string envRefreshToken)
 {
     await userSecrets.SetAsync(db, owner.Id, UserSecretKey.GmailRefreshToken, envRefreshToken);
-    refreshToken = envRefreshToken;
     Console.WriteLine("Migrated GMAIL_REFRESH_TOKEN into encrypted per-user storage.");
 }
-
-GmailClient gmail;
-if (clientId is not null && clientSecret is not null && refreshToken is not null)
+else if (ownerRefreshToken is null && clientId is null)
 {
-    gmail = await GmailClient.CreateAsync(clientId, clientSecret, refreshToken);
-    Console.WriteLine("Gmail authenticated.");
-}
-else
-{
+    // Nothing headless available at all — one-time interactive local setup. Extracts a
+    // refresh token via the browser flow and stores it, so every run after this is headless.
     string credentialsFile = config["GMAIL_CREDENTIALS_PATH"] ?? "credentials.json";
     string credentialsPath = FindFileInAncestors(credentialsFile)
         ?? throw new FileNotFoundException(
             $"Could not find '{credentialsFile}'. Set GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN in user-secrets, " +
             "or place credentials.json in the repo root for first-time browser auth.");
     string tokenStorePath = Path.GetDirectoryName(credentialsPath)!;
-    gmail = await GmailClient.CreateWithBrowserFlowAsync(credentialsPath, tokenStorePath);
-    Console.WriteLine("Gmail authenticated (browser flow).");
+    var (bootstrapClientId, bootstrapClientSecret, bootstrapRefreshToken) =
+        await GmailClient.AuthorizeWithBrowserFlowAsync(credentialsPath, tokenStorePath);
+    clientId = bootstrapClientId;
+    clientSecret = bootstrapClientSecret;
+    await userSecrets.SetAsync(db, owner.Id, UserSecretKey.GmailRefreshToken, bootstrapRefreshToken);
+    Console.WriteLine("Gmail authenticated (browser flow) — refresh token stored for future headless runs.");
 }
-
-// Determine fetch window
-DateTimeOffset? since;
-bool testMode = days.HasValue || fromDate.HasValue;
-
-if (fromDate.HasValue)
-{
-    since = fromDate;
-    string label = toDate.HasValue
-        ? $"{fromDate.Value:yyyy-MM-dd} → {toDate.Value:yyyy-MM-dd}"
-        : $"from {fromDate.Value:yyyy-MM-dd}";
-    Console.WriteLine($"Date range mode: {label}...");
-}
-else if (days.HasValue)
-{
-    since = DateTimeOffset.UtcNow.AddDays(-days.Value);
-    Console.WriteLine($"Test mode: fetching last {days} days...");
-}
-else
-{
-    var latestRaw = await db.RawEmails.OrderByDescending(r => r.ReceivedAt).Select(r => (DateTime?)r.ReceivedAt).FirstOrDefaultAsync();
-    since = latestRaw is DateTime d ? new DateTimeOffset(d, TimeSpan.Zero) : null;
-    string label = since.HasValue
-        ? since.Value.ToString("yyyy-MM-dd HH:mm UTC")
-        : "last 24 hours";
-    Console.WriteLine($"Fetching emails since {label}...");
-}
-
-var emails = await gmail.FetchEmailsSinceAsync(since, until: toDate);
-
-// Batch upsert — one query to find existing, one SaveChanges for all new rows
-var fetchedIds = emails.Select(e => e.MessageId).ToHashSet();
-var existingIds = await db.RawEmails
-    .Where(r => fetchedIds.Contains(r.MessageId))
-    .Select(r => r.MessageId)
-    .ToHashSetAsync();
-foreach (var email in emails.Where(e => !existingIds.Contains(e.MessageId)))
-{
-    db.RawEmails.Add(new RawEmailRecord
-    {
-        UserId      = owner.Id,
-        MessageId   = email.MessageId,
-        ThreadId    = email.ThreadId,
-        FromAddress = email.FromAddress,
-        Subject     = email.Subject,
-        BodyText    = email.BodyText,
-        ReceivedAt  = email.ReceivedAt.UtcDateTime,
-    });
-}
-await db.SaveChangesAsync();
-
-// Determine what to classify
-List<RawEmail> emailsToClassify;
-if (testMode)
-{
-    emailsToClassify = emails;
-}
-else
-{
-    // Newly fetched emails newer than the checkpoint
-    var fresh = since.HasValue ? emails.Where(e => e.ReceivedAt > since.Value).ToList() : emails;
-    // Plus any stored emails that were never classified
-    var unclassified = db.RawEmails
-        .Where(r => !db.Classifications.Any(c => c.MessageId == r.MessageId))
-        .AsEnumerable()
-        .Select(r => new RawEmail(
-            r.MessageId, r.ThreadId, r.FromAddress, r.Subject, r.BodyText,
-            new DateTimeOffset(r.ReceivedAt, TimeSpan.Zero)))
-        .ToList();
-    var seen = new HashSet<string>(fresh.Select(e => e.MessageId));
-    emailsToClassify = fresh.Concat(unclassified.Where(e => !seen.Contains(e.MessageId))).ToList();
-}
-
-Console.WriteLine($"Fetched {emails.Count} — classifying {emailsToClassify.Count}...");
-
-var botToken = config["TELEGRAM_BOT_TOKEN"];
-var chatId   = config["TELEGRAM_CHAT_ID"];
 
 // ---------------------------------------------------------------------------
-// Job discovery — always runs, even when there are no new emails to classify
+// Active users: Gmail connected AND a criteria profile exists. Anyone missing either is
+// skipped for now — no partial-pipeline branching for a case with no real users yet.
 // ---------------------------------------------------------------------------
-var adzunaAppId  = config["ADZUNA_APP_ID"];
-var adzunaAppKey = config["ADZUNA_APP_KEY"];
+var activeUsers = await db.Users
+    .Where(u => db.UserProfiles.Any(p => p.UserId == u.Id)
+             && db.UserSecrets.Any(s => s.UserId == u.Id && s.Key == UserSecretKey.GmailRefreshToken))
+    .ToListAsync();
 
-if (!testMode)
+Console.WriteLine($"Processing {activeUsers.Count} active user(s)...");
+
+int totalEmailsFetched = 0, totalEmailsClassified = 0, totalNewApplications = 0;
+
+foreach (var user in activeUsers)
 {
     Console.WriteLine();
-    if (adzunaAppId is null || adzunaAppKey is null)
+    Console.WriteLine($"=== {user.Email} ===");
+    try
     {
-        Console.WriteLine("Job discovery: skipped (ADZUNA_APP_ID / ADZUNA_APP_KEY not set).");
+        var result = await ProcessUserAsync(user);
+        totalEmailsFetched += result.EmailsFetched;
+        totalEmailsClassified += result.EmailsClassified;
+        totalNewApplications += result.NewApplications;
     }
-    else
+    catch (Exception ex)
     {
-        using var discoveryTelegram = botToken is not null && chatId is not null
-            ? new TelegramNotifier(botToken, chatId)
-            : null;
-
-        var discovery = new JobDiscoveryWorker(
-            db,
-            [
-                new AdzunaFetcher(adzunaAppId, adzunaAppKey),
-                new GreenhouseFetcher(),
-                new LeverFetcher(),
-            ],
-            new JobPostingFetcher(),
-            new PostingEvaluator(apiKey),
-            discoveryTelegram);
-
-        var (discovered, evaluated, notified) = await discovery.RunAsync();
-        Console.WriteLine($"Job discovery: {discovered} new, {evaluated} evaluated, {notified} notified.");
+        // One user's Gmail hiccup or API failure must not stall everyone else.
+        await Console.Error.WriteLineAsync($"[{user.Email}] Unhandled error: {ex}");
     }
 }
 
-if (emailsToClassify.Count == 0)
-{
-    Console.WriteLine("Nothing to classify.");
-    if (!testMode)
-        await RunAlertProcessing();
-    db.SystemHealth.Add(new JobSearch.Data.SystemHealth
-    {
-        CheckedAt = DateTime.UtcNow,
-        EmailsFetched = emails.Count,
-        EmailsClassified = 0,
-        NewApplications = 0,
-        DurationMs = (int)(DateTime.UtcNow - runStart).TotalMilliseconds,
-    });
-    await db.SaveChangesAsync();
-    return;
-}
-
-var classifier = new EmailClassifier(apiKey);
-var results = await classifier.ClassifyBatchAsync(emailsToClassify);
-
-var now = DateTime.UtcNow;
-foreach (var (email, clf) in results)
-{
-    var existing = await db.Classifications.FirstOrDefaultAsync(c => c.MessageId == email.MessageId);
-    if (existing is not null)
-    {
-        existing.IsJobRelated = clf.IsJobRelated;
-        existing.Category     = clf.Category;
-        existing.Confidence   = clf.Confidence;
-        existing.Company      = clf.Company;
-        existing.RoleTitle    = clf.RoleTitle;
-        existing.ClassifiedAt = now;
-    }
-    else
-    {
-        db.Classifications.Add(new ClassificationRecord
-        {
-            UserId       = owner.Id,
-            MessageId    = email.MessageId,
-            IsJobRelated = clf.IsJobRelated,
-            Category     = clf.Category,
-            Confidence   = clf.Confidence,
-            Company      = clf.Company,
-            RoleTitle    = clf.RoleTitle,
-            ClassifiedAt = now,
-        });
-    }
-}
-await db.SaveChangesAsync();
-
-var jobRelated = results.Where(r => r.Classification.IsJobRelated).ToList();
-int notRelevantCount = results.Count - jobRelated.Count;
-
-Console.WriteLine();
-Console.WriteLine($"Results: {jobRelated.Count} job-related, {notRelevantCount} not relevant.");
-
-var tracking = await ApplicationTracker.ProcessClassificationsAsync(db, results);
-if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
-    Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
-
-// Process job alert emails — query all stored alerts so previously-classified
-// ones are retried each run (dedup in JobAlertProcessor handles already-done URLs).
-if (!testMode)
-    await RunAlertProcessing();
-
-if (botToken is not null && chatId is not null)
-{
-    var pending = await db.Notifications.Where(n => n.SentAt == null).ToListAsync();
-    if (pending.Count > 0)
-    {
-        using var telegram = new TelegramNotifier(botToken, chatId);
-        var sentAt = DateTime.UtcNow;
-        int sent = 0;
-        foreach (var notification in pending)
-        {
-            if (await telegram.SendAsync(notification.Message))
-            {
-                notification.SentAt = sentAt;
-                sent++;
-            }
-        }
-        await db.SaveChangesAsync();
-        Console.WriteLine($"Telegram: {sent}/{pending.Count} notification(s) sent.");
-    }
-}
-
-if (jobRelated.Count > 0)
-{
-    var categoryLabels = new Dictionary<string, string>
-    {
-        ["application_confirmation"] = "Application confirmed",
-        ["rejection"]                = "Rejection",
-        ["interview_invitation"]     = "Interview invite",
-        ["recruiter_outreach"]       = "Recruiter outreach",
-        ["scheduling_request"]       = "Scheduling request",
-        ["offer"]                    = "Offer",
-        ["follow_up_needed"]         = "Action needed",
-        ["job_alert"]                = "Job alert",
-        ["not_relevant"]             = "Not relevant",
-    };
-
-    Console.WriteLine();
-    Console.WriteLine("Job-search emails:");
-    foreach (var (email, clf) in jobRelated)
-    {
-        string ts = email.ReceivedAt.ToString("MM-dd HH:mm");
-        string tag = categoryLabels.GetValueOrDefault(clf.Category, clf.Category);
-        string company = clf.Company.Length > 0 ? $" [{clf.Company}]" : "";
-        string role = clf.RoleTitle.Length > 0 ? $" — {clf.RoleTitle}" : "";
-        string subject = email.Subject.Length > 80 ? email.Subject[..80] : email.Subject;
-        Console.WriteLine($"  [{ts}] {tag}{company}{role}");
-        Console.WriteLine($"         {subject}");
-    }
-}
-else
-{
-    Console.WriteLine("No job-search emails found in this window.");
-}
-
-db.SystemHealth.Add(new JobSearch.Data.SystemHealth
+db.SystemHealth.Add(new SystemHealth
 {
     CheckedAt = DateTime.UtcNow,
-    EmailsFetched = emails.Count,
-    EmailsClassified = emailsToClassify.Count,
-    NewApplications = tracking.Created,
+    EmailsFetched = totalEmailsFetched,
+    EmailsClassified = totalEmailsClassified,
+    NewApplications = totalNewApplications,
     DurationMs = (int)(DateTime.UtcNow - runStart).TotalMilliseconds,
 });
 await db.SaveChangesAsync();
 
 // ---------------------------------------------------------------------------
-// Load all stored job_alert emails from DB and run the alert processor.
-// Running from DB (not just current-batch results) means previously-classified
-// alert emails are retried each run — dedup in JobAlertProcessor skips done URLs.
+// Per-user pipeline: fetch, classify, track applications, discover postings, process job
+// alerts, send notifications. Runs against its own AppDbContext (fresh per user, not the
+// bootstrap `db` above) so tracked entities and CurrentUserId never leak between users.
 // ---------------------------------------------------------------------------
-async Task RunAlertProcessing()
+async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> ProcessUserAsync(User user)
 {
-    var alertMessageIds = await db.Classifications
+    await using var userDb = new AppDbContext(dbOptions) { CurrentUserId = user.Id };
+    bool sendTelegram = user.Id == owner.Id && botToken is not null && chatId is not null;
+
+    var refreshToken = await userSecrets.GetAsync(userDb, user.Id, UserSecretKey.GmailRefreshToken);
+    if (refreshToken is null || clientId is null || clientSecret is null)
+    {
+        Console.WriteLine("Gmail not fully configured — skipped.");
+        return (0, 0, 0);
+    }
+    var gmail = await GmailClient.CreateAsync(clientId, clientSecret, refreshToken);
+
+    // Determine fetch window
+    DateTimeOffset? since;
+    if (fromDate.HasValue)
+    {
+        since = fromDate;
+        string label = toDate.HasValue
+            ? $"{fromDate.Value:yyyy-MM-dd} → {toDate.Value:yyyy-MM-dd}"
+            : $"from {fromDate.Value:yyyy-MM-dd}";
+        Console.WriteLine($"Date range mode: {label}...");
+    }
+    else if (days.HasValue)
+    {
+        since = DateTimeOffset.UtcNow.AddDays(-days.Value);
+        Console.WriteLine($"Test mode: fetching last {days} days...");
+    }
+    else
+    {
+        var latestRaw = await userDb.RawEmails.OrderByDescending(r => r.ReceivedAt).Select(r => (DateTime?)r.ReceivedAt).FirstOrDefaultAsync();
+        since = latestRaw is DateTime d ? new DateTimeOffset(d, TimeSpan.Zero) : null;
+        string label = since.HasValue
+            ? since.Value.ToString("yyyy-MM-dd HH:mm UTC")
+            : "last 24 hours";
+        Console.WriteLine($"Fetching emails since {label}...");
+    }
+
+    var emails = await gmail.FetchEmailsSinceAsync(since, until: toDate);
+
+    // Batch upsert — one query to find existing, one SaveChanges for all new rows
+    var fetchedIds = emails.Select(e => e.MessageId).ToHashSet();
+    var existingIds = await userDb.RawEmails
+        .Where(r => fetchedIds.Contains(r.MessageId))
+        .Select(r => r.MessageId)
+        .ToHashSetAsync();
+    foreach (var email in emails.Where(e => !existingIds.Contains(e.MessageId)))
+    {
+        userDb.RawEmails.Add(new RawEmailRecord
+        {
+            UserId      = user.Id,
+            MessageId   = email.MessageId,
+            ThreadId    = email.ThreadId,
+            FromAddress = email.FromAddress,
+            Subject     = email.Subject,
+            BodyText    = email.BodyText,
+            ReceivedAt  = email.ReceivedAt.UtcDateTime,
+        });
+    }
+    await userDb.SaveChangesAsync();
+
+    // Job discovery — always runs, even when there are no new emails to classify
+    if (!testMode)
+    {
+        Console.WriteLine();
+        if (adzunaAppId is null || adzunaAppKey is null)
+        {
+            Console.WriteLine("Job discovery: skipped (ADZUNA_APP_ID / ADZUNA_APP_KEY not set).");
+        }
+        else
+        {
+            using var discoveryTelegram = sendTelegram ? new TelegramNotifier(botToken!, chatId!) : null;
+            var discovery = new JobDiscoveryWorker(
+                userDb,
+                [
+                    new AdzunaFetcher(adzunaAppId, adzunaAppKey),
+                    new GreenhouseFetcher(),
+                    new LeverFetcher(),
+                ],
+                new JobPostingFetcher(),
+                new PostingEvaluator(apiKey),
+                discoveryTelegram);
+
+            var (discovered, evaluated, notified) = await discovery.RunAsync();
+            Console.WriteLine($"Job discovery: {discovered} new, {evaluated} evaluated, {notified} notified.");
+        }
+    }
+
+    // Determine what to classify
+    List<RawEmail> emailsToClassify;
+    if (testMode)
+    {
+        emailsToClassify = emails;
+    }
+    else
+    {
+        var fresh = since.HasValue ? emails.Where(e => e.ReceivedAt > since.Value).ToList() : emails;
+        var unclassified = userDb.RawEmails
+            .Where(r => !userDb.Classifications.Any(c => c.MessageId == r.MessageId))
+            .AsEnumerable()
+            .Select(r => new RawEmail(
+                r.MessageId, r.ThreadId, r.FromAddress, r.Subject, r.BodyText,
+                new DateTimeOffset(r.ReceivedAt, TimeSpan.Zero)))
+            .ToList();
+        var seen = new HashSet<string>(fresh.Select(e => e.MessageId));
+        emailsToClassify = fresh.Concat(unclassified.Where(e => !seen.Contains(e.MessageId))).ToList();
+    }
+
+    Console.WriteLine($"Fetched {emails.Count} — classifying {emailsToClassify.Count}...");
+
+    if (emailsToClassify.Count == 0)
+    {
+        Console.WriteLine("Nothing to classify.");
+        if (!testMode)
+            await RunAlertProcessingAsync(userDb, sendTelegram);
+        return (emails.Count, 0, 0);
+    }
+
+    var classifier = new EmailClassifier(apiKey);
+    var results = await classifier.ClassifyBatchAsync(emailsToClassify);
+
+    var now = DateTime.UtcNow;
+    foreach (var (email, clf) in results)
+    {
+        var existing = await userDb.Classifications.FirstOrDefaultAsync(c => c.MessageId == email.MessageId);
+        if (existing is not null)
+        {
+            existing.IsJobRelated = clf.IsJobRelated;
+            existing.Category     = clf.Category;
+            existing.Confidence   = clf.Confidence;
+            existing.Company      = clf.Company;
+            existing.RoleTitle    = clf.RoleTitle;
+            existing.ClassifiedAt = now;
+        }
+        else
+        {
+            userDb.Classifications.Add(new ClassificationRecord
+            {
+                UserId       = user.Id,
+                MessageId    = email.MessageId,
+                IsJobRelated = clf.IsJobRelated,
+                Category     = clf.Category,
+                Confidence   = clf.Confidence,
+                Company      = clf.Company,
+                RoleTitle    = clf.RoleTitle,
+                ClassifiedAt = now,
+            });
+        }
+    }
+    await userDb.SaveChangesAsync();
+
+    var jobRelated = results.Where(r => r.Classification.IsJobRelated).ToList();
+    int notRelevantCount = results.Count - jobRelated.Count;
+
+    Console.WriteLine();
+    Console.WriteLine($"Results: {jobRelated.Count} job-related, {notRelevantCount} not relevant.");
+
+    var tracking = await ApplicationTracker.ProcessClassificationsAsync(userDb, results);
+    if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
+        Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
+
+    // Process job alert emails — query all stored alerts so previously-classified
+    // ones are retried each run (dedup in JobAlertProcessor handles already-done URLs).
+    if (!testMode)
+        await RunAlertProcessingAsync(userDb, sendTelegram);
+
+    if (sendTelegram)
+    {
+        var pending = await userDb.Notifications.Where(n => n.SentAt == null).ToListAsync();
+        if (pending.Count > 0)
+        {
+            using var telegram = new TelegramNotifier(botToken!, chatId!);
+            var sentAt = DateTime.UtcNow;
+            int sent = 0;
+            foreach (var notification in pending)
+            {
+                if (await telegram.SendAsync(notification.Message))
+                {
+                    notification.SentAt = sentAt;
+                    sent++;
+                }
+            }
+            await userDb.SaveChangesAsync();
+            Console.WriteLine($"Telegram: {sent}/{pending.Count} notification(s) sent.");
+        }
+    }
+
+    if (jobRelated.Count > 0)
+    {
+        var categoryLabels = new Dictionary<string, string>
+        {
+            ["application_confirmation"] = "Application confirmed",
+            ["rejection"]                = "Rejection",
+            ["interview_invitation"]     = "Interview invite",
+            ["recruiter_outreach"]       = "Recruiter outreach",
+            ["scheduling_request"]       = "Scheduling request",
+            ["offer"]                    = "Offer",
+            ["follow_up_needed"]         = "Action needed",
+            ["job_alert"]                = "Job alert",
+            ["not_relevant"]             = "Not relevant",
+        };
+
+        Console.WriteLine();
+        Console.WriteLine("Job-search emails:");
+        foreach (var (email, clf) in jobRelated)
+        {
+            string ts = email.ReceivedAt.ToString("MM-dd HH:mm");
+            string tag = categoryLabels.GetValueOrDefault(clf.Category, clf.Category);
+            string company = clf.Company.Length > 0 ? $" [{clf.Company}]" : "";
+            string role = clf.RoleTitle.Length > 0 ? $" — {clf.RoleTitle}" : "";
+            string subject = email.Subject.Length > 80 ? email.Subject[..80] : email.Subject;
+            Console.WriteLine($"  [{ts}] {tag}{company}{role}");
+            Console.WriteLine($"         {subject}");
+        }
+    }
+    else
+    {
+        Console.WriteLine("No job-search emails found in this window.");
+    }
+
+    return (emails.Count, emailsToClassify.Count, tracking.Created);
+}
+
+// ---------------------------------------------------------------------------
+// Load all stored job_alert emails from DB and run the alert processor.
+// ---------------------------------------------------------------------------
+async Task RunAlertProcessingAsync(AppDbContext userDb, bool sendTelegram)
+{
+    var alertMessageIds = await userDb.Classifications
         .Where(c => c.Category == "job_alert" && c.IsJobRelated)
         .Select(c => c.MessageId)
         .ToHashSetAsync();
     if (alertMessageIds.Count == 0) return;
 
-    var allAlertEmails = db.RawEmails
+    var allAlertEmails = userDb.RawEmails
         .Where(r => alertMessageIds.Contains(r.MessageId))
         .AsEnumerable()
         .Select(r => new RawEmail(
@@ -365,10 +398,9 @@ async Task RunAlertProcessing()
         .ToList();
 
     Console.WriteLine();
-    using var alertTelegram = botToken is not null && chatId is not null
-        ? new TelegramNotifier(botToken, chatId) : null;
+    using var alertTelegram = sendTelegram ? new TelegramNotifier(botToken!, chatId!) : null;
     var alertProcessor = new JobAlertProcessor(
-        db, new JobPostingFetcher(), new PostingEvaluator(apiKey), alertTelegram);
+        userDb, new JobPostingFetcher(), new PostingEvaluator(apiKey), alertTelegram);
     var (found, evaluated, notified) = await alertProcessor.ProcessAsync(allAlertEmails);
     Console.WriteLine($"Job alerts: {found} URLs found, {evaluated} evaluated, {notified} notified.");
 }

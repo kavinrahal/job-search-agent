@@ -41,28 +41,26 @@ public class GmailClient
         return Task.FromResult(new GmailClient(service));
     }
 
-    // Browser OAuth flow — only needed on first-time local setup before secrets are extracted.
-    public static async Task<GmailClient> CreateWithBrowserFlowAsync(
+    // Browser OAuth flow — only needed on first-time local setup before secrets are
+    // extracted. Returns the raw client id/secret/refresh token so the caller can persist
+    // them (e.g. into encrypted UserSecrets) instead of relying on this interactive flow
+    // on every run — CreateAsync above is the headless path used after that.
+    public static async Task<(string ClientId, string ClientSecret, string RefreshToken)> AuthorizeWithBrowserFlowAsync(
         string credentialsPath, string tokenStorePath)
     {
         await using var stream = File.OpenRead(credentialsPath);
 #pragma warning disable S6966 // Google.Apis library has no FromStreamAsync equivalent
-        var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-            GoogleClientSecrets.FromStream(stream).Secrets,
+        var clientSecrets = GoogleClientSecrets.FromStream(stream).Secrets;
 #pragma warning restore S6966
+        var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
+            clientSecrets,
             [GmailService.Scope.GmailReadonly],
             "user",
             CancellationToken.None,
             new FileDataStore(tokenStorePath, fullPath: true)
         );
 
-        var service = new GmailService(new BaseClientService.Initializer
-        {
-            HttpClientInitializer = credential,
-            ApplicationName = "JobSearchAgent",
-        });
-
-        return new GmailClient(service);
+        return (clientSecrets.ClientId, clientSecrets.ClientSecret, credential.Token.RefreshToken);
     }
 
     public async Task<List<RawEmail>> FetchEmailsSinceAsync(DateTimeOffset? since, DateTimeOffset? until = null)
