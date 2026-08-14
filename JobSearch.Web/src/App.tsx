@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from "react-router-dom";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
@@ -11,7 +10,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { LandingPage } from "./pages/LandingPage";
 import { GeneratePage } from "./pages/GeneratePage";
 import { SupportPage } from "./pages/SupportPage";
-import { fetchMe, logout } from "./api";
+import { useMe, useLogout } from "./hooks/useAuth";
 
 const NAV_LINKS = [
   { to: "/",             label: "Dashboard"    },
@@ -26,8 +25,6 @@ const NAV_LINKS = [
   { to: "/health",       label: "Health"       },
 ];
 
-type AuthState = "loading" | "authenticated" | "unauthenticated";
-
 // Routes a brand new user (blank Background, per /auth/me's needsOnboarding flag) can visit
 // without being bounced back to the resume intake step — lets them move on to job criteria
 // or settings without a redirect loop, but still funnels them away from the empty Dashboard.
@@ -40,27 +37,16 @@ function OnboardingRedirect() {
 }
 
 export default function App() {
-  const [auth, setAuth] = useState<AuthState>("loading");
-  const [email, setEmail] = useState<string | null>(null);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
-
-  useEffect(() => {
-    fetchMe()
-      .then((me) => {
-        setEmail(me.email);
-        setNeedsOnboarding(me.needsOnboarding);
-        setAuth("authenticated");
-      })
-      .catch(() => setAuth("unauthenticated"));
-  }, []);
+  const { data: me, loading } = useMe();
+  const { execute: doLogout } = useLogout();
 
   async function handleLogout() {
-    await logout();
+    await doLogout();
     window.location.href = "/";
   }
 
-  if (auth === "loading") return null;
-  if (auth === "unauthenticated") return <LandingPage />;
+  if (loading) return null;
+  if (!me) return <LandingPage />;
 
   return (
     <BrowserRouter>
@@ -86,7 +72,7 @@ export default function App() {
                 </NavLink>
               ))}
               <div className="ml-4 flex items-center gap-3 border-l border-gray-200 pl-4">
-                <span className="text-xs text-gray-400">{email}</span>
+                <span className="text-xs text-gray-400">{me.email}</span>
                 <button
                   onClick={handleLogout}
                   className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
@@ -99,7 +85,7 @@ export default function App() {
         </header>
 
         <main className="mx-auto max-w-7xl px-6 py-8">
-          {needsOnboarding && <OnboardingRedirect />}
+          {me.needsOnboarding && <OnboardingRedirect />}
           <Routes>
             <Route path="/"             element={<DashboardPage />} />
             <Route path="/generate"     element={<GeneratePage />} />

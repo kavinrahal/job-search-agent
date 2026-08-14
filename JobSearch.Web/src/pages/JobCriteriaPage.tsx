@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { updateProfile } from "../api";
+import { useUpdateProfile } from "../hooks/useProfile";
 
 const EMPLOYMENT_TYPES = ["full_time", "part_time", "contract", "casual"] as const;
 const SENIORITY_LEVELS = ["junior", "mid", "senior", "lead"] as const;
@@ -85,9 +85,8 @@ const INPUT = "w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-70
 
 export function JobCriteriaPage() {
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { execute, loading: saving, error } = useUpdateProfile();
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(f => ({ ...f, [key]: value }));
@@ -104,16 +103,8 @@ export function JobCriteriaPage() {
   }
 
   async function handleSave() {
-    setSaving(true);
-    setError(null);
-    try {
-      await updateProfile({ jobCriteria: buildCriteriaYaml(form) });
-      setSaved(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-    } finally {
-      setSaving(false);
-    }
+    await execute({ jobCriteria: buildCriteriaYaml(form) });
+    setSaved(true);
   }
 
   return (

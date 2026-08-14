@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
-import { fetchActivity } from "../api";
-import type { ActivityItem } from "../types";
+import { useState } from "react";
+import { useActivity } from "../hooks/useDashboardData";
 
 const EVENT_COLORS: Record<string, string> = {
   StatusChanged: "bg-blue-100 text-blue-700",
@@ -21,19 +20,9 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function ActivityPage() {
-  const [items, setItems] = useState<ActivityItem[]>([]);
   const [limit, setLimit] = useState(30);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    fetchActivity(limit)
-      .then(setItems)
-      .catch(e => setError(e instanceof Error ? e.message : "Failed to load"))
-      .finally(() => setLoading(false));
-  }, [limit]);
+  const { data, error, loading } = useActivity(limit);
+  const items = data ?? [];
 
   return (
     <div className="space-y-6">

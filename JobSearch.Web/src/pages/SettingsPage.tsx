@@ -1,56 +1,42 @@
 import { useEffect, useState } from "react";
-import { fetchProfile, updateProfile, cancelAccount } from "../api";
+import { useProfile, useUpdateProfile } from "../hooks/useProfile";
+import { useCancelAccount } from "../hooks/useAuth";
 
 const TEXTAREA = "w-full rounded-lg border border-gray-200 p-3 font-mono text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300";
 const LABEL = "mb-2 block text-sm font-medium text-gray-700";
 
 export function SettingsPage() {
+  const { data: profile, loading: loadingProfile } = useProfile();
   const [background, setBackground] = useState("");
   const [cvBase, setCvBase] = useState("");
   const [jobCriteria, setJobCriteria] = useState("");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const save = useUpdateProfile();
+  const cancel = useCancelAccount();
 
   useEffect(() => {
-    fetchProfile()
-      .then(p => {
-        setBackground(p.background);
-        setCvBase(p.cvBase);
-        setJobCriteria(p.jobCriteria);
-        setUpdatedAt(p.updatedAt);
-      })
-      .catch(e => setError(e instanceof Error ? e.message : "Failed to load profile"))
-      .finally(() => setLoading(false));
-  }, []);
+    if (!profile) return;
+    setBackground(profile.background);
+    setCvBase(profile.cvBase);
+    setJobCriteria(profile.jobCriteria);
+    setUpdatedAt(profile.updatedAt);
+  }, [profile]);
 
   async function handleSave() {
-    setSaving(true);
-    setError(null);
-    try {
-      const updated = await updateProfile({ background, cvBase, jobCriteria });
-      setUpdatedAt(updated.updatedAt);
-      setSaved(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-    } finally {
-      setSaving(false);
-    }
+    const updated = await save.execute({ background, cvBase, jobCriteria });
+    setUpdatedAt(updated.updatedAt);
+    setSaved(true);
   }
 
   async function handleCancelAccount() {
     if (!confirm("Cancel your account? You'll be signed out and won't be able to log back in unless it's reactivated. Your data is kept, not deleted.")) return;
-    try {
-      await cancelAccount();
-      window.location.href = "/";
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to cancel account");
-    }
+    await cancel.execute();
+    window.location.href = "/";
   }
 
-  if (loading) return <div className="py-12 text-center text-sm text-gray-400">Loading…</div>;
+  if (loadingProfile) return <div className="py-12 text-center text-sm text-gray-400">Loading…</div>;
 
   return (
     <div className="space-y-6">
@@ -86,16 +72,16 @@ export function SettingsPage() {
       <div className="flex items-center gap-3">
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={save.loading}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
-          {saving ? "Saving…" : "Save changes"}
+          {save.loading ? "Saving…" : "Save changes"}
         </button>
         {saved && <span className="text-sm text-emerald-600">Saved.</span>}
       </div>
 
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+      {save.error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{save.error}</div>
       )}
 
       <div className="rounded-xl border border-red-200 bg-white p-5 shadow-sm">
@@ -110,6 +96,7 @@ export function SettingsPage() {
         >
           Cancel my account
         </button>
+        {cancel.error && <p className="mt-2 text-sm text-red-700">{cancel.error}</p>}
       </div>
     </div>
   );

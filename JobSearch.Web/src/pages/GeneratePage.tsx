@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { generateCv, generateLetter, askQuestion, editThread, cvPdfUrl, InsufficientCreditsError } from "../api";
+import { cvPdfUrl } from "../api";
+import { useGenerateCv, useGenerateLetter, useAskQuestion, useEditThread } from "../hooks/useGeneration";
 import type { GenerationResult } from "../types";
 
 type Mode = "url" | "text";
@@ -24,22 +25,11 @@ function RevisionBox({ threadId, placeholder, onRevised }: {
   threadId: number; placeholder: string; onRevised: (r: GenerationResult) => void;
 }) {
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { execute, loading, error } = useEditThread();
 
   async function handleSubmit() {
-    setBusy(true);
-    setError(null);
-    try {
-      onRevised(await editThread(threadId, message));
-      setMessage("");
-    } catch (e) {
-      setError(e instanceof InsufficientCreditsError
-        ? "You're out of credits."
-        : e instanceof Error ? e.message : "Something went wrong");
-    } finally {
-      setBusy(false);
-    }
+    onRevised(await execute(threadId, message));
+    setMessage("");
   }
 
   return (
@@ -53,10 +43,10 @@ function RevisionBox({ threadId, placeholder, onRevised }: {
         />
         <button
           onClick={handleSubmit}
-          disabled={message.trim().length === 0 || busy}
+          disabled={message.trim().length === 0 || loading}
           className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {busy ? "Sending…" : "Send"}
+          {loading ? "Sending…" : "Send"}
         </button>
       </div>
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
@@ -69,55 +59,28 @@ export function GeneratePage() {
   const [postingUrl, setPostingUrl] = useState("");
   const [postingText, setPostingText] = useState("");
   const [question, setQuestion] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [cvResult, setCvResult] = useState<GenerationResult | null>(null);
   const [letterResult, setLetterResult] = useState<GenerationResult | null>(null);
   const [answerResult, setAnswerResult] = useState<GenerationResult | null>(null);
 
+  const generateCv = useGenerateCv();
+  const generateLetter = useGenerateLetter();
+  const askQuestion = useAskQuestion();
+
   const postingInput = mode === "url" ? { postingUrl } : { postingText };
   const canSubmitPosting = mode === "url" ? postingUrl.trim().length > 0 : postingText.trim().length > 0;
-
-  function handleError(e: unknown) {
-    setError(e instanceof InsufficientCreditsError
-      ? "You're out of credits."
-      : e instanceof Error ? e.message : "Something went wrong");
-  }
+  const error = generateCv.error ?? generateLetter.error ?? askQuestion.error;
 
   async function handleGenerateCv() {
-    setBusy("cv");
-    setError(null);
-    try {
-      setCvResult(await generateCv(postingInput));
-    } catch (e) {
-      handleError(e);
-    } finally {
-      setBusy(null);
-    }
+    setCvResult(await generateCv.execute(postingInput));
   }
 
   async function handleGenerateLetter() {
-    setBusy("letter");
-    setError(null);
-    try {
-      setLetterResult(await generateLetter(postingInput));
-    } catch (e) {
-      handleError(e);
-    } finally {
-      setBusy(null);
-    }
+    setLetterResult(await generateLetter.execute(postingInput));
   }
 
   async function handleAskQuestion() {
-    setBusy("answer");
-    setError(null);
-    try {
-      setAnswerResult(await askQuestion({ question, postingUrl: mode === "url" ? postingUrl : undefined }));
-    } catch (e) {
-      handleError(e);
-    } finally {
-      setBusy(null);
-    }
+    setAnswerResult(await askQuestion.execute({ question, postingUrl: mode === "url" ? postingUrl : undefined }));
   }
 
   return (
@@ -150,17 +113,17 @@ export function GeneratePage() {
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             onClick={handleGenerateCv}
-            disabled={!canSubmitPosting || busy !== null}
+            disabled={!canSubmitPosting || generateCv.loading}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
-            {busy === "cv" ? "Generating…" : "Generate CV"}
+            {generateCv.loading ? "Generating…" : "Generate CV"}
           </button>
           <button
             onClick={handleGenerateLetter}
-            disabled={!canSubmitPosting || busy !== null}
+            disabled={!canSubmitPosting || generateLetter.loading}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
-            {busy === "letter" ? "Generating…" : "Generate cover letter"}
+            {generateLetter.loading ? "Generating…" : "Generate cover letter"}
           </button>
         </div>
       </div>
@@ -205,10 +168,10 @@ export function GeneratePage() {
           />
           <button
             onClick={handleAskQuestion}
-            disabled={question.trim().length === 0 || busy !== null}
+            disabled={question.trim().length === 0 || askQuestion.loading}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
-            {busy === "answer" ? "Asking…" : "Ask"}
+            {askQuestion.loading ? "Asking…" : "Ask"}
           </button>
         </div>
         {answerResult && (

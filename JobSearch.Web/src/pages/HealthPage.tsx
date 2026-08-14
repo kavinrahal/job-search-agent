@@ -1,6 +1,4 @@
-import { useState, useEffect } from "react";
-import { fetchHealth } from "../api";
-import type { HealthStatus } from "../types";
+import { useHealth } from "../hooks/useDashboardData";
 
 function StatRow({ label, value }: { label: string; value: string | number | null }) {
   return (
@@ -12,14 +10,7 @@ function StatRow({ label, value }: { label: string; value: string | number | nul
 }
 
 export function HealthPage() {
-  const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchHealth()
-      .then(setHealth)
-      .catch(e => setError(e instanceof Error ? e.message : "Failed to load"));
-  }, []);
+  const { data: health, error } = useHealth();
 
   const statusConfig = {
     ok:      { label: "Healthy",  bg: "bg-emerald-50",  border: "border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500" },

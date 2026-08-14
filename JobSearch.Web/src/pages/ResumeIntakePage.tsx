@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { parseResumePdf, parseResumeText, updateProfile } from "../api";
+import { useParseResumeText, useParseResumePdf, useUpdateProfile } from "../hooks/useProfile";
 import type { ParsedResume } from "../types";
 
 type Mode = "text" | "pdf";
@@ -11,38 +11,26 @@ export function ResumeIntakePage() {
   const [parsed, setParsed] = useState<ParsedResume | null>(null);
   const [background, setBackground] = useState("");
   const [cvBase, setCvBase] = useState("");
-  const [parsing, setParsing] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const parseText = useParseResumeText();
+  const parsePdf = useParseResumePdf();
+  const save = useUpdateProfile();
+
+  const parsing = parseText.loading || parsePdf.loading;
+  const error = parseText.error ?? parsePdf.error ?? save.error;
 
   async function handleParse() {
-    setParsing(true);
-    setError(null);
     setSaved(false);
-    try {
-      const result = mode === "text" ? await parseResumeText(resumeText) : await parseResumePdf(file!);
-      setParsed(result);
-      setBackground(result.background);
-      setCvBase(result.cvBase);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to parse resume");
-    } finally {
-      setParsing(false);
-    }
+    const result = mode === "text" ? await parseText.execute(resumeText) : await parsePdf.execute(file!);
+    setParsed(result);
+    setBackground(result.background);
+    setCvBase(result.cvBase);
   }
 
   async function handleSave() {
-    setSaving(true);
-    setError(null);
-    try {
-      await updateProfile({ background, cvBase });
-      setSaved(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-    } finally {
-      setSaving(false);
-    }
+    await save.execute({ background, cvBase });
+    setSaved(true);
   }
 
   const canParse = mode === "text" ? resumeText.trim().length > 0 : file !== null;
@@ -128,10 +116,10 @@ export function ResumeIntakePage() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={save.loading}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
-              {saving ? "Saving…" : "Save to profile"}
+              {save.loading ? "Saving…" : "Save to profile"}
             </button>
             <button
               onClick={() => { setParsed(null); setSaved(false); }}

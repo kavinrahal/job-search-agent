@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { fetchEmails } from "../api";
-import type { EmailItem } from "../types";
+import { useState, useEffect } from "react";
+import { useEmails } from "../hooks/useDashboardData";
 
 const CATEGORY_LABELS: Record<string, string> = {
   application_confirmation: "Application confirmed",
@@ -41,39 +40,26 @@ export function EmailTable({
   onCategoryChange,
   onJobRelatedChange,
 }: EmailTableProps) {
-  const [emails, setEmails] = useState<EmailItem[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
   // Reset to page 1 whenever any filter changes.
   useEffect(() => { setPage(1); }, [category, jobRelatedOnly, from, to]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetchEmails({
-        page,
-        pageSize: PAGE_SIZE,
-        category: category || undefined,
-        jobRelatedOnly: jobRelatedOnly || undefined,
-        from: from || undefined,
-        to: to || undefined,
-      });
-      setEmails(res.items);
-      setTotal(res.total);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, category, jobRelatedOnly, from, to]);
+  const { data, error, loading, reload } = useEmails({
+    page,
+    pageSize: PAGE_SIZE,
+    category: category || undefined,
+    jobRelatedOnly: jobRelatedOnly || undefined,
+    from: from || undefined,
+    to: to || undefined,
+  });
+  const emails = data?.items ?? [];
+  const total = data?.total ?? 0;
 
-  useEffect(() => { void load(); }, [load, refreshKey]);
+  // refreshKey is bumped by the parent's manual refresh button, with no other dep changing.
+  useEffect(() => { if (refreshKey > 0) reload(); }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 

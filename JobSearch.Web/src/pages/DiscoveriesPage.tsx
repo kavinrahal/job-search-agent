@@ -1,5 +1,5 @@
-import { useState, useEffect, Fragment } from "react";
-import { fetchDiscoveries } from "../api";
+import { useState, Fragment } from "react";
+import { useDiscoveries } from "../hooks/useDashboardData";
 import type { DiscoveredPosting } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -224,26 +224,13 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
 // ---------------------------------------------------------------------------
 export function DiscoveriesPage() {
   const [activeTab, setActiveTab] = useState<string>("strong_match");
-  const [postings, setPostings] = useState<DiscoveredPosting[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    fetchDiscoveries({
-      recommendation: activeTab || undefined,
-      pageSize: 100,
-    })
-      .then(res => {
-        const visible = res.items.filter(p => p.recommendation !== "discard");
-        setPostings(visible);
-        setTotal(res.total);
-      })
-      .catch(e => setError(e instanceof Error ? e.message : "Failed to load"))
-      .finally(() => setLoading(false));
-  }, [activeTab]);
+  const { data, error, loading } = useDiscoveries({
+    recommendation: activeTab || undefined,
+    pageSize: 100,
+  });
+  const postings = data?.items.filter(p => p.recommendation !== "discard") ?? [];
+  const total = data?.total ?? 0;
 
   return (
     <div className="space-y-6">

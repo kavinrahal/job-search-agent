@@ -1,24 +1,15 @@
 import { useState } from "react";
-import { submitSupportMessage } from "../api";
+import { useSupportMessage } from "../hooks/useSupport";
 
 export function SupportPage() {
   const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { execute, loading, error } = useSupportMessage();
 
   async function handleSubmit() {
-    setSending(true);
-    setError(null);
-    try {
-      await submitSupportMessage(message);
-      setMessage("");
-      setSent(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to send");
-    } finally {
-      setSending(false);
-    }
+    await execute(message);
+    setMessage("");
+    setSent(true);
   }
 
   return (
@@ -38,10 +29,10 @@ export function SupportPage() {
         <div className="mt-4 flex items-center gap-3">
           <button
             onClick={handleSubmit}
-            disabled={message.trim().length === 0 || sending}
+            disabled={message.trim().length === 0 || loading}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
-            {sending ? "Sending…" : "Send"}
+            {loading ? "Sending…" : "Send"}
           </button>
           {sent && <span className="text-sm text-emerald-600">Sent — we'll get back to you.</span>}
         </div>

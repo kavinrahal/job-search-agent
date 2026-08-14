@@ -1,37 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchSummary } from "../api";
-import type { Summary } from "../types";
+import { useSummary } from "../hooks/useDashboardData";
 import { SummaryCards } from "../components/SummaryCards";
 import { EmailTable } from "../components/EmailTable";
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const { data: summary, error, loading, reload } = useSummary();
 
   // Owned here so SummaryCards can drive them and EmailTable stays in sync.
   const [category, setCategory] = useState("");
   const [jobRelatedOnly, setJobRelatedOnly] = useState(false);
 
-  const loadSummary = useCallback(async () => {
-    try {
-      setSummary(await fetchSummary());
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load summary");
-    }
-  }, []);
-
-  useEffect(() => { void loadSummary(); }, [loadSummary, refreshKey]);
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    await loadSummary();
+  function handleRefresh() {
+    reload();
     setRefreshKey(k => k + 1);
-    setRefreshing(false);
   }
 
   return (
@@ -47,10 +31,10 @@ export function DashboardPage() {
           <h2 className="text-lg font-semibold text-gray-700">Overview</h2>
           <button
             onClick={handleRefresh}
-            disabled={refreshing}
+            disabled={loading}
             className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-50 disabled:opacity-40"
           >
-            {refreshing ? "Refreshing…" : "Refresh"}
+            {loading ? "Refreshing…" : "Refresh"}
           </button>
         </div>
         {summary && (
