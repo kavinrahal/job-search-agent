@@ -289,7 +289,14 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
     var userId = int.Parse(ctx.User.FindFirstValue(UserIdClaimType)!, CultureInfo.InvariantCulture);
     var user = await db.Users.FindAsync(userId);
     if (user is null) return Results.Unauthorized();
-    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance });
+
+    // A blank Background is exactly the state the login handler creates for a brand new
+    // user (see UserProfileProvisioningService.GetOrSeedAsync call in OnCreatingTicket) — the
+    // owner's is always seeded with real content, so this only ever flags a genuine first-timer.
+    var profile = await db.UserProfiles.FindAsync(userId);
+    bool needsOnboarding = string.IsNullOrEmpty(profile?.Background);
+
+    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding });
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>

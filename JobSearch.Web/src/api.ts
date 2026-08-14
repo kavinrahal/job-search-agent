@@ -76,7 +76,7 @@ export async function fetchDiscoveries(params: {
   return get(`/discoveries${qs(params)}`);
 }
 
-export async function fetchMe(): Promise<{ email: string }> {
+export async function fetchMe(): Promise<{ email: string; needsOnboarding: boolean }> {
   return get("/auth/me");
 }
 

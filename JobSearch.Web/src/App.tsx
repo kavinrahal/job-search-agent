@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from "react-router-dom";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
 import { ActivityPage } from "./pages/ActivityPage";
@@ -8,6 +8,7 @@ import { DiscoveriesPage } from "./pages/DiscoveriesPage";
 import { ResumeIntakePage } from "./pages/ResumeIntakePage";
 import { JobCriteriaPage } from "./pages/JobCriteriaPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { LandingPage } from "./pages/LandingPage";
 import { fetchMe, logout } from "./api";
 
 const NAV_LINKS = [
@@ -23,31 +24,39 @@ const NAV_LINKS = [
 
 type AuthState = "loading" | "authenticated" | "unauthenticated";
 
+// Routes a brand new user (blank Background, per /auth/me's needsOnboarding flag) can visit
+// without being bounced back to the resume intake step — lets them move on to job criteria
+// or settings without a redirect loop, but still funnels them away from the empty Dashboard.
+const ONBOARDING_ROUTES = ["/profile", "/criteria", "/settings"];
+
+function OnboardingRedirect() {
+  const location = useLocation();
+  if (ONBOARDING_ROUTES.includes(location.pathname)) return null;
+  return <Navigate to="/profile" replace />;
+}
+
 export default function App() {
   const [auth, setAuth] = useState<AuthState>("loading");
   const [email, setEmail] = useState<string | null>(null);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
     fetchMe()
       .then((me) => {
         setEmail(me.email);
+        setNeedsOnboarding(me.needsOnboarding);
         setAuth("authenticated");
       })
       .catch(() => setAuth("unauthenticated"));
   }, []);
 
-  useEffect(() => {
-    if (auth === "unauthenticated") {
-      window.location.href = "/api/v1/auth/login";
-    }
-  }, [auth]);
-
   async function handleLogout() {
     await logout();
-    window.location.href = "/api/v1/auth/login";
+    window.location.href = "/";
   }
 
-  if (auth !== "authenticated") return null;
+  if (auth === "loading") return null;
+  if (auth === "unauthenticated") return <LandingPage />;
 
   return (
     <BrowserRouter>
@@ -86,6 +95,7 @@ export default function App() {
         </header>
 
         <main className="mx-auto max-w-7xl px-6 py-8">
+          {needsOnboarding && <OnboardingRedirect />}
           <Routes>
             <Route path="/"             element={<DashboardPage />} />
             <Route path="/discover"     element={<DiscoveriesPage />} />
