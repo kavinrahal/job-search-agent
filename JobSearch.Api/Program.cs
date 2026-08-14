@@ -38,6 +38,14 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 var ownerEmail = builder.Configuration["ALLOWED_EMAIL"] ?? "kavinrahal@gmail.com";
 const string UserIdClaimType = "jobfindr:uid";
 
+// Where to send the browser after the OAuth round-trip completes — the frontend's own URL,
+// now that it's a separate deployment from the API and there's nothing to redirect to at
+// the API's own root anymore. Only required outside dev, where the SPA runs on Vite's own
+// port instead.
+var frontendUrl = isDev
+    ? null
+    : builder.Configuration["FRONTEND_URL"] ?? throw new InvalidOperationException("FRONTEND_URL not set");
+
 builder.Services.AddAuthentication(o =>
 {
     o.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -283,9 +291,9 @@ app.UseRateLimiter();
 // ---------------------------------------------------------------------------
 app.MapGet("/api/v1/auth/login", (HttpContext ctx) =>
 {
-    // After the OAuth round-trip, redirect back to the SPA root.
-    // In dev we run the SPA on the Vite port, so redirect there instead.
-    var redirectUri = isDev ? "http://localhost:5173/" : "/";
+    // After the OAuth round-trip, redirect back to the SPA — its own separate deployment in
+    // prod (frontendUrl), Vite's own port in dev.
+    var redirectUri = isDev ? "http://localhost:5173/" : frontendUrl!;
     return Results.Challenge(
         new AuthenticationProperties { RedirectUri = redirectUri },
         [GoogleDefaults.AuthenticationScheme]);
