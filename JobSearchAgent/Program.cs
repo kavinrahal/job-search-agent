@@ -48,6 +48,14 @@ var dbOptions = new DbContextOptionsBuilder<AppDbContext>()
 await using var db = new AppDbContext(dbOptions);
 await db.Database.MigrateAsync();
 
+// Guards against two runs overlapping if a cron trigger fires before the previous run
+// finished — see WorkerLockService for why a plain load-then-save check is fine here.
+if (!await WorkerLockService.TryAcquireAsync(db, DateTime.UtcNow))
+{
+    Console.WriteLine("Another run is still in progress — skipping this trigger.");
+    return;
+}
+
 // Data Protection key ring persisted to Postgres (not the framework's local-disk default)
 // since this worker and JobSearch.Api are separate processes on ephemeral containers that
 // both need to decrypt UserSecrets encrypted by either one.
@@ -153,6 +161,8 @@ db.SystemHealth.Add(new SystemHealth
     DurationMs = (int)(DateTime.UtcNow - runStart).TotalMilliseconds,
 });
 await db.SaveChangesAsync();
+
+await WorkerLockService.ReleaseAsync(db);
 
 // ---------------------------------------------------------------------------
 // Per-user pipeline: fetch, classify, track applications, discover postings, process job
