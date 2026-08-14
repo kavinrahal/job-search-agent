@@ -45,9 +45,9 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     // maxPoolSize caps this process's Npgsql pool explicitly — the Npgsql default (100) is as
     // large as Postgres's own default max_connections, so one process alone could exhaust the
     // database's entire connection budget with nothing left for the other process (API vs.
-    // worker each get their own pool) or a manual psql session. 20 is a conservative default
-    // safe on any Railway Postgres tier; tune it against the real limit (`SHOW max_connections;`
-    // via psql) once confirmed.
+    // worker each get their own pool) or a manual psql session. Confirmed via `SHOW
+    // max_connections;` that this Railway instance's limit is 100 — API (20) + worker (10)
+    // leaves 70 connections of headroom for growth, manual access, and margin of error.
     public static string GetConnectionString(string? configured = null, int maxPoolSize = 20)
     {
         var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
