@@ -10,6 +10,7 @@ import { JobCriteriaPage } from "./pages/JobCriteriaPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LandingPage } from "./pages/LandingPage";
 import { GeneratePage } from "./pages/GeneratePage";
+import { SupportPage } from "./pages/SupportPage";
 import { fetchMe, logout } from "./api";
 
 const NAV_LINKS = [
@@ -21,6 +22,7 @@ const NAV_LINKS = [
   { to: "/profile",      label: "Profile"      },
   { to: "/criteria",     label: "Criteria"     },
   { to: "/settings",     label: "Settings"     },
+  { to: "/support",      label: "Support"      },
   { to: "/health",       label: "Health"       },
 ];
 
@@ -107,6 +109,7 @@ export default function App() {
             <Route path="/profile"      element={<ResumeIntakePage />} />
             <Route path="/criteria"     element={<JobCriteriaPage />} />
             <Route path="/settings"     element={<SettingsPage />} />
+            <Route path="/support"      element={<SupportPage />} />
             <Route path="/health"       element={<HealthPage />} />
           </Routes>
         </main>

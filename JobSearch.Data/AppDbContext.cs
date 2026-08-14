@@ -33,6 +33,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<ClaudeUsageLog> ClaudeUsageLogs { get; set; }
     public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; }
     public DbSet<WorkerLock> WorkerLocks { get; set; }
+    public DbSet<SupportMessage> SupportMessages { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -176,5 +177,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasIndex(a => a.CreatedAt);
         });
 
+        modelBuilder.Entity<SupportMessage>()
+            .HasIndex(s => s.CreatedAt);
     }
 }

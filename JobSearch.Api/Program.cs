@@ -613,6 +613,42 @@ api.MapGet("/admin/analytics", async (HttpContext ctx, AppDbContext db) =>
     return Results.Ok(await AnalyticsService.GetSummaryAsync(db, DateTime.UtcNow));
 });
 
+// POST /api/v1/support — body: { message: string }. Email/UserId are taken from the
+// authenticated session, not the request body, so the form itself only needs a message.
+api.MapPost("/support", async (HttpContext ctx, SupportMessageRequest body, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var user = await db.Users.FindAsync(userId);
+    if (user is null) return Results.NotFound();
+
+    db.SupportMessages.Add(new SupportMessage
+    {
+        UserId = userId,
+        Email = user.Email,
+        Message = body.Message,
+        CreatedAt = DateTime.UtcNow,
+    });
+    await db.SaveChangesAsync();
+
+    return Results.Ok();
+});
+
+// GET /api/v1/admin/support — owner-only, no dedicated frontend page (same as
+// /admin/analytics) — recent submissions, newest first.
+api.MapGet("/admin/support", async (HttpContext ctx, AppDbContext db) =>
+{
+    if (CurrentUserId(ctx, UserIdClaimType) != ownerUserId)
+        return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+
+    var messages = await db.SupportMessages
+        .OrderByDescending(m => m.CreatedAt)
+        .Take(100)
+        .Select(m => new { m.Id, m.Email, m.Message, m.CreatedAt })
+        .ToListAsync();
+
+    return Results.Ok(messages);
+});
+
 // ---------------------------------------------------------------------------
 // Onboarding — resume parsing, and saving the result to a profile.
 // ---------------------------------------------------------------------------
