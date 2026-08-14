@@ -181,4 +181,47 @@ public class HttpFetcherTests
             HttpRequestMessage _, CancellationToken __) =>
             Task.FromResult(factory());
     }
+
+    // =========================================================================
+    // JoraFetcher
+    // =========================================================================
+
+    // TC11 — job cards parsed into JobFeedItems with title/company/location/url from the
+    // save-button's data-* attributes, paired with the matching href for the URL.
+    [Fact]
+    public async Task Jora_SearchResults_MappedToFeedItems()
+    {
+        var fetcher = new JoraFetcher(Stub(Fixture("jora_search.html")));
+
+        var items = await fetcher.SearchAsync("software engineer", "Melbourne");
+
+        var job = items.Single(i => i.Company == "Mintec Systems");
+        Assert.Equal("Software Engineer - Java Developer", job.Title);
+        Assert.Equal("Melbourne VIC", job.Location);
+        Assert.Equal("https://au.jora.com/job/Software-Engineer-7fd5d2fc90da82fe6c17abf9ada95262", job.Url);
+        Assert.Equal("jora", job.Source);
+    }
+
+    // TC12 — both cards in the fixture are parsed, not just the first
+    [Fact]
+    public async Task Jora_SearchResults_AllCardsParsed()
+    {
+        var fetcher = new JoraFetcher(Stub(Fixture("jora_search.html")));
+
+        var items = await fetcher.SearchAsync("cabinet maker", "Melbourne");
+
+        Assert.Equal(2, items.Count);
+    }
+
+    // TC13 — request failure returns an empty list rather than throwing
+    // Silent failure: an unhandled exception here would abort the whole cross-check attempt.
+    [Fact]
+    public async Task Jora_RequestFails_ReturnsEmptyList()
+    {
+        var fetcher = new JoraFetcher(Stub("", HttpStatusCode.ServiceUnavailable));
+
+        var items = await fetcher.SearchAsync("software engineer", "Melbourne");
+
+        Assert.Empty(items);
+    }
 }

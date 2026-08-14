@@ -38,7 +38,7 @@ public class AdzunaFetcher : IJobFetcher
         {
             try
             {
-                var items = await FetchKeywordAsync(keyword);
+                var items = await FetchKeywordAsync(keyword, "melbourne");
                 foreach (var item in items.Where(i => seen.Add(i.Url)))
                     results.Add(item);
                 Console.WriteLine($"[Adzuna] '{keyword}': {items.Count} results");
@@ -53,7 +53,21 @@ public class AdzunaFetcher : IJobFetcher
         return results;
     }
 
-    private async Task<List<JobFeedItem>> FetchKeywordAsync(string keyword)
+    // Used for the Seek cross-check (JobAlertProcessor): a one-off targeted search rather
+    // than the fixed keyword sweep FetchAllAsync runs for proactive discovery.
+    public virtual async Task<List<JobFeedItem>> SearchAsync(string keywords, string location)
+    {
+        try
+        {
+            return await FetchKeywordAsync(keywords, location);
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private async Task<List<JobFeedItem>> FetchKeywordAsync(string keyword, string location)
     {
 #pragma warning disable S1075 // Adzuna public API base URL — not a configurable path
         var url = "https://api.adzuna.com/v1/api/jobs/au/search/1" +
@@ -61,7 +75,7 @@ public class AdzunaFetcher : IJobFetcher
             $"&app_key={Uri.EscapeDataString(_appKey)}" +
             $"&results_per_page=20" +
             $"&what={Uri.EscapeDataString(keyword)}" +
-            $"&where=melbourne" +
+            $"&where={Uri.EscapeDataString(location)}" +
             $"&max_days_old=14" +
             $"&sort_by=date" +
             $"&content-type=application%2Fjson";

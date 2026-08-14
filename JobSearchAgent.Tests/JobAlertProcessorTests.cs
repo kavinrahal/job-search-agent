@@ -1,4 +1,5 @@
 using JobSearch.Data;
+using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
 using JobSearchAgent.Workers;
 
@@ -333,6 +334,92 @@ public class JobAlertProcessorTests
         Assert.Equal(0, notified);
     }
 
+    // TC-P10 — Fetch fails, cross-check finds a confident match → evaluated on the matched
+    // candidate's content, not the thin email snippet.
+    // Silent failure: if the matched candidate is ignored, the whole cross-check feature is a
+    // no-op and postings silently keep evaluating on the thin fallback text.
+    [Fact]
+    public async Task ProcessAsync_FetchFailsCrossCheckMatches_EvaluatesOnMatchedContent()
+    {
+        var db = Db.Fresh();
+        var url = "https://au.seek.com/job/90000001";
+        var matched = new JobFeedItem { Title = "Backend Engineer", Company = "Mintec Systems", Url = "https://au.jora.com/job/xyz", Description = "Real full description here.", Source = "jora" };
+        string? capturedText = null;
+        var processor = MakeProcessor(
+            db,
+            fetcher: new FakeFetcher(_ => Task.FromException<string>(new HttpRequestException("blocked"))),
+            joraFetcher: new FakeJoraFetcher(_ => [matched]),
+            matcher: new FakeMatcher((_, candidates) => candidates.Single()),
+            evaluator: new FakeEvaluator(text => { capturedText = text; return StubEval("good_match"); }));
+        var email = Make.Email(bodyText: $"Software Engineer\nMintec Systems\n\nMelbourne VIC\n\n{url}");
+
+        await processor.ProcessAsync([email]);
+
+        Assert.NotNull(capturedText);
+        Assert.Contains("Real full description here.", capturedText);
+    }
+
+    // TC-P11 — Fetch fails, no candidates found anywhere → honest metadata-only fallback,
+    // not an error record.
+    [Fact]
+    public async Task ProcessAsync_FetchFailsNoCrossCheckMatch_HonestFallbackNoError()
+    {
+        var db = Db.Fresh();
+        var url = "https://au.seek.com/job/90000002";
+        var processor = MakeProcessor(
+            db,
+            fetcher: new FakeFetcher(_ => Task.FromException<string>(new HttpRequestException("blocked"))),
+            joraFetcher: new FakeJoraFetcher(_ => []));
+        var email = Make.Email(bodyText: $"Software Engineer\nMintec Systems\n\nMelbourne VIC\n\n{url}");
+
+        await processor.ProcessAsync([email]);
+
+        var record = db.DiscoveredPostings.Single(d => d.Url == url);
+        Assert.NotEqual("error", record.Recommendation);
+    }
+
+    // =========================================================================
+    // ExtractSearchContext
+    // =========================================================================
+
+    // TC-C1 — Typical Seek alert layout (title/company blank-line location/salary blank-line url)
+    // grabs the meaningful lines, skipping the blank lines between them.
+    [Fact]
+    public void ExtractSearchContext_TypicalAlertLayout_GrabsTitleCompanyLocation()
+    {
+        var url = "https://au.seek.com/job/93942243";
+        var body = $"found 20 new jobs.\n\nSoftware Engineer - Java developer\nMintec Systems\n\nMelbourne VIC\n$110,000 – $130,000 per year\n\n[{url}]";
+
+        var context = JobAlertProcessor.ExtractSearchContext(body, url);
+
+        Assert.Contains("Software Engineer - Java developer", context);
+        Assert.Contains("Mintec Systems", context);
+        Assert.Contains("Melbourne VIC", context);
+    }
+
+    // TC-C2 — "logo" lines and bracketed image-URL lines between job blocks are skipped
+    // Silent failure: without filtering, "logo" pollutes the search query sent to Jora/Adzuna.
+    [Fact]
+    public void ExtractSearchContext_LogoAndBracketLines_Skipped()
+    {
+        var url = "https://au.seek.com/job/1";
+        var body = $"Full Stack Engineer\nAllume Energy\n\nlogo\n[https://cdn.example.com/logo.png]\n\n[{url}]";
+
+        var context = JobAlertProcessor.ExtractSearchContext(body, url);
+
+        Assert.DoesNotContain("logo", context, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("cdn.example.com", context);
+    }
+
+    // TC-C3 — URL not present in the body → empty string, not an exception
+    [Fact]
+    public void ExtractSearchContext_UrlNotInBody_ReturnsEmpty()
+    {
+        var context = JobAlertProcessor.ExtractSearchContext("Nothing relevant here.", "https://au.seek.com/job/999");
+
+        Assert.Equal("", context);
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
@@ -341,11 +428,17 @@ public class JobAlertProcessorTests
         AppDbContext db,
         JobPostingFetcher? fetcher = null,
         PostingEvaluator? evaluator = null,
-        TelegramNotifier? telegram = null) =>
+        TelegramNotifier? telegram = null,
+        JoraFetcher? joraFetcher = null,
+        AdzunaFetcher? adzunaFetcher = null,
+        PostingMatcherAgent? matcher = null) =>
         new(db,
             fetcher   ?? new FakeFetcher(_ => Task.FromResult<string>("job description text")),
             evaluator ?? new FakeEvaluator(_ => StubEval("weak_match")),
-            telegram);
+            telegram,
+            joraFetcher ?? new FakeJoraFetcher(_ => []),
+            adzunaFetcher,
+            matcher ?? new FakeMatcher((_, _) => null));
 
     private static PostingEvaluation StubEval(string recommendation, string company = "ACME") => new()
     {
@@ -390,5 +483,21 @@ public class JobAlertProcessorTests
             CallCount++;
             return Task.FromResult(_returns);
         }
+    }
+
+    private sealed class FakeJoraFetcher : JoraFetcher
+    {
+        private readonly Func<string, List<JobFeedItem>> _fn;
+        public FakeJoraFetcher(Func<string, List<JobFeedItem>> fn) => _fn = fn;
+        public override Task<List<JobFeedItem>> SearchAsync(string keywords, string location) =>
+            Task.FromResult(_fn(keywords));
+    }
+
+    private sealed class FakeMatcher : PostingMatcherAgent
+    {
+        private readonly Func<string, IReadOnlyList<JobFeedItem>, JobFeedItem?> _fn;
+        public FakeMatcher(Func<string, IReadOnlyList<JobFeedItem>, JobFeedItem?> fn) => _fn = fn;
+        public override Task<JobFeedItem?> FindMatchAsync(int userId, string targetContext, IReadOnlyList<JobFeedItem> candidates) =>
+            Task.FromResult(_fn(targetContext, candidates));
     }
 }

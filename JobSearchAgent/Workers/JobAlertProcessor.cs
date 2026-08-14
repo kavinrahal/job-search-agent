@@ -28,17 +28,26 @@ public class JobAlertProcessor
     private readonly JobPostingFetcher _fetcher;
     private readonly PostingEvaluator _evaluator;
     private readonly TelegramNotifier? _telegram;
+    private readonly JoraFetcher _joraFetcher;
+    private readonly AdzunaFetcher? _adzunaFetcher;
+    private readonly PostingMatcherAgent _matcher;
 
     public JobAlertProcessor(
         AppDbContext db,
         JobPostingFetcher fetcher,
         PostingEvaluator evaluator,
-        TelegramNotifier? telegram)
+        TelegramNotifier? telegram,
+        JoraFetcher joraFetcher,
+        AdzunaFetcher? adzunaFetcher,
+        PostingMatcherAgent matcher)
     {
         _db = db;
         _fetcher = fetcher;
         _evaluator = evaluator;
         _telegram = telegram;
+        _joraFetcher = joraFetcher;
+        _adzunaFetcher = adzunaFetcher;
+        _matcher = matcher;
     }
 
     internal static Dictionary<string, string> ExtractJobUrls(IEnumerable<RawEmail> emails)
@@ -128,8 +137,8 @@ public class JobAlertProcessor
                 }
                 catch (Exception fetchEx) when (fallbackContext.ContainsKey(url))
                 {
-                    Console.WriteLine($"    (fetch failed: {fetchEx.Message} — evaluating from email alert content)");
-                    postingText = $"Source URL: {url}\n\n[Job page could not be fetched. Evaluate based on the email alert content below.]\n\n{fallbackContext[url]}";
+                    Console.WriteLine($"    (fetch failed: {fetchEx.Message} — trying cross-check against Jora/Adzuna)");
+                    postingText = await BuildCrossCheckedPostingTextAsync(url, fallbackContext[url]);
                 }
 
                 var eval = await _evaluator.EvaluateAsync(profile, postingText, url);
@@ -167,5 +176,64 @@ public class JobAlertProcessor
         }
 
         return (urls.Count, evaluated, notified);
+    }
+
+    // Seek (and any other source) can fail to fetch directly — rather than evaluating on
+    // just the thin alert-email snippet (title/company/location/salary, no real description),
+    // try to find the same job on Jora/Adzuna and use its real content. Falls back to an
+    // honest metadata-only posting text if no confident match is found — evaluate_posting.md
+    // already treats unaddressed dimensions as "not stated" rather than guessing, so this
+    // doesn't need special-casing on the evaluator side.
+    private async Task<string> BuildCrossCheckedPostingTextAsync(string url, string emailBody)
+    {
+        var context = ExtractSearchContext(emailBody, url);
+        if (context.Length == 0)
+            return $"Source URL: {url}\n\n[Job page could not be fetched, and no alert context was found.]";
+
+        // Both SearchAsync implementations already catch their own request failures and
+        // return an empty list rather than throwing — nothing to guard here.
+        var candidates = new List<JobFeedItem>(await _joraFetcher.SearchAsync(context, "Melbourne"));
+        if (_adzunaFetcher is not null)
+            candidates.AddRange(await _adzunaFetcher.SearchAsync(context, "melbourne"));
+
+        var match = candidates.Count > 0
+            ? await _matcher.FindMatchAsync(_db.CurrentUserId!.Value, context, candidates)
+            : null;
+
+        if (match is not null)
+        {
+            Console.WriteLine($"    (cross-check matched via {match.Source}: {match.Url})");
+            return JobDiscoveryWorker.FormatPostingText(match);
+        }
+
+        Console.WriteLine("    (no confident cross-check match — evaluating from alert metadata only)");
+        return $"""
+            Source URL: {url}
+
+            [The full posting could not be fetched, and no confident match was found on other
+            job boards. Only the summary below — from the alert email — is available. Treat any
+            dimension it doesn't address as "not stated" rather than guessing.]
+
+            {context}
+            """;
+    }
+
+    // Grabs the handful of non-junk lines immediately before the job's URL in the alert
+    // email — for a typical Seek digest that's the title/company/location/salary block —
+    // without parsing them into separate fields. Deliberately loose: it's used as a search
+    // query and as raw context for PostingMatcherAgent to read itself, both of which
+    // tolerate messy input better than a field parser tied to one email template would.
+    internal static string ExtractSearchContext(string emailBody, string url)
+    {
+        int idx = emailBody.IndexOf(url, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return "";
+
+        var lines = emailBody[..idx]
+            .Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0 && !l.Equals("logo", StringComparison.OrdinalIgnoreCase) && !l.StartsWith('['))
+            .TakeLast(4);
+
+        return string.Join(" ", lines);
     }
 }

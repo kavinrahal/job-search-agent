@@ -415,8 +415,12 @@ async Task RunAlertProcessingAsync(AppDbContext userDb, bool sendTelegram)
 
     Console.WriteLine();
     using var alertTelegram = sendTelegram ? new TelegramNotifier(botToken!, chatId!) : null;
+    var adzunaCrossCheckFetcher = adzunaAppId is not null && adzunaAppKey is not null
+        ? new AdzunaFetcher(adzunaAppId, adzunaAppKey)
+        : null;
     var alertProcessor = new JobAlertProcessor(
-        userDb, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), alertTelegram);
+        userDb, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), alertTelegram,
+        new JoraFetcher(), adzunaCrossCheckFetcher, new PostingMatcherAgent(apiKey, usageLogger));
     var (found, evaluated, notified) = await alertProcessor.ProcessAsync(allAlertEmails);
     Console.WriteLine($"Job alerts: {found} URLs found, {evaluated} evaluated, {notified} notified.");
 }
