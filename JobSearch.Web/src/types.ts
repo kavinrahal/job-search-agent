@@ -113,6 +113,13 @@ export interface ParsedResume {
   cvBase: string;
 }
 
+export interface GenerationResult {
+  threadId: number;
+  text?: string;
+  content?: string;
+  mode?: "ask_followup" | "final_answer";
+}
+
 export interface Profile {
   background: string;
   cvBase: string;

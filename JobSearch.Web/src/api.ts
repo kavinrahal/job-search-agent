@@ -8,6 +8,7 @@ import type {
   HealthStatus,
   ParsedResume,
   Profile,
+  GenerationResult,
 } from "./types";
 
 // VITE_API_URL is set in production to the Railway dashboard URL.
@@ -103,6 +104,38 @@ export async function parseResumePdf(file: File): Promise<ParsedResume> {
 
 export async function fetchProfile(): Promise<Profile> {
   return get("/profile");
+}
+
+export class InsufficientCreditsError extends Error {}
+
+async function postGeneration<T>(path: string, body: object): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 402) throw new InsufficientCreditsError("Insufficient credits");
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null);
+    throw new Error(errBody?.error ?? `${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function generateCv(input: { postingUrl?: string; postingText?: string }): Promise<GenerationResult> {
+  return postGeneration("/cv", input);
+}
+
+export async function generateLetter(input: { postingUrl?: string; postingText?: string }): Promise<GenerationResult> {
+  return postGeneration("/letter", input);
+}
+
+export async function askQuestion(input: { question: string; postingUrl?: string }): Promise<GenerationResult> {
+  return postGeneration("/answer", input);
+}
+
+export function cvPdfUrl(threadId: number): string {
+  return `${BASE}/threads/${threadId}/pdf`;
 }
 
 export async function updateProfile(

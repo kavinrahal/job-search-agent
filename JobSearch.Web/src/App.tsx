@@ -9,10 +9,12 @@ import { ResumeIntakePage } from "./pages/ResumeIntakePage";
 import { JobCriteriaPage } from "./pages/JobCriteriaPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LandingPage } from "./pages/LandingPage";
+import { GeneratePage } from "./pages/GeneratePage";
 import { fetchMe, logout } from "./api";
 
 const NAV_LINKS = [
   { to: "/",             label: "Dashboard"    },
+  { to: "/generate",     label: "Generate"     },
   { to: "/discover",     label: "Discover"     },
   { to: "/applications", label: "Applications" },
   { to: "/activity",     label: "Activity"     },
@@ -98,6 +100,7 @@ export default function App() {
           {needsOnboarding && <OnboardingRedirect />}
           <Routes>
             <Route path="/"             element={<DashboardPage />} />
+            <Route path="/generate"     element={<GeneratePage />} />
             <Route path="/discover"     element={<DiscoveriesPage />} />
             <Route path="/applications" element={<ApplicationsPage />} />
             <Route path="/activity"     element={<ActivityPage />} />

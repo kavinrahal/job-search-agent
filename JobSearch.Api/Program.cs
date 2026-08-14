@@ -673,18 +673,31 @@ api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbC
 // this to work correctly).
 // ---------------------------------------------------------------------------
 
-// Resolves posting text from either an existing (per-user) DiscoveredPosting or pasted
-// text. Falls back to the cached evaluation summary if the posting can't be re-fetched —
-// same fallback Telegram uses — but unlike Telegram's reply-to-this-message trick, the
-// caller just retries the same POST with postingText set; no stateful correlation needed.
+// Resolves posting text from a pasted URL, an existing (per-user) DiscoveredPosting, or
+// pasted text directly — in that priority order. Falls back to the cached evaluation summary
+// if a DiscoveredPosting can't be re-fetched — same fallback Telegram uses — but unlike
+// Telegram's reply-to-this-message trick, the caller just retries the same POST with
+// postingText set; no stateful correlation needed.
 static async Task<(string? PostingText, string EvalJson, string? Error)> ResolvePostingTextAsync(
-    AppDbContext db, JobPostingFetcher fetcher, int? discoveryId, string? postingText)
+    AppDbContext db, JobPostingFetcher fetcher, int? discoveryId, string? postingText, string? postingUrl = null)
 {
     if (postingText is not null)
         return (postingText, "{}", null);
 
+    if (postingUrl is not null)
+    {
+        try
+        {
+            return (await fetcher.FetchAsync(postingUrl), "{}", null);
+        }
+        catch
+        {
+            return (null, "{}", "Could not fetch that URL. Paste the posting text instead.");
+        }
+    }
+
     if (discoveryId is null)
-        return (null, "{}", "Provide either discoveryId or postingText.");
+        return (null, "{}", "Provide a discoveryId, postingUrl, or postingText.");
 
     var posting = await db.DiscoveredPostings.FindAsync(discoveryId.Value);
     if (posting is null)
@@ -716,11 +729,11 @@ static int CurrentUserId(HttpContext ctx, string claimType) =>
 // generates and how the initial user turn is built.
 static async Task<IResult> GenerateArtifactAsync(
     AppDbContext db, JobPostingFetcher fetcher, int userId,
-    int? discoveryId, string? postingText, string artifactType,
+    int? discoveryId, string? postingText, string? postingUrl, string artifactType,
     Func<string, string, Task<string>> generate,
     Func<string, string, string> buildInitialUserContent)
 {
-    var (resolvedText, evalJson, error) = await ResolvePostingTextAsync(db, fetcher, discoveryId, postingText);
+    var (resolvedText, evalJson, error) = await ResolvePostingTextAsync(db, fetcher, discoveryId, postingText, postingUrl);
     if (resolvedText is null)
         return Results.BadRequest(new { error });
 
@@ -763,7 +776,7 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
     var profile = await db.UserProfiles.FindAsync(userId)
         ?? throw new InvalidOperationException("UserProfile not found for the current user.");
 
-    return await GenerateArtifactAsync(db, fetcher, userId, body.DiscoveryId, body.PostingText,
+    return await GenerateArtifactAsync(db, fetcher, userId, body.DiscoveryId, body.PostingText, body.PostingUrl,
         AgentThreadType.Cv,
         (text, evalJson) => cvAgent.GenerateAsync(profile, text, evalJson),
         CvTailorAgent.BuildInitialUserContent);
@@ -779,21 +792,26 @@ api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContex
     var profile = await db.UserProfiles.FindAsync(userId)
         ?? throw new InvalidOperationException("UserProfile not found for the current user.");
 
-    return await GenerateArtifactAsync(db, fetcher, userId, body.DiscoveryId, body.PostingText,
+    return await GenerateArtifactAsync(db, fetcher, userId, body.DiscoveryId, body.PostingText, body.PostingUrl,
         AgentThreadType.CoverLetter,
         (text, evalJson) => letterAgent.GenerateAsync(profile, text, evalJson),
         CoverLetterAgent.BuildInitialUserContent);
 }).RequireRateLimiting("generation");
 
-// POST /api/v1/answer — body: { question: string, discoveryId?: int }
-api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext db, AnswerAgent answerAgent) =>
+// POST /api/v1/answer — body: { question: string, discoveryId?: int, postingUrl?: string }
+api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext db, JobPostingFetcher fetcher, AnswerAgent answerAgent) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     if (!await CreditService.HasCreditAsync(db, userId))
         return Results.Json(new { error = "Insufficient credits" }, statusCode: StatusCodes.Status402PaymentRequired);
 
     string? jobContext = null;
-    if (body.DiscoveryId is int discoveryId)
+    if (body.PostingUrl is not null)
+    {
+        try { jobContext = await fetcher.FetchAsync(body.PostingUrl); }
+        catch { /* no job context is fine — the question can still be answered generically */ }
+    }
+    else if (body.DiscoveryId is int discoveryId)
     {
         var posting = await db.DiscoveredPostings.FindAsync(discoveryId);
         if (posting?.EvaluationJson is not null)
