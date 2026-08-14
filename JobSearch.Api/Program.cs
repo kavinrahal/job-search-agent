@@ -49,7 +49,12 @@ var frontendUrl = isDev
 builder.Services.AddAuthentication(o =>
 {
     o.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    o.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+    // Challenge the cookie scheme by default, not Google directly — RequireAuthorization()
+    // on every protected endpoint relies on this to hit OnRedirectToLogin below (401 for API
+    // callers) instead of 302-redirecting a fetch() straight to Google's OAuth URL, which the
+    // browser then blocks as a cross-origin redirect with no CORS headers. /api/v1/auth/login
+    // is unaffected — it names GoogleDefaults.AuthenticationScheme explicitly.
+    o.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
 })
 .AddCookie(o =>
 {
