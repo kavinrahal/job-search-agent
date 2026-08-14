@@ -1,5 +1,3 @@
-using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace JobSearch.Data;
@@ -7,12 +5,6 @@ namespace JobSearch.Data;
 public class JobPostingFetcher
 {
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
-    // Matches both the real Seek website (what a user copies directly from a job
-    // posting) and au.seek.com (what JobAlertProcessor normalizes extracted URLs
-    // to when storing DiscoveredPostings) — these are different hostnames, not
-    // the same domain with/without "www".
-    private static readonly Regex SeekUrlPattern = new(
-        @"(?:www\.seek\.com\.au|au\.seek\.com)/job/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     static JobPostingFetcher()
     {
@@ -22,100 +14,96 @@ public class JobPostingFetcher
         _http.DefaultRequestHeaders.Accept.ParseAdd(
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
         _http.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-AU,en;q=0.9");
+        // A Chrome UA with none of its usual companion headers is itself a bot signal to
+        // WAFs like Cloudflare Bot Management (which Seek runs) — these round it out.
+        _http.DefaultRequestHeaders.Add("Sec-Fetch-Dest", "document");
+        _http.DefaultRequestHeaders.Add("Sec-Fetch-Mode", "navigate");
+        _http.DefaultRequestHeaders.Add("Sec-Fetch-Site", "none");
+        _http.DefaultRequestHeaders.Add("Sec-Fetch-User", "?1");
+        _http.DefaultRequestHeaders.Add("Upgrade-Insecure-Requests", "1");
     }
 
+    // Cloudflare/Akamai-style bot management (confirmed on Seek: __cf_bm cookie, CF-Ray
+    // header) blocks or challenges requests from datacenter IPs like this app's host
+    // regardless of headers, even though the same request succeeds from a residential IP.
+    // r.jina.ai fetches the page on our behalf from IPs that generally aren't on those
+    // blocklists and returns cleaned text directly — a well-known workaround for exactly
+    // this class of failure, used only as a fallback so most sites never touch it.
     public virtual async Task<string> FetchAsync(string url)
     {
-        var seekMatch = SeekUrlPattern.Match(url);
-        if (seekMatch.Success)
-        {
-            try
-            {
-                return await FetchSeekAsync(seekMatch.Groups[1].Value);
-            }
-            catch
-            {
-                // chalice-experience.seek.com is an undocumented internal API, not a
-                // stable public contract — it can go unreachable (observed: DNS no longer
-                // resolves it at all) without warning. Fall back to scraping the public
-                // page like every other site, rather than losing the posting entirely.
-            }
-        }
-
-        var html = await _http.GetStringAsync(url);
-        return StripHtml(html);
+        var diagnostics = await DiagnoseAsync(url);
+        return diagnostics.ResultText
+            ?? throw new HttpRequestException(
+                $"fetch failed (direct: {diagnostics.Direct.Error ?? $"status {diagnostics.Direct.StatusCode}, looked like a challenge page"}; " +
+                $"reader: {diagnostics.Reader?.Error ?? $"status {diagnostics.Reader?.StatusCode}"})");
     }
 
-    private static async Task<string> FetchSeekAsync(string jobId)
+    public sealed record AttemptResult(int? StatusCode, int? ContentLength, bool LooksLikeChallenge, string? Error);
+    public sealed record FetchDiagnostics(AttemptResult Direct, AttemptResult? Reader, string? ResultText);
+
+    // Reports what actually happened on each attempt (status code, size, whether the response
+    // looks like a bot-challenge page), not just the final text — so a source's reachability
+    // can be confirmed from the deployed environment itself, rather than inferred from
+    // behavior observed elsewhere (e.g. a developer's own machine, which has a different IP
+    // reputation than where this runs in production). FetchAsync is a thin wrapper over this.
+    public virtual async Task<FetchDiagnostics> DiagnoseAsync(string url)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get,
-            $"https://chalice-experience.seek.com/api/job/{jobId}");
-        request.Headers.Add("X-Seek-Site", "chalice-experience");
+        int? directStatus = null, directLength = null;
+        bool directChallenge = false;
+        string? directError = null, resultText = null;
 
-        var response = await _http.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var root = doc.RootElement;
-        var sb = new StringBuilder();
-
-        if (root.TryGetProperty("title", out var title))
-            sb.AppendLine($"Title: {title.GetString()}");
-
-        if (root.TryGetProperty("advertiser", out var adv) &&
-            adv.TryGetProperty("description", out var company))
-            sb.AppendLine($"Company: {company.GetString()}");
-
-        if (root.TryGetProperty("location", out var loc))
+        try
         {
-            string? locText;
-            if (loc.ValueKind == JsonValueKind.String)
-                locText = loc.GetString();
-            else if (loc.TryGetProperty("label", out var ll))
-                locText = ll.GetString();
-            else
-                locText = null;
-            if (locText is not null) sb.AppendLine($"Location: {locText}");
+            using var response = await _http.GetAsync(url);
+            directStatus = (int)response.StatusCode;
+            var html = await response.Content.ReadAsStringAsync();
+            directLength = html.Length;
+            response.EnsureSuccessStatusCode();
+            directChallenge = LooksLikeBotChallenge(html);
+            if (!directChallenge) resultText = StripHtml(html);
+        }
+        catch (Exception ex)
+        {
+            directError = ex.Message;
         }
 
-        if (root.TryGetProperty("salary", out var sal))
+        var direct = new AttemptResult(directStatus, directLength, directChallenge, directError);
+        if (resultText is not null)
+            return new FetchDiagnostics(direct, null, resultText);
+
+        int? readerStatus = null, readerLength = null;
+        bool readerChallenge = false;
+        string? readerError = null;
+        try
         {
-            string? salText;
-            if (sal.ValueKind == JsonValueKind.String)
-                salText = sal.GetString();
-            else if (sal.TryGetProperty("label", out var sl))
-                salText = sl.GetString();
-            else
-                salText = null;
-            if (salText is not null) sb.AppendLine($"Salary: {salText}");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://r.jina.ai/{url}");
+            using var response = await _http.SendAsync(request);
+            readerStatus = (int)response.StatusCode;
+            var text = await response.Content.ReadAsStringAsync();
+            readerLength = text.Length;
+            response.EnsureSuccessStatusCode();
+            readerChallenge = LooksLikeBotChallenge(text);
+            if (!readerChallenge) resultText = text.Trim();
+        }
+        catch (Exception ex)
+        {
+            readerError = ex.Message;
         }
 
-        if (root.TryGetProperty("workArrangements", out var wa) &&
-            wa.ValueKind == JsonValueKind.Object &&
-            wa.TryGetProperty("data", out var waData) &&
-            waData.ValueKind == JsonValueKind.Array)
-        {
-            var arrangements = waData.EnumerateArray()
-                .Select(a => a.TryGetProperty("label", out var l) ? l.GetString() : null)
-                .OfType<string>();
-            var joined = string.Join(", ", arrangements);
-            if (joined.Length > 0) sb.AppendLine($"Work arrangement: {joined}");
-        }
+        var reader = new AttemptResult(readerStatus, readerLength, readerChallenge, readerError);
+        return new FetchDiagnostics(direct, reader, resultText);
+    }
 
-        sb.AppendLine();
-
-        if (root.TryGetProperty("bulletPoints", out var bullets) &&
-            bullets.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var b in bullets.EnumerateArray())
-                sb.AppendLine($"• {b.GetString()}");
-            sb.AppendLine();
-        }
-
-        if (root.TryGetProperty("content", out var content))
-            sb.AppendLine(StripHtml(content.GetString() ?? ""));
-
-        return sb.ToString().Trim();
+    // Bot-challenge interstitials (Cloudflare "Just a moment...", etc.) are short and carry
+    // unmistakable markers; a real job posting page is thousands of characters and never
+    // contains this exact copy.
+    private static bool LooksLikeBotChallenge(string html)
+    {
+        if (html.Length < 3000) return true;
+        return html.Contains("Just a moment", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("cf-browser-verification", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("Checking your browser", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("Enable JavaScript and cookies to continue", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string StripHtml(string html)

@@ -663,6 +663,22 @@ api.MapGet("/admin/support", async (HttpContext ctx, AppDbContext db) =>
     return Results.Ok(messages);
 });
 
+// GET /api/v1/admin/diagnose-fetch?url=... — owner-only. Reports exactly what happened
+// fetching a URL from this deployed environment (status code, size, whether the response
+// looks like a bot-challenge page) for both the direct request and the reader-proxy
+// fallback, instead of just the final text a normal fetch returns — for confirming from
+// production itself why a source like Seek is or isn't fetchable, rather than inferring it
+// from a developer machine's very different IP reputation.
+api.MapGet("/admin/diagnose-fetch", async (HttpContext ctx, JobPostingFetcher fetcher, string url) =>
+{
+    if (CurrentUserId(ctx, UserIdClaimType) != ownerUserId)
+        return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+
+    var d = await fetcher.DiagnoseAsync(url);
+    var preview = d.ResultText is { } text ? text[..Math.Min(500, text.Length)] : null;
+    return Results.Ok(new { d.Direct, d.Reader, ResultPreview = preview });
+});
+
 // ---------------------------------------------------------------------------
 // Onboarding — resume parsing, and saving the result to a profile.
 // ---------------------------------------------------------------------------
