@@ -6,6 +6,8 @@ import type {
   ActivityItem,
   DiscoveriesResponse,
   HealthStatus,
+  ParsedResume,
+  Profile,
 } from "./types";
 
 // VITE_API_URL is set in production to the Railway dashboard URL.
@@ -81,4 +83,32 @@ export async function fetchMe(): Promise<{ email: string }> {
 export async function logout(): Promise<void> {
   const res = await fetch(`${BASE}/auth/logout`, { method: "POST" });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+}
+
+export async function parseResumeText(text: string): Promise<ParsedResume> {
+  const form = new FormData();
+  form.set("text", text);
+  const res = await fetch(`${BASE}/onboarding/parse-resume`, { method: "POST", body: form });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+export async function parseResumePdf(file: File): Promise<ParsedResume> {
+  const form = new FormData();
+  form.set("file", file);
+  const res = await fetch(`${BASE}/onboarding/parse-resume`, { method: "POST", body: form });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+export async function updateProfile(
+  fields: Partial<Pick<Profile, "background" | "cvBase" | "jobCriteria">>,
+): Promise<Profile> {
+  const res = await fetch(`${BASE}/profile`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
 }

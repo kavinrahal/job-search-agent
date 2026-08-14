@@ -16,8 +16,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
 builder.WebHost.UseUrls($"http://+:{port}");
-// Applies to every request (webhooks included) — a native Kestrel guard against oversized payloads.
-builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 1_000_000);
+// Applies to every request (webhooks included) — a native Kestrel guard against oversized
+// payloads. 8MB, not 1MB, to leave headroom for resume PDF uploads (scanned/image-heavy
+// resumes can run a few MB); everything else in the app sends only small JSON bodies.
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 8_000_000);
 
 var isDev = builder.Environment.IsDevelopment();
 
@@ -85,6 +87,12 @@ builder.Services.AddAuthentication(o =>
         var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
         var user = await UserProvisioningService.GetOrCreateAsync(db, email);
 
+        // Every user needs a UserProfile row to generate against, even a blank one — this is
+        // a no-op for the owner (already seeded with real content by the startup bootstrap
+        // below) and creates an empty one for a real new user's first-ever login, which the
+        // onboarding flow then fills in.
+        await UserProfileProvisioningService.GetOrSeedAsync(db, user.Id, background: "", cvBase: "", jobCriteria: "");
+
         db.AnalyticsEvents.Add(new AnalyticsEvent { UserId = user.Id, EventType = AnalyticsEventType.Login, CreatedAt = DateTime.UtcNow });
         await db.SaveChangesAsync();
 
@@ -119,6 +127,7 @@ builder.Services.AddSingleton(sp => new PostingEvaluator(anthropicApiKey, sp.Get
 builder.Services.AddSingleton(sp => new CoverLetterAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new CvTailorAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new AnswerAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(sp => new ResumeIntakeAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
 
 // Trust X-Forwarded-Proto from Railway's load balancer regardless of its IP.
@@ -589,6 +598,55 @@ api.MapGet("/admin/analytics", async (HttpContext ctx, AppDbContext db) =>
         return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
 
     return Results.Ok(await AnalyticsService.GetSummaryAsync(db, DateTime.UtcNow));
+});
+
+// ---------------------------------------------------------------------------
+// Onboarding — resume parsing, and saving the result to a profile.
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/onboarding/parse-resume — multipart form: either a "text" field (pasted
+// resume) or a "file" field (PDF). Returns a preview for the user to review/edit, not saved.
+api.MapPost("/onboarding/parse-resume", async (
+    HttpRequest request, ResumeIntakeAgent intakeAgent, HttpContext ctx) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var form = await request.ReadFormAsync();
+    var file = form.Files["file"];
+    var text = form["text"].ToString();
+
+    ParsedResume parsed;
+    if (file is { Length: > 0 })
+    {
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms);
+        parsed = await intakeAgent.ParseFromPdfAsync(userId, ms.ToArray());
+    }
+    else if (!string.IsNullOrWhiteSpace(text))
+    {
+        parsed = await intakeAgent.ParseFromTextAsync(userId, text);
+    }
+    else
+    {
+        return Results.BadRequest(new { error = "Provide either a \"text\" field or a \"file\" (PDF) field." });
+    }
+
+    return Results.Ok(new { background = parsed.Background, cvBase = parsed.CvBase });
+}).RequireRateLimiting("generation");
+
+// PUT /api/v1/profile — partial update: only provided fields change.
+api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var profile = await db.UserProfiles.FindAsync(userId);
+    if (profile is null) return Results.NotFound();
+
+    if (body.Background is not null) profile.Background = body.Background;
+    if (body.CvBase is not null) profile.CvBase = body.CvBase;
+    if (body.JobCriteria is not null) profile.JobCriteria = body.JobCriteria;
+    profile.UpdatedAt = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new { profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt });
 });
 
 // ---------------------------------------------------------------------------

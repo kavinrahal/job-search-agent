@@ -23,4 +23,5 @@ public static class ClaudeAgentName
     public const string PostingEvaluator = "PostingEvaluator";
     public const string AnswerAgent = "AnswerAgent";
     public const string EmailClassifier = "EmailClassifier";
+    public const string ResumeIntakeAgent = "ResumeIntakeAgent";
 }

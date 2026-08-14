@@ -199,4 +199,53 @@ public class ContractTests
         Assert.Equal("final_answer", mode);
         Assert.False(string.IsNullOrWhiteSpace(content));
     }
+
+    // =========================================================================
+    // ResumeIntakeAgent
+    // =========================================================================
+
+    private const string SampleResumeText = """
+        Jordan Lee
+        jordan.lee@example.com | Sydney, NSW | linkedin.com/in/jordanlee
+
+        Experience
+
+        Software Engineer, Acme Corp — Sydney, NSW — Jan 2022 to Present
+        - Built and maintained backend services in C# and ASP.NET Core for an e-commerce platform.
+        - Migrated a legacy monolith to a set of REST APIs, reducing deploy time by half.
+        - Mentored two junior engineers.
+
+        Junior Developer, Beta Pty Ltd — Melbourne, VIC — Jun 2020 to Dec 2021
+        - Built internal tooling in Python and Django.
+
+        Education
+
+        Bachelor of Computer Science, University of Sydney — Graduated 2020
+
+        Skills
+        C#, ASP.NET Core, Python, Django, PostgreSQL, Docker, Git
+        """;
+
+    // Verifies structural contract: both outputs are non-empty, background_yaml contains the
+    // expected top-level sections, cv_base_markdown leaves the Summary as the placeholder
+    // (a later tailoring step fills it in, not this one).
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task ResumeIntakeAgent_ParseFromTextAsync_ReturnsStructuredOutput()
+    {
+        if (ApiKey is null) return;
+
+        var agent = new ResumeIntakeAgent(ApiKey);
+        var result = await agent.ParseFromTextAsync(userId: 1, SampleResumeText);
+
+        Assert.False(string.IsNullOrWhiteSpace(result.Background));
+        Assert.Contains("personal:", result.Background);
+        Assert.Contains("experience:", result.Background);
+        Assert.Contains("education:", result.Background);
+        Assert.Contains("skills:", result.Background);
+
+        Assert.False(string.IsNullOrWhiteSpace(result.CvBase));
+        Assert.Contains("[Fresh summary specific to this role; see tailoring instructions]", result.CvBase);
+        Assert.Contains("Acme Corp", result.CvBase);
+    }
 }

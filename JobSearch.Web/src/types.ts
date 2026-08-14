@@ -108,6 +108,18 @@ export interface DiscoveriesResponse {
   pageSize: number;
 }
 
+export interface ParsedResume {
+  background: string;
+  cvBase: string;
+}
+
+export interface Profile {
+  background: string;
+  cvBase: string;
+  jobCriteria: string;
+  updatedAt: string;
+}
+
 export interface HealthStatus {
   status: "ok" | "stale" | "unknown";
   lastRunAt: string | null;
