@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace JobSearch.Data;
 
@@ -40,19 +41,27 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         optionsBuilder.UseNpgsql(GetConnectionString());
     }
 
-    // Priority: DATABASE_URL env var (Railway) → configured value (user-secrets/appsettings) → local default
-    public static string GetConnectionString(string? configured = null)
+    // Priority: DATABASE_URL env var (Railway) → configured value (user-secrets/appsettings) → local default.
+    // maxPoolSize caps this process's Npgsql pool explicitly — the Npgsql default (100) is as
+    // large as Postgres's own default max_connections, so one process alone could exhaust the
+    // database's entire connection budget with nothing left for the other process (API vs.
+    // worker each get their own pool) or a manual psql session. 20 is a conservative default
+    // safe on any Railway Postgres tier; tune it against the real limit (`SHOW max_connections;`
+    // via psql) once confirmed.
+    public static string GetConnectionString(string? configured = null, int maxPoolSize = 20)
     {
         var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+        string baseConnectionString;
         if (!string.IsNullOrEmpty(databaseUrl))
-            return ParseDatabaseUrl(databaseUrl);
-
-        if (!string.IsNullOrEmpty(configured))
-            return configured;
-
+            baseConnectionString = ParseDatabaseUrl(databaseUrl);
+        else if (!string.IsNullOrEmpty(configured))
+            baseConnectionString = configured;
+        else
 #pragma warning disable S2068 // local dev default only — not a real credential
-        return "Host=localhost;Database=job_search;Username=postgres;Password=postgres";
+            baseConnectionString = "Host=localhost;Database=job_search;Username=postgres;Password=postgres";
 #pragma warning restore S2068
+
+        return new NpgsqlConnectionStringBuilder(baseConnectionString) { MaxPoolSize = maxPoolSize }.ConnectionString;
     }
 
     // Convert postgresql://user:pass@host:port/db to Npgsql connection string

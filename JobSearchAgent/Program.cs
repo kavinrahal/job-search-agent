@@ -40,8 +40,10 @@ string apiKey = config["ANTHROPIC_API_KEY"]
 
 var runStart = DateTime.UtcNow;
 
-// Init database — connection string from user-secrets / DATABASE_URL env var / local default
-string connStr = AppDbContext.GetConnectionString(config.GetConnectionString("DefaultConnection"));
+// Init database — connection string from user-secrets / DATABASE_URL env var / local default.
+// Smaller pool than the API's: users are processed sequentially, so this rarely needs more
+// than one or two connections open at once even accounting for async overlap.
+string connStr = AppDbContext.GetConnectionString(config.GetConnectionString("DefaultConnection"), maxPoolSize: 10);
 var dbOptions = new DbContextOptionsBuilder<AppDbContext>()
     .UseNpgsql(connStr)
     .Options;
