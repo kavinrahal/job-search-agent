@@ -6,6 +6,7 @@ import { ActivityPage } from "./pages/ActivityPage";
 import { HealthPage } from "./pages/HealthPage";
 import { DiscoveriesPage } from "./pages/DiscoveriesPage";
 import { ResumeIntakePage } from "./pages/ResumeIntakePage";
+import { JobCriteriaPage } from "./pages/JobCriteriaPage";
 import { fetchMe, logout } from "./api";
 
 const NAV_LINKS = [
@@ -14,6 +15,7 @@ const NAV_LINKS = [
   { to: "/applications", label: "Applications" },
   { to: "/activity",     label: "Activity"     },
   { to: "/profile",      label: "Profile"      },
+  { to: "/criteria",     label: "Criteria"     },
   { to: "/health",       label: "Health"       },
 ];
 
@@ -88,6 +90,7 @@ export default function App() {
             <Route path="/applications" element={<ApplicationsPage />} />
             <Route path="/activity"     element={<ActivityPage />} />
             <Route path="/profile"      element={<ResumeIntakePage />} />
+            <Route path="/criteria"     element={<JobCriteriaPage />} />
             <Route path="/health"       element={<HealthPage />} />
           </Routes>
         </main>
