@@ -16,16 +16,21 @@ Telegram webhook ──────────────┐
                                 ▼
                        JobSearch.Api (ASP.NET Core)
                        ├── GET /api/v1/... — dashboard data
-                       ├── POST /api/v1/telegram/webhook
-                       │   ├── URL evaluation (Claude)
-                       │   ├── /cv — tailored CV → PDF
-                       │   ├── /letter — cover letter
-                       │   ├── /answer — conversational application Q&A
-                       │   └── /edit — revise a previous CV, letter, or answer
-                       └── React SPA (served from wwwroot)
+                       └── POST /api/v1/telegram/webhook
+                           ├── URL evaluation (Claude)
+                           ├── /cv — tailored CV → PDF
+                           ├── /letter — cover letter
+                           ├── /answer — conversational application Q&A
+                           └── /edit — revise a previous CV, letter, or answer
+
+                       JobSearch.Web (React SPA, nginx)
+                       └── separate deployment, calls JobSearch.Api cross-origin
 ```
 
-Both projects share the same PostgreSQL database and the same `skills/` directory.
+JobSearchAgent and JobSearch.Api share the same PostgreSQL database and the same `skills/`
+directory. JobSearch.Web is deployed independently (its own Dockerfile.web/nginx), not
+bundled into the API — set `VITE_API_URL` at build time to the API's URL, and `CORS_ORIGINS`
+on the API to the frontend's URL.
 
 ---
 

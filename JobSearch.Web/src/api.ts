@@ -11,14 +11,27 @@ import type {
   GenerationResult,
 } from "./types";
 
-// VITE_API_URL is set in production to the Railway dashboard URL.
-// In local dev it's unset and Vite's proxy forwards /api to localhost:5000.
+// VITE_API_URL is set in production to the API's own Railway URL — the frontend and API are
+// separate deployments (separate origins), so credentials: "include" below is required on
+// every request for the session cookie to actually be sent.
+// In local dev it's unset and Vite's proxy forwards /api to localhost:5000, making dev
+// same-origin from the browser's point of view.
 const BASE = (import.meta.env.VITE_API_URL ?? "") + "/api/v1";
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
+export class InsufficientCreditsError extends Error {}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { ...options, credentials: "include" });
+  if (res.status === 402) throw new InsufficientCreditsError("Insufficient credits");
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null);
+    throw new Error(errBody?.error ?? `${res.status} ${res.statusText}`);
+  }
+  return res.status === 204 ? (undefined as T) : res.json();
+}
+
+function json(body: object): RequestInit {
+  return { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
 }
 
 function qs(params: object): string {
@@ -30,7 +43,7 @@ function qs(params: object): string {
 }
 
 export async function fetchSummary(): Promise<Summary> {
-  return get("/summary");
+  return request("/summary");
 }
 
 export interface EmailsParams {
@@ -43,7 +56,7 @@ export interface EmailsParams {
 }
 
 export async function fetchEmails(params: EmailsParams = {}): Promise<EmailsResponse> {
-  return get(`/emails${qs(params)}`);
+  return request(`/emails${qs(params)}`);
 }
 
 export async function fetchApplications(params: {
@@ -51,19 +64,19 @@ export async function fetchApplications(params: {
   page?: number;
   pageSize?: number;
 } = {}): Promise<ApplicationsResponse> {
-  return get(`/applications${qs(params)}`);
+  return request(`/applications${qs(params)}`);
 }
 
 export async function fetchApplicationEvents(id: number): Promise<ApplicationWithEvents> {
-  return get(`/applications/${id}/events`);
+  return request(`/applications/${id}/events`);
 }
 
 export async function fetchActivity(limit = 30): Promise<ActivityItem[]> {
-  return get(`/activity?limit=${limit}`);
+  return request(`/activity?limit=${limit}`);
 }
 
 export async function fetchHealth(): Promise<HealthStatus> {
-  const res = await fetch(`${BASE}/health`);
+  const res = await fetch(`${BASE}/health`, { credentials: "include" });
   // 503 means stale — still parse the body
   if (!res.ok && res.status !== 503) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
@@ -74,96 +87,63 @@ export async function fetchDiscoveries(params: {
   page?: number;
   pageSize?: number;
 } = {}): Promise<DiscoveriesResponse> {
-  return get(`/discoveries${qs(params)}`);
+  return request(`/discoveries${qs(params)}`);
 }
 
 export async function fetchMe(): Promise<{ email: string; needsOnboarding: boolean }> {
-  return get("/auth/me");
+  return request("/auth/me");
 }
 
 export async function logout(): Promise<void> {
-  const res = await fetch(`${BASE}/auth/logout`, { method: "POST" });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  await request("/auth/logout", { method: "POST" });
 }
 
 export async function cancelAccount(): Promise<void> {
-  const res = await fetch(`${BASE}/account/cancel`, { method: "POST" });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  await request("/account/cancel", { method: "POST" });
 }
 
 export async function submitSupportMessage(message: string): Promise<void> {
-  const res = await fetch(`${BASE}/support`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  await request("/support", { method: "POST", ...json({ message }) });
 }
 
 export async function parseResumeText(text: string): Promise<ParsedResume> {
   const form = new FormData();
   form.set("text", text);
-  const res = await fetch(`${BASE}/onboarding/parse-resume`, { method: "POST", body: form });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
+  return request("/onboarding/parse-resume", { method: "POST", body: form });
 }
 
 export async function parseResumePdf(file: File): Promise<ParsedResume> {
   const form = new FormData();
   form.set("file", file);
-  const res = await fetch(`${BASE}/onboarding/parse-resume`, { method: "POST", body: form });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
+  return request("/onboarding/parse-resume", { method: "POST", body: form });
 }
 
 export async function fetchProfile(): Promise<Profile> {
-  return get("/profile");
-}
-
-export class InsufficientCreditsError extends Error {}
-
-async function postGeneration<T>(path: string, body: object): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (res.status === 402) throw new InsufficientCreditsError("Insufficient credits");
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => null);
-    throw new Error(errBody?.error ?? `${res.status} ${res.statusText}`);
-  }
-  return res.json();
-}
-
-export async function generateCv(input: { postingUrl?: string; postingText?: string }): Promise<GenerationResult> {
-  return postGeneration("/cv", input);
-}
-
-export async function generateLetter(input: { postingUrl?: string; postingText?: string }): Promise<GenerationResult> {
-  return postGeneration("/letter", input);
-}
-
-export async function askQuestion(input: { question: string; postingUrl?: string }): Promise<GenerationResult> {
-  return postGeneration("/answer", input);
-}
-
-export function cvPdfUrl(threadId: number): string {
-  return `${BASE}/threads/${threadId}/pdf`;
-}
-
-export async function editThread(threadId: number, message: string): Promise<GenerationResult> {
-  return postGeneration(`/threads/${threadId}/edit`, { message });
+  return request("/profile");
 }
 
 export async function updateProfile(
   fields: Partial<Pick<Profile, "background" | "cvBase" | "jobCriteria">>,
 ): Promise<Profile> {
-  const res = await fetch(`${BASE}/profile`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(fields),
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
+  return request("/profile", { method: "PUT", ...json(fields) });
+}
+
+export async function generateCv(input: { postingUrl?: string; postingText?: string }): Promise<GenerationResult> {
+  return request("/cv", { method: "POST", ...json(input) });
+}
+
+export async function generateLetter(input: { postingUrl?: string; postingText?: string }): Promise<GenerationResult> {
+  return request("/letter", { method: "POST", ...json(input) });
+}
+
+export async function askQuestion(input: { question: string; postingUrl?: string }): Promise<GenerationResult> {
+  return request("/answer", { method: "POST", ...json(input) });
+}
+
+export async function editThread(threadId: number, message: string): Promise<GenerationResult> {
+  return request(`/threads/${threadId}/edit`, { method: "POST", ...json({ message }) });
+}
+
+export function cvPdfUrl(threadId: number): string {
+  return `${BASE}/threads/${threadId}/pdf`;
 }

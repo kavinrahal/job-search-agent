@@ -50,7 +50,11 @@ builder.Services.AddAuthentication(o =>
     o.Cookie.Name = isDev ? "session" : "__Host-session";
     o.Cookie.HttpOnly = true;
     o.Cookie.SecurePolicy = isDev ? CookieSecurePolicy.None : CookieSecurePolicy.Always;
-    o.Cookie.SameSite = SameSiteMode.Strict;
+    // The frontend and API are separate deployments (separate origins) in production, so the
+    // session cookie has to be sendable cross-site — None, not Strict/Lax. Browsers require
+    // Secure for SameSite=None, which is already true in prod. Dev stays Lax: the frontend
+    // and API are same-origin there via Vite's proxy, so nothing cross-site ever happens.
+    o.Cookie.SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.None;
     o.ExpireTimeSpan = TimeSpan.FromDays(7);
     o.SlidingExpiration = true;
     // Return 401/403 for API callers instead of redirecting them to a login page.
@@ -113,6 +117,17 @@ builder.Services.AddAuthentication(o =>
 });
 
 builder.Services.AddAuthorization();
+
+// CORS_ORIGINS is a comma-separated allowlist (e.g. the frontend's Railway URL). Credentialed
+// requests (cookies) can't use a wildcard origin, so with nothing configured, cross-origin
+// requests are simply rejected rather than silently falling back to allow-all.
+var corsOrigins = (builder.Configuration["CORS_ORIGINS"] ?? "")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+builder.Services.AddCors(o => o.AddDefaultPolicy(policy =>
+{
+    if (corsOrigins.Length > 0)
+        policy.WithOrigins(corsOrigins).AllowCredentials().AllowAnyHeader().AllowAnyMethod();
+}));
 
 // ---------------------------------------------------------------------------
 // Job search services
@@ -202,24 +217,10 @@ app.Use(async (ctx, next) =>
     ctx.Response.Headers.Append("X-Frame-Options", "DENY");
     ctx.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
     ctx.Response.Headers.Append("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
-#pragma warning disable S7039 // CSP is intentionally restrictive — 'unsafe-inline' only for styles (no nonce support in SPA build)
-    ctx.Response.Headers.Append("Content-Security-Policy",
-        "default-src 'self'; " +
-        "script-src 'self'; " +
-        "style-src 'self' 'unsafe-inline'; " +
-        "img-src 'self' data: https:; " +
-        "connect-src 'self' https://accounts.google.com; " +
-        "font-src 'self'; " +
-        "frame-src 'none'; " +
-        "base-uri 'self'; " +
-        "form-action 'self' https://accounts.google.com");
-#pragma warning restore S7039
     await next();
 });
 
-// Serve the React SPA and other static files from wwwroot/.
-app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseCors();
 
 Console.WriteLine("[Startup] Running database migration...");
 try

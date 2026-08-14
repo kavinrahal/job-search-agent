@@ -1,0 +1,22 @@
+# Stage 1: build the React SPA
+FROM node:22-slim AS build
+WORKDIR /app
+COPY JobSearch.Web/package*.json ./
+RUN npm ci
+COPY JobSearch.Web/ ./
+# VITE_API_URL: the API's public URL, no trailing slash (e.g. https://api-xyz.up.railway.app).
+# Vite bakes VITE_* vars into the bundle at build time, not runtime, so this needs to be a
+# build-time variable in Railway, not just a regular service variable.
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+RUN npm run build
+
+# Stage 2: serve the built static files via nginx, listening on Railway's dynamic $PORT.
+# The official nginx image auto-substitutes ${PORT} and ${VITE_API_URL} (also referenced in
+# nginx.conf.template's CSP header, reusing the same variable) in *.template files into
+# conf.d/*.conf at container start (envsubst) — no custom entrypoint script needed. $uri in
+# the template is nginx's own directive variable, not an OS env var, so envsubst leaves it
+# untouched.
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
