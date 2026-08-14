@@ -13,6 +13,11 @@ public class User
     public int CreditVersion { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    // Soft-deactivation, not a hard delete — set on account cancellation, checked at login
+    // to block sign-in, so a returning user's data is still there if they come back. Null
+    // means active.
+    public DateTime? DeactivatedAt { get; set; }
 }
 
 // Bare entitlement fields — Stripe/billing wiring is a separate later ticket.

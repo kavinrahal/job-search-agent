@@ -87,6 +87,12 @@ builder.Services.AddAuthentication(o =>
         var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
         var user = await UserProvisioningService.GetOrCreateAsync(db, email);
 
+        if (user.DeactivatedAt is not null)
+        {
+            ctx.Fail("Account deactivated");
+            return;
+        }
+
         // Every user needs a UserProfile row to generate against, even a blank one — this is
         // a no-op for the owner (already seeded with real content by the startup bootstrap
         // below) and creates an empty one for a real new user's first-ever login, which the
@@ -663,6 +669,25 @@ api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbC
     await db.SaveChangesAsync();
 
     return Results.Ok(new { profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt });
+});
+
+// POST /api/v1/account/cancel — soft-deactivates the account (blocks future login, data is
+// kept) and signs out the current session immediately. Doesn't revoke any other active
+// session for this account elsewhere — there's no server-side session store to revoke
+// against, only the signed cookie — so a second open tab stays signed in until it expires
+// or the cookie is cleared there too. Acceptable for now: the login check still blocks any
+// future sign-in attempt regardless.
+api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var user = await db.Users.FindAsync(userId);
+    if (user is null) return Results.NotFound();
+
+    user.DeactivatedAt = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+    return Results.Ok();
 });
 
 // ---------------------------------------------------------------------------

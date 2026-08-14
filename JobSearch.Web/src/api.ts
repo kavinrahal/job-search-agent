@@ -86,6 +86,11 @@ export async function logout(): Promise<void> {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 }
 
+export async function cancelAccount(): Promise<void> {
+  const res = await fetch(`${BASE}/account/cancel`, { method: "POST" });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+}
+
 export async function parseResumeText(text: string): Promise<ParsedResume> {
   const form = new FormData();
   form.set("text", text);

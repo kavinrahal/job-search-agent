@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchProfile, updateProfile } from "../api";
+import { fetchProfile, updateProfile, cancelAccount } from "../api";
 
 const TEXTAREA = "w-full rounded-lg border border-gray-200 p-3 font-mono text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300";
 const LABEL = "mb-2 block text-sm font-medium text-gray-700";
@@ -37,6 +37,16 @@ export function SettingsPage() {
       setError(e instanceof Error ? e.message : "Failed to save");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCancelAccount() {
+    if (!confirm("Cancel your account? You'll be signed out and won't be able to log back in unless it's reactivated. Your data is kept, not deleted.")) return;
+    try {
+      await cancelAccount();
+      window.location.href = "/";
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to cancel account");
     }
   }
 
@@ -87,6 +97,20 @@ export function SettingsPage() {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       )}
+
+      <div className="rounded-xl border border-red-200 bg-white p-5 shadow-sm">
+        <p className="mb-1 text-sm font-medium text-red-700">Danger zone</p>
+        <p className="mb-3 text-sm text-gray-500">
+          Cancels your account and signs you out. Your data is kept, not deleted, in case you
+          come back — you just won't be able to sign in again unless it's reactivated.
+        </p>
+        <button
+          onClick={handleCancelAccount}
+          className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50"
+        >
+          Cancel my account
+        </button>
+      </div>
     </div>
   );
 }
