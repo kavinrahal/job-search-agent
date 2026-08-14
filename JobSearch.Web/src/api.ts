@@ -101,6 +101,10 @@ export async function parseResumePdf(file: File): Promise<ParsedResume> {
   return res.json();
 }
 
+export async function fetchProfile(): Promise<Profile> {
+  return get("/profile");
+}
+
 export async function updateProfile(
   fields: Partial<Pick<Profile, "background" | "cvBase" | "jobCriteria">>,
 ): Promise<Profile> {

@@ -633,6 +633,15 @@ api.MapPost("/onboarding/parse-resume", async (
     return Results.Ok(new { background = parsed.Background, cvBase = parsed.CvBase });
 }).RequireRateLimiting("generation");
 
+// GET /api/v1/profile
+api.MapGet("/profile", async (HttpContext ctx, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var profile = await db.UserProfiles.FindAsync(userId);
+    if (profile is null) return Results.NotFound();
+    return Results.Ok(new { profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt });
+});
+
 // PUT /api/v1/profile — partial update: only provided fields change.
 api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbContext db) =>
 {
