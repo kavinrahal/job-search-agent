@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { generateCv, generateLetter, askQuestion, cvPdfUrl, InsufficientCreditsError } from "../api";
+import { generateCv, generateLetter, askQuestion, editThread, cvPdfUrl, InsufficientCreditsError } from "../api";
 import type { GenerationResult } from "../types";
 
 type Mode = "url" | "text";
@@ -14,6 +14,53 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     >
       {children}
     </button>
+  );
+}
+
+// Same input drives two things depending on the thread's state (the backend endpoint
+// handles both transparently): replying to an answer-agent follow-up question, or
+// requesting a revision to an already-complete CV/letter/answer.
+function RevisionBox({ threadId, placeholder, onRevised }: {
+  threadId: number; placeholder: string; onRevised: (r: GenerationResult) => void;
+}) {
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit() {
+    setBusy(true);
+    setError(null);
+    try {
+      onRevised(await editThread(threadId, message));
+      setMessage("");
+    } catch (e) {
+      setError(e instanceof InsufficientCreditsError
+        ? "You're out of credits."
+        : e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <div className="flex gap-2">
+        <input
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          placeholder={placeholder}
+          className="flex-1 rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        />
+        <button
+          onClick={handleSubmit}
+          disabled={message.trim().length === 0 || busy}
+          className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? "Sending…" : "Send"}
+        </button>
+      </div>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
   );
 }
 
@@ -127,6 +174,11 @@ export function GeneratePage() {
           >
             Download PDF
           </a>
+          <RevisionBox
+            threadId={cvResult.threadId}
+            placeholder="Request changes (e.g. mention Docker experience)"
+            onRevised={setCvResult}
+          />
         </div>
       )}
 
@@ -134,6 +186,11 @@ export function GeneratePage() {
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <p className="mb-2 text-sm font-medium text-gray-700">Cover letter</p>
           <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700">{letterResult.text}</pre>
+          <RevisionBox
+            threadId={letterResult.threadId}
+            placeholder="Request changes"
+            onRevised={setLetterResult}
+          />
         </div>
       )}
 
@@ -160,6 +217,11 @@ export function GeneratePage() {
               <p className="mb-1 text-xs font-medium text-amber-600">Needs more context:</p>
             )}
             <p className="whitespace-pre-wrap">{answerResult.content}</p>
+            <RevisionBox
+              threadId={answerResult.threadId}
+              placeholder={answerResult.mode === "ask_followup" ? "Your answer to the question above" : "Request changes"}
+              onRevised={setAnswerResult}
+            />
           </div>
         )}
       </div>

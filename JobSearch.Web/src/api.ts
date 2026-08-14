@@ -138,6 +138,10 @@ export function cvPdfUrl(threadId: number): string {
   return `${BASE}/threads/${threadId}/pdf`;
 }
 
+export async function editThread(threadId: number, message: string): Promise<GenerationResult> {
+  return postGeneration(`/threads/${threadId}/edit`, { message });
+}
+
 export async function updateProfile(
   fields: Partial<Pick<Profile, "background" | "cvBase" | "jobCriteria">>,
 ): Promise<Profile> {
