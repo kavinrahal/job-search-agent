@@ -140,55 +140,57 @@ export function EmailTable({
         ) : emails.length === 0 ? (
           <div className="p-8 text-center text-sm text-gray-400">No emails found</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
-              <tr>
-                <th className="px-4 py-3 text-left">Date</th>
-                <th className="px-4 py-3 text-left">From</th>
-                <th className="px-4 py-3 text-left">Subject</th>
-                <th className="px-4 py-3 text-left">Company</th>
-                <th className="px-4 py-3 text-left">Category</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {emails.map(email => (
-                <tr key={email.messageId} className="hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-4 py-3 text-gray-400">
-                    {new Date(email.receivedAt).toLocaleDateString("en-AU", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </td>
-                  <td className="max-w-[180px] truncate px-4 py-3 text-gray-600">
-                    {email.from}
-                  </td>
-                  <td className="max-w-[300px] truncate px-4 py-3 font-medium text-gray-800">
-                    {email.subject}
-                    {email.roleTitle && (
-                      <span className="ml-2 text-xs font-normal text-gray-400">
-                        {email.roleTitle}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">{email.company ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    {email.category ? (
-                      <button
-                        onClick={() => onCategoryChange(email.category!)}
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-75 ${CATEGORY_COLORS[email.category] ?? "bg-gray-100 text-gray-600"}`}
-                        title={`Filter by ${CATEGORY_LABELS[email.category] ?? email.category}`}
-                      >
-                        {CATEGORY_LABELS[email.category] ?? email.category}
-                      </button>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
+                <tr>
+                  <th className="px-4 py-3 text-left">Date</th>
+                  <th className="px-4 py-3 text-left">From</th>
+                  <th className="px-4 py-3 text-left">Subject</th>
+                  <th className="px-4 py-3 text-left">Company</th>
+                  <th className="px-4 py-3 text-left">Category</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {emails.map(email => (
+                  <tr key={email.messageId} className="hover:bg-gray-50">
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-400">
+                      {new Date(email.receivedAt).toLocaleDateString("en-AU", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </td>
+                    <td className="max-w-[180px] truncate px-4 py-3 text-gray-600">
+                      {email.from}
+                    </td>
+                    <td className="max-w-[300px] truncate px-4 py-3 font-medium text-gray-800">
+                      {email.subject}
+                      {email.roleTitle && (
+                        <span className="ml-2 text-xs font-normal text-gray-400">
+                          {email.roleTitle}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500">{email.company ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      {email.category ? (
+                        <button
+                          onClick={() => onCategoryChange(email.category!)}
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-75 ${CATEGORY_COLORS[email.category] ?? "bg-gray-100 text-gray-600"}`}
+                          title={`Filter by ${CATEGORY_LABELS[email.category] ?? email.category}`}
+                        >
+                          {CATEGORY_LABELS[email.category] ?? email.category}
+                        </button>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

@@ -26,6 +26,42 @@ const REC_LABELS: Record<string, string> = {
   discard:      "Discard",
 };
 
+// Matches the `Source` values JobAlertProcessor/GreenhouseFetcher/LeverFetcher/AdzunaFetcher
+// write to DiscoveredPosting (JobSearchAgent/Workers/JobAlertProcessor.cs,
+// JobSearchAgent/Integrations/*Fetcher.cs). Falls back to a title-cased, "_alert"-stripped
+// version of unrecognized values, so a new fetcher/source doesn't need a frontend change to
+// show up reasonably.
+const SOURCE_LABELS: Record<string, string> = {
+  seek_alert:     "Seek",
+  linkedin_alert: "LinkedIn",
+  jora_alert:     "Jora",
+  greenhouse:     "Greenhouse",
+  lever:          "Lever",
+  adzuna:         "Adzuna",
+};
+
+const SOURCE_STYLES: Record<string, string> = {
+  seek_alert:     "bg-purple-50 text-purple-700",
+  linkedin_alert: "bg-sky-50 text-sky-700",
+  jora_alert:     "bg-teal-50 text-teal-700",
+  greenhouse:     "bg-lime-50 text-lime-700",
+  lever:          "bg-orange-50 text-orange-700",
+  adzuna:         "bg-rose-50 text-rose-700",
+};
+
+function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? source.replace(/_alert$/, "").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function SourceBadge({ source }: { source: string }) {
+  if (!source) return null;
+  return (
+    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${SOURCE_STYLES[source] ?? "bg-gray-100 text-gray-600"}`}>
+      {sourceLabel(source)}
+    </span>
+  );
+}
+
 const MATCH_STYLES: Record<string, string> = {
   strong:     "text-emerald-600",
   good:       "text-blue-600",
@@ -75,7 +111,8 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-semibold text-gray-800 leading-snug">
+          <SourceBadge source={posting.source} />
+          <p className="mt-1 font-semibold text-gray-800 leading-snug">
             {posting.company || "Unknown company"}
           </p>
           <p className="mt-0.5 text-sm text-gray-500 leading-snug">{posting.title}</p>

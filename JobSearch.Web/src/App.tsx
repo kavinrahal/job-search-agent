@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from "react-router-dom";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
@@ -36,9 +37,42 @@ function OnboardingRedirect() {
   return <Navigate to="/profile" replace />;
 }
 
+function NavLinks({ onNavigate, className }: { onNavigate?: () => void; className: (isActive: boolean) => string }) {
+  return (
+    <>
+      {NAV_LINKS.map(({ to, label }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to === "/"}
+          onClick={onNavigate}
+          className={({ isActive }) => className(isActive)}
+        >
+          {label}
+        </NavLink>
+      ))}
+    </>
+  );
+}
+
+function AccountMenu({ email, onLogout, className }: { email: string; onLogout: () => void; className: string }) {
+  return (
+    <div className={className}>
+      <span className="text-xs text-gray-400">{email}</span>
+      <button
+        onClick={onLogout}
+        className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+      >
+        Sign out
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const { data: me, loading } = useMe();
   const { execute: doLogout } = useLogout();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   async function handleLogout() {
     await doLogout();
@@ -52,39 +86,57 @@ export default function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50">
         <header className="border-b border-gray-200 bg-white shadow-sm">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
             <h1 className="text-lg font-semibold text-gray-800">Job Search</h1>
-            <nav className="flex items-center gap-1">
-              {NAV_LINKS.map(({ to, label }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={to === "/"}
-                  className={({ isActive }) =>
-                    `rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                      isActive
-                        ? "bg-blue-50 text-blue-700"
-                        : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                    }`
-                  }
-                >
-                  {label}
-                </NavLink>
-              ))}
-              <div className="ml-4 flex items-center gap-3 border-l border-gray-200 pl-4">
-                <span className="text-xs text-gray-400">{me.email}</span>
-                <button
-                  onClick={handleLogout}
-                  className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
-                >
-                  Sign out
-                </button>
-              </div>
+
+            <nav className="hidden items-center gap-1 md:flex">
+              <NavLinks
+                className={isActive =>
+                  `rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                  }`
+                }
+              />
+              <AccountMenu email={me.email} onLogout={handleLogout} className="ml-4 flex items-center gap-3 border-l border-gray-200 pl-4" />
             </nav>
+
+            <button
+              onClick={() => setMenuOpen(o => !o)}
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 md:hidden"
+            >
+              {menuOpen ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
           </div>
+
+          {menuOpen && (
+            <nav className="flex flex-col gap-1 border-t border-gray-100 px-4 py-3 md:hidden">
+              <NavLinks
+                onNavigate={() => setMenuOpen(false)}
+                className={isActive =>
+                  `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`
+                }
+              />
+              <AccountMenu email={me.email} onLogout={handleLogout} className="mt-2 flex items-center justify-between border-t border-gray-100 pt-3" />
+            </nav>
+          )}
         </header>
 
-        <main className="mx-auto max-w-7xl px-6 py-8">
+        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
           {me.needsOnboarding && <OnboardingRedirect />}
           <Routes>
             <Route path="/"             element={<DashboardPage />} />
