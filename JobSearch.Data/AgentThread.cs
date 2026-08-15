@@ -17,6 +17,10 @@ public class AgentThread
     public string? CurrentContent { get; set; }       // latest assistant turn's content; null while AwaitingContext
     public string Status { get; set; } = AgentThreadStatus.AwaitingContext;
     public string? LastMessageId { get; set; }        // Telegram message_id of the most recent bot message, or null (web-originated)
+    // Hiring company, if identifiable from the posting at generation time — used to name
+    // downloaded CV/cover-letter files ("{Applicant} - {Company} - Resume.pdf"). Null when
+    // not identifiable, or for Answer threads (no download exists for those).
+    public string? Company { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

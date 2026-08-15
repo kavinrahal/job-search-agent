@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using JobSearch.Api;
 using JobSearch.Api.Services;
@@ -168,6 +169,7 @@ builder.Services.AddSingleton(sp => new CvTailorAgent(anthropicApiKey, sp.GetReq
 builder.Services.AddSingleton(sp => new AnswerAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new ResumeIntakeAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new PostingMatcherAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(sp => new CompanyExtractorAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(_ => new JoraFetcher());
 // Left unregistered when unset. Deliberately NOT an endpoint parameter (AdzunaFetcher?) —
 // minimal API infers an unregistered type's parameter source at startup from the DI
@@ -824,18 +826,22 @@ api.MapGet("/postings/search-candidates", async (HttpContext ctx, string hint, J
 // if a DiscoveredPosting can't be re-fetched — same fallback Telegram uses — but unlike
 // Telegram's reply-to-this-message trick, the caller just retries the same POST with
 // postingText set; no stateful correlation needed.
-static async Task<(string? PostingText, string EvalJson, string? Error)> ResolvePostingTextAsync(
+// Company is only free when discoveryId is used (DiscoveredPosting already has it from its
+// own evaluation) — null in every other case, since pasting a URL/text never runs a full
+// evaluation. GenerateArtifactAsync fills the gap with CompanyExtractorAgent when this comes
+// back null, rather than this function always paying for that call even when it's redundant.
+static async Task<(string? PostingText, string EvalJson, string? Company, string? Error)> ResolvePostingTextAsync(
     AppDbContext db, JobPostingFetcher fetcher, CrossCheckDeps crossCheck, int userId, int? discoveryId,
     string? postingText, string? postingUrl = null, string? postingHint = null)
 {
     if (postingText is not null)
-        return (postingText, "{}", null);
+        return (postingText, "{}", null, null);
 
     if (postingUrl is not null)
     {
         try
         {
-            return (await fetcher.FetchAsync(postingUrl), "{}", null);
+            return (await fetcher.FetchAsync(postingUrl), "{}", null, null);
         }
         catch
         {
@@ -843,26 +849,26 @@ static async Task<(string? PostingText, string EvalJson, string? Error)> Resolve
             {
                 var match = await TryCrossCheckAsync(crossCheck, userId, postingHint);
                 if (match is not null)
-                    return (match.ToPostingText(), "{}", null);
-                return (null, "{}", $"Couldn't fetch that URL, and no confident match for \"{postingHint}\" on Jora or Adzuna either. Paste the posting text instead.");
+                    return (match.ToPostingText(), "{}", match.Company, null);
+                return (null, "{}", null, $"Couldn't fetch that URL, and no confident match for \"{postingHint}\" on Jora or Adzuna either. Paste the posting text instead.");
             }
 
-            return (null, "{}", "Could not fetch that URL — this happens with Seek links specifically. Add a job title/company as a hint and we'll try finding it on Jora, or paste the posting text instead.");
+            return (null, "{}", null, "Could not fetch that URL — this happens with Seek links specifically. Add a job title/company as a hint and we'll try finding it on Jora, or paste the posting text instead.");
         }
     }
 
     if (discoveryId is null)
-        return (null, "{}", "Provide a discoveryId, postingUrl, or postingText.");
+        return (null, "{}", null, "Provide a discoveryId, postingUrl, or postingText.");
 
     var posting = await db.DiscoveredPostings.FindAsync(discoveryId.Value);
     if (posting is null)
-        return (null, "{}", "Discovery not found.");
+        return (null, "{}", null, "Discovery not found.");
 
     string evalJson = posting.EvaluationJson ?? "{}";
     try
     {
         var text = await fetcher.FetchAsync(posting.Url);
-        return (text, evalJson, null);
+        return (text, evalJson, posting.Company, null);
     }
     catch
     {
@@ -870,9 +876,9 @@ static async Task<(string? PostingText, string EvalJson, string? Error)> Resolve
         {
             var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var ev = JsonSerializer.Deserialize<PostingEvaluation>(posting.EvaluationJson, opts);
-            if (ev is not null) return (EvalFormatter.ToPostingContext(ev), evalJson, null);
+            if (ev is not null) return (EvalFormatter.ToPostingContext(ev), evalJson, posting.Company, null);
         }
-        return (null, evalJson, "Could not fetch the posting and no cached copy is available. Retry with postingText.");
+        return (null, evalJson, null, "Could not fetch the posting and no cached copy is available. Retry with postingText.");
     }
 }
 
@@ -883,15 +889,19 @@ static int CurrentUserId(HttpContext ctx, string claimType) =>
 // thread → spend a credit → return { threadId, text }), differing only in which agent
 // generates and how the initial user turn is built.
 static async Task<IResult> GenerateArtifactAsync(
-    AppDbContext db, JobPostingFetcher fetcher, CrossCheckDeps crossCheck, int userId,
-    int? discoveryId, string? postingText, string? postingUrl, string? postingHint, string artifactType,
+    AppDbContext db, JobPostingFetcher fetcher, CrossCheckDeps crossCheck, CompanyExtractorAgent companyExtractor,
+    int userId, int? discoveryId, string? postingText, string? postingUrl, string? postingHint, string artifactType,
     Func<string, string, Task<string>> generate,
     Func<string, string, string> buildInitialUserContent)
 {
-    var (resolvedText, evalJson, error) = await ResolvePostingTextAsync(
+    var (resolvedText, evalJson, company, error) = await ResolvePostingTextAsync(
         db, fetcher, crossCheck, userId, discoveryId, postingText, postingUrl, postingHint);
     if (resolvedText is null)
         return Results.BadRequest(new { error });
+
+    // Only known for free via discoveryId (DiscoveredPosting already has it) — everywhere
+    // else, a cheap dedicated extraction beats leaving the download filename generic.
+    company ??= await companyExtractor.ExtractAsync(userId, resolvedText);
 
     var text = await generate(resolvedText, evalJson);
 
@@ -905,6 +915,7 @@ static async Task<IResult> GenerateArtifactAsync(
             new("assistant", text),
         }),
         CurrentContent = text,
+        Company = company,
         Status = AgentThreadStatus.Complete,
         CreatedAt = DateTime.UtcNow,
         UpdatedAt = DateTime.UtcNow,
@@ -924,7 +935,7 @@ static async Task<IResult> GenerateArtifactAsync(
 
 // POST /api/v1/cv — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingHint?: string }
 api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher,
-    JoraFetcher joraFetcher, PostingMatcherAgent matcher, CvTailorAgent cvAgent) =>
+    JoraFetcher joraFetcher, PostingMatcherAgent matcher, CompanyExtractorAgent companyExtractor, CvTailorAgent cvAgent) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     if (!await CreditService.HasCreditAsync(db, userId))
@@ -934,7 +945,7 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
         ?? throw new InvalidOperationException("UserProfile not found for the current user.");
 
     var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
-    return await GenerateArtifactAsync(db, fetcher, crossCheck, userId,
+    return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, userId,
         body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingHint,
         AgentThreadType.Cv,
         (text, evalJson) => cvAgent.GenerateAsync(profile, text, evalJson),
@@ -943,7 +954,7 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
 
 // POST /api/v1/letter — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingHint?: string }
 api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher,
-    JoraFetcher joraFetcher, PostingMatcherAgent matcher, CoverLetterAgent letterAgent) =>
+    JoraFetcher joraFetcher, PostingMatcherAgent matcher, CompanyExtractorAgent companyExtractor, CoverLetterAgent letterAgent) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     if (!await CreditService.HasCreditAsync(db, userId))
@@ -953,7 +964,7 @@ api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContex
         ?? throw new InvalidOperationException("UserProfile not found for the current user.");
 
     var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
-    return await GenerateArtifactAsync(db, fetcher, crossCheck, userId,
+    return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, userId,
         body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingHint,
         AgentThreadType.CoverLetter,
         (text, evalJson) => letterAgent.GenerateAsync(profile, text, evalJson),
@@ -1084,16 +1095,48 @@ api.MapPost("/threads/{id:int}/edit", async (
     return Results.Ok(new { threadId = thread.Id, text, mode = answerMode, content = answerContent });
 }).RequireRateLimiting("generation");
 
+// "{Applicant} - {Company} - {DocType}.{ext}", gracefully dropping any segment that isn't
+// known rather than leaving a blank gap (e.g. "Kavin Abeysinghe - Resume.pdf" when company
+// couldn't be identified).
+static string BuildDownloadFilename(string? applicantName, string? company, string docType, string ext)
+{
+    var parts = new[] { applicantName, company, docType }
+        .Where(p => !string.IsNullOrWhiteSpace(p));
+    var raw = string.Join(" - ", parts);
+    var safe = Regex.Replace(raw, "[\\\\/:*?\"<>|]", "").Trim();
+    return $"{safe}.{ext}";
+}
+
+// Every user's CvBase is seeded in the same format (see parse_resume_intake.md /
+// skills/context/cv_base.md), starting with "# {Full Name}" as its first line.
+static string? ExtractApplicantName(string? cvBase)
+{
+    var firstLine = cvBase?.ReplaceLineEndings("\n").Split('\n').FirstOrDefault()?.Trim();
+    return firstLine is not null && firstLine.StartsWith("# ") ? firstLine[2..].Trim() : null;
+}
+
+static async Task<string?> GetApplicantNameAsync(AppDbContext db, int userId)
+{
+    var profile = await db.UserProfiles.FindAsync(userId);
+    return ExtractApplicantName(profile?.CvBase);
+}
+
 // GET /api/v1/threads/{id}/pdf — renders a completed CV or cover-letter thread as a PDF
 api.MapGet("/threads/{id:int}/pdf", async (int id, AppDbContext db) =>
 {
     var thread = await db.AgentThreads.FindAsync(id);
     if (thread?.CurrentContent is null) return Results.NotFound();
 
+    var applicantName = await GetApplicantNameAsync(db, thread.UserId);
+
     return thread.ArtifactType switch
     {
-        AgentThreadType.Cv => Results.File(JobSearch.Api.Services.PdfRenderer.RenderCv(thread.CurrentContent), "application/pdf", "CV.pdf"),
-        AgentThreadType.CoverLetter => Results.File(JobSearch.Api.Services.PdfRenderer.RenderLetter(thread.CurrentContent), "application/pdf", "Cover Letter.pdf"),
+        AgentThreadType.Cv => Results.File(
+            JobSearch.Api.Services.PdfRenderer.RenderCv(thread.CurrentContent), "application/pdf",
+            BuildDownloadFilename(applicantName, thread.Company, "Resume", "pdf")),
+        AgentThreadType.CoverLetter => Results.File(
+            JobSearch.Api.Services.PdfRenderer.RenderLetter(thread.CurrentContent), "application/pdf",
+            BuildDownloadFilename(applicantName, thread.Company, "Cover Letter", "pdf")),
         _ => Results.NotFound(),
     };
 });
@@ -1105,10 +1148,12 @@ api.MapGet("/threads/{id:int}/docx", async (int id, AppDbContext db) =>
     if (thread?.CurrentContent is null || thread.ArtifactType != AgentThreadType.CoverLetter)
         return Results.NotFound();
 
+    var applicantName = await GetApplicantNameAsync(db, thread.UserId);
+
     var docx = JobSearch.Api.Services.WordRenderer.RenderLetter(thread.CurrentContent);
     return Results.File(docx,
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "Cover Letter.docx");
+        BuildDownloadFilename(applicantName, thread.Company, "Cover Letter", "docx"));
 });
 
 // Recognizes our own "couldn't fetch, paste the description" prompt (identified by its
