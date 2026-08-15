@@ -62,6 +62,7 @@ export function GeneratePage() {
   const [question, setQuestion] = useState("");
   const [cvResult, setCvResult] = useState<GenerationResult | null>(null);
   const [letterResult, setLetterResult] = useState<GenerationResult | null>(null);
+  const [letterCopied, setLetterCopied] = useState(false);
   const [answerResult, setAnswerResult] = useState<GenerationResult | null>(null);
   const [candidates, setCandidates] = useState<PostingCandidate[] | null>(null);
 
@@ -91,7 +92,22 @@ export function GeneratePage() {
   }
 
   async function handleGenerateLetter() {
-    setLetterResult(await generateLetter.execute(postingInput));
+    handleLetterResult(await generateLetter.execute(postingInput));
+  }
+
+  // Every fresh or revised letter is copied automatically — the point of generating one is
+  // to paste it somewhere else (an application form, an email), so save that extra click.
+  // Clipboard access can fail quietly (permissions, non-secure context) — letterCopied only
+  // reflects the latest attempt, so a failed copy never shows a stale "Copied" from before.
+  async function handleLetterResult(result: GenerationResult) {
+    setLetterResult(result);
+    setLetterCopied(false);
+    try {
+      await navigator.clipboard.writeText(result.text ?? "");
+      setLetterCopied(true);
+    } catch {
+      // Clipboard write failed — the letter is still shown on screen, just not auto-copied.
+    }
   }
 
   async function handleAskQuestion() {
@@ -208,7 +224,12 @@ export function GeneratePage() {
 
       {letterResult && (
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <p className="mb-2 text-sm font-medium text-gray-700">Cover letter</p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-700">Cover letter</p>
+            {letterCopied && (
+              <span className="text-xs text-emerald-600">Copied to clipboard.</span>
+            )}
+          </div>
           <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700">{letterResult.text}</pre>
           <div className="mt-3 flex gap-2">
             <a
@@ -227,7 +248,7 @@ export function GeneratePage() {
           <RevisionBox
             threadId={letterResult.threadId}
             placeholder="Request changes"
-            onRevised={setLetterResult}
+            onRevised={handleLetterResult}
           />
         </div>
       )}
