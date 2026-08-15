@@ -9,6 +9,7 @@ import type {
   ParsedResume,
   Profile,
   GenerationResult,
+  PostingCandidate,
 } from "./types";
 
 // VITE_API_URL is set in production to the API's own Railway URL — the frontend and API are
@@ -126,6 +127,10 @@ export async function updateProfile(
   fields: Partial<Pick<Profile, "background" | "cvBase" | "jobCriteria">>,
 ): Promise<Profile> {
   return request("/profile", { method: "PUT", ...json(fields) });
+}
+
+export async function searchPostingCandidates(hint: string): Promise<{ candidates: PostingCandidate[] }> {
+  return request(`/postings/search-candidates?hint=${encodeURIComponent(hint)}`);
 }
 
 export async function generateCv(input: { postingUrl?: string; postingText?: string; postingHint?: string }): Promise<GenerationResult> {

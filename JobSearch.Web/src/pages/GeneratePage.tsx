@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { cvPdfUrl } from "../api";
-import { useGenerateCv, useGenerateLetter, useAskQuestion, useEditThread } from "../hooks/useGeneration";
-import type { GenerationResult } from "../types";
+import { useGenerateCv, useGenerateLetter, useAskQuestion, useEditThread, useSearchPostingCandidates } from "../hooks/useGeneration";
+import type { GenerationResult, PostingCandidate } from "../types";
 
 type Mode = "url" | "text";
 
@@ -63,17 +63,28 @@ export function GeneratePage() {
   const [cvResult, setCvResult] = useState<GenerationResult | null>(null);
   const [letterResult, setLetterResult] = useState<GenerationResult | null>(null);
   const [answerResult, setAnswerResult] = useState<GenerationResult | null>(null);
+  const [candidates, setCandidates] = useState<PostingCandidate[] | null>(null);
 
   const generateCv = useGenerateCv();
   const generateLetter = useGenerateLetter();
   const askQuestion = useAskQuestion();
+  const searchCandidates = useSearchPostingCandidates();
 
   const postingInput = mode === "url" ? { postingUrl, postingHint: postingHint || undefined } : { postingText };
   const canSubmitPosting = mode === "url" ? postingUrl.trim().length > 0 : postingText.trim().length > 0;
-  const error = generateCv.error ?? generateLetter.error ?? askQuestion.error;
+  const error = generateCv.error ?? generateLetter.error ?? askQuestion.error ?? searchCandidates.error;
   // A URL fetch failure is the only case a hint helps with — reveal the field once that's
   // happened rather than cluttering the common case where the link just works.
   const showHintField = mode === "url" && (error !== null || postingHint.length > 0);
+
+  async function handleSearchCandidates() {
+    setCandidates((await searchCandidates.execute(postingHint)).candidates);
+  }
+
+  function handlePickCandidate(candidate: PostingCandidate) {
+    setPostingUrl(candidate.url);
+    setCandidates(null);
+  }
 
   async function handleGenerateCv() {
     setCvResult(await generateCv.execute(postingInput));
@@ -110,12 +121,44 @@ export function GeneratePage() {
               className="w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
             />
             {showHintField && (
-              <input
-                value={postingHint}
-                onChange={e => setPostingHint(e.target.value)}
-                placeholder="Job title or company — helps us find it elsewhere if the link can't be fetched directly (e.g. Seek)"
-                className="w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
+              <div className="flex gap-2">
+                <input
+                  value={postingHint}
+                  onChange={e => { setPostingHint(e.target.value); setCandidates(null); }}
+                  placeholder="Job title or company — helps us find it elsewhere if the link can't be fetched directly (e.g. Seek)"
+                  className="flex-1 rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+                <button
+                  onClick={handleSearchCandidates}
+                  disabled={postingHint.trim().length === 0 || searchCandidates.loading}
+                  className="shrink-0 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {searchCandidates.loading ? "Searching…" : "Search Jora/Adzuna"}
+                </button>
+              </div>
+            )}
+
+            {candidates && (
+              candidates.length === 0 ? (
+                <p className="text-xs text-gray-400">No results for that search.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-gray-400">Pick the one you meant — it'll be used as the posting URL.</p>
+                  {candidates.map(c => (
+                    <button
+                      key={c.url}
+                      onClick={() => handlePickCandidate(c)}
+                      className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-left text-sm hover:border-blue-300 hover:bg-blue-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-gray-800">{c.title}</span>
+                        <span className="block truncate text-xs text-gray-500">{c.company} · {c.location}</span>
+                      </span>
+                      <span className="ml-2 shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">{c.source}</span>
+                    </button>
+                  ))}
+                </div>
+              )
             )}
           </div>
         ) : (

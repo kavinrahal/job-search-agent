@@ -120,6 +120,14 @@ export interface GenerationResult {
   mode?: "ask_followup" | "final_answer";
 }
 
+export interface PostingCandidate {
+  title: string;
+  company: string;
+  location: string;
+  url: string;
+  source: string;
+}
+
 export interface Profile {
   background: string;
   cvBase: string;

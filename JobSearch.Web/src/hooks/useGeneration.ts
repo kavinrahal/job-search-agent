@@ -1,4 +1,4 @@
-import { generateCv, generateLetter, askQuestion, editThread } from "../api";
+import { generateCv, generateLetter, askQuestion, editThread, searchPostingCandidates } from "../api";
 import { useAsyncAction } from "./useAsync";
 
 export function useGenerateCv() {
@@ -15,4 +15,8 @@ export function useAskQuestion() {
 
 export function useEditThread() {
   return useAsyncAction(editThread);
+}
+
+export function useSearchPostingCandidates() {
+  return useAsyncAction(searchPostingCandidates);
 }

@@ -782,16 +782,42 @@ api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db) =>
 
 // A pasted URL alone carries no title/company to search Jora/Adzuna with (unlike the Seek
 // email-alert pipeline, which always has those from the alert itself) — postingHint covers
-// that gap when the direct fetch fails. Same matching mechanism as JobAlertProcessor's
-// cross-check, just a user-supplied hint instead of text pulled from an alert email.
+// that gap when the direct fetch fails.
+static async Task<List<JobFeedItem>> SearchCandidatesAsync(JoraFetcher jora, AdzunaFetcher? adzuna, string hint)
+{
+    var candidates = new List<JobFeedItem>(await jora.SearchAsync(hint, "Melbourne"));
+    if (adzuna is not null)
+        candidates.AddRange(await adzuna.SearchAsync(hint, "melbourne"));
+    return candidates;
+}
+
+// Same matching mechanism as JobAlertProcessor's cross-check, just a user-supplied hint
+// instead of text pulled from an alert email. Used by /cv,/letter,/answer as a fast path —
+// when confident, skips the manual "pick from search results" step (/postings/search-candidates
+// below) entirely.
 static async Task<JobFeedItem?> TryCrossCheckAsync(CrossCheckDeps deps, int userId, string hint)
 {
-    var candidates = new List<JobFeedItem>(await deps.Jora.SearchAsync(hint, "Melbourne"));
-    if (deps.Adzuna is not null)
-        candidates.AddRange(await deps.Adzuna.SearchAsync(hint, "melbourne"));
-
+    var candidates = await SearchCandidatesAsync(deps.Jora, deps.Adzuna, hint);
     return candidates.Count > 0 ? await deps.Matcher.FindMatchAsync(userId, hint, candidates) : null;
 }
+
+// GET /api/v1/postings/search-candidates?hint=... — the manual counterpart to the automatic
+// cross-check above: no Claude call, just the raw Jora/Adzuna search results, for the Generate
+// UI to show as pickable suggestions when the auto-match isn't confident enough (or the user
+// wants to search directly). Picking one just sets it as postingUrl — Jora/Adzuna links
+// already fetch fine directly, no special-casing needed once a URL is chosen.
+api.MapGet("/postings/search-candidates", async (HttpContext ctx, string hint, JoraFetcher joraFetcher) =>
+{
+    if (string.IsNullOrWhiteSpace(hint))
+        return Results.BadRequest(new { error = "hint is required." });
+
+    var candidates = await SearchCandidatesAsync(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), hint);
+
+    return Results.Ok(new
+    {
+        candidates = candidates.Take(6).Select(c => new { c.Title, c.Company, c.Location, c.Url, c.Source }),
+    });
+});
 
 // Resolves posting text from a pasted URL, an existing (per-user) DiscoveredPosting, or
 // pasted text directly — in that priority order. Falls back to the cached evaluation summary
