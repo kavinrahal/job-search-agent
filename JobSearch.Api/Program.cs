@@ -353,9 +353,12 @@ app.MapGet("/api/v1/auth/denied", () =>
 // ---------------------------------------------------------------------------
 var api = app.MapGroup("/api/v1").RequireAuthorization();
 
-// GET /api/v1/discoveries
-api.MapGet("/discoveries", (AppDbContext db, string? recommendation = null, int page = 1, int pageSize = 25) =>
+// GET /api/v1/discoveries — Tier 2 only: discovery is a Tier 2-exclusive feature.
+api.MapGet("/discoveries", async (HttpContext ctx, AppDbContext db, string? recommendation = null, int page = 1, int pageSize = 25) =>
 {
+    var (_, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (tierError is not null) return tierError;
+
     var validRecs = new HashSet<string> { "strong_match", "good_match", "weak_match", "discard" };
     if (recommendation is not null && !validRecs.Contains(recommendation))
         return Results.BadRequest(new { error = "Invalid recommendation value" });
@@ -366,13 +369,13 @@ api.MapGet("/discoveries", (AppDbContext db, string? recommendation = null, int 
         ? query.Where(d => d.Recommendation == recommendation)
         : query.Where(d => d.Recommendation != null && d.Recommendation != "error");
 
-    int total = query.Count();
+    int total = await query.CountAsync();
 
-    var raw = query
+    var raw = await query
         .OrderByDescending(d => d.DiscoveredAt)
         .Skip((page - 1) * pageSize)
         .Take(pageSize)
-        .ToList();
+        .ToListAsync();
 
     var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
     var items = raw.Select(d =>
@@ -493,13 +496,17 @@ api.MapGet("/emails", (
     return Results.Ok(new { items, total, page, pageSize });
 });
 
-// GET /api/v1/applications
-api.MapGet("/applications", (
+// GET /api/v1/applications — Tier 2 only: application tracking is a Tier 2-exclusive feature.
+api.MapGet("/applications", async (
+    HttpContext ctx,
     AppDbContext db,
     string? status = null,
     int page = 1,
     int pageSize = 25) =>
 {
+    var (_, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (tierError is not null) return tierError;
+
     var validStatuses = new HashSet<string>
         { "Applied", "Acknowledged", "Screening", "Interviewing",
           "FinalRound", "Offer", "Rejected", "Ghosted", "Withdrawn" };
@@ -510,9 +517,9 @@ api.MapGet("/applications", (
     if (status is not null)
         query = query.Where(a => a.Status == status);
 
-    int total = query.Count();
+    int total = await query.CountAsync();
 
-    var items = query
+    var items = await query
         .OrderByDescending(a => a.UpdatedAt)
         .Skip((page - 1) * pageSize)
         .Take(pageSize)
@@ -527,14 +534,17 @@ api.MapGet("/applications", (
             updatedAt = a.UpdatedAt,
             notes = a.Notes,
         })
-        .ToList();
+        .ToListAsync();
 
     return Results.Ok(new { items, total, page, pageSize });
 });
 
-// GET /api/v1/applications/{id}/events
-api.MapGet("/applications/{id}/events", async (int id, AppDbContext db) =>
+// GET /api/v1/applications/{id}/events — Tier 2 only.
+api.MapGet("/applications/{id}/events", async (HttpContext ctx, int id, AppDbContext db) =>
 {
+    var (_, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (tierError is not null) return tierError;
+
     var application = await db.Applications.FindAsync(id);
     if (application is null) return Results.NotFound();
 
@@ -568,10 +578,13 @@ api.MapGet("/applications/{id}/events", async (int id, AppDbContext db) =>
     });
 });
 
-// GET /api/v1/activity
-api.MapGet("/activity", (AppDbContext db, int limit = 20) =>
+// GET /api/v1/activity — Tier 2 only: built entirely from application-tracking events.
+api.MapGet("/activity", async (HttpContext ctx, AppDbContext db, int limit = 20) =>
 {
-    var items = db.ApplicationEvents
+    var (_, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (tierError is not null) return tierError;
+
+    var items = await db.ApplicationEvents
         .Join(db.Applications,
             e => e.ApplicationId,
             a => a.Id,
@@ -589,7 +602,7 @@ api.MapGet("/activity", (AppDbContext db, int limit = 20) =>
             summary = x.Event.Summary,
             occurredAt = x.Event.OccurredAt,
         })
-        .ToList();
+        .ToListAsync();
 
     return Results.Ok(items);
 });

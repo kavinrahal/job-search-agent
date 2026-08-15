@@ -14,13 +14,15 @@ import { SupportPage } from "./pages/SupportPage";
 import { SourcesPage } from "./pages/SourcesPage";
 import { useMe, useLogout } from "./hooks/useAuth";
 
+// Discover/Applications/Activity are Tier 2-exclusive (discovery and application tracking
+// both are — see the backend's matching RequireTier2Async gate on those three endpoints).
 const NAV_LINKS = [
   { to: "/",             label: "Dashboard"    },
   { to: "/generate",     label: "Generate"     },
-  { to: "/discover",     label: "Discover"     },
-  { to: "/applications", label: "Applications" },
-  { to: "/activity",     label: "Activity"     },
-  { to: "/sources",      label: "Sources",     tier2Only: true },
+  { to: "/discover",     label: "Discover",     tier2Only: true },
+  { to: "/applications", label: "Applications", tier2Only: true },
+  { to: "/activity",     label: "Activity",     tier2Only: true },
+  { to: "/sources",      label: "Sources",      tier2Only: true },
   { to: "/profile",      label: "Profile"      },
   { to: "/criteria",     label: "Criteria"     },
   { to: "/settings",     label: "Settings"     },
