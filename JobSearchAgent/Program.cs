@@ -124,6 +124,33 @@ else if (ownerRefreshToken is null && clientId is null)
 }
 
 // ---------------------------------------------------------------------------
+// Tier 2 aggregator/ATS discovery: runs the moment someone is Tier 2, independent of
+// whether they've connected Gmail — Gmail is a separate, optional step (application status
+// tracking), not a prerequisite for seeing discovered postings. Deliberately not folded into
+// the Gmail-gated loop below.
+// ---------------------------------------------------------------------------
+if (!testMode)
+{
+    var discoveryUsers = await db.Users
+        .Where(u => u.Tier == UserTier.Tier2 && db.UserProfiles.Any(p => p.UserId == u.Id))
+        .ToListAsync();
+
+    Console.WriteLine($"Running aggregator discovery for {discoveryUsers.Count} Tier 2 user(s)...");
+    foreach (var user in discoveryUsers)
+    {
+        try
+        {
+            var (discovered, evaluated, notified) = await RunDiscoveryForUserAsync(user);
+            Console.WriteLine($"  [{user.Email}] discovery: {discovered} new, {evaluated} evaluated, {notified} notified.");
+        }
+        catch (Exception ex)
+        {
+            await Console.Error.WriteLineAsync($"[{user.Email}] Discovery error: {ex}");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Active users: Gmail connected AND a criteria profile exists. Anyone missing either is
 // skipped for now — no partial-pipeline branching for a case with no real users yet.
 // ---------------------------------------------------------------------------
@@ -167,14 +194,39 @@ await db.SaveChangesAsync();
 await WorkerLockService.ReleaseAsync(db);
 
 // ---------------------------------------------------------------------------
-// Per-user pipeline: fetch, classify, track applications, discover postings, process job
-// alerts, send notifications. Runs against its own AppDbContext (fresh per user, not the
-// bootstrap `db` above) so tracked entities and CurrentUserId never leak between users.
+// Aggregator/ATS discovery for one Tier 2 user — decoupled from Gmail so it starts the
+// moment they're Tier 2, no OAuth prerequisite. Fresh AppDbContext per user, same reasoning
+// as ProcessUserAsync below.
+// ---------------------------------------------------------------------------
+bool IsOwnerWithTelegram(User user) => user.Id == owner.Id && botToken is not null && chatId is not null;
+
+async Task<(int Discovered, int Evaluated, int Notified)> RunDiscoveryForUserAsync(User user)
+{
+    await using var userDb = new AppDbContext(dbOptions) { CurrentUserId = user.Id };
+
+    var fetchers = DiscoverySourceResolver.Resolve(user.EnabledSources, adzunaAppId, adzunaAppKey);
+    if (fetchers.Count == 0)
+    {
+        Console.WriteLine("    (no automatic sources enabled — skipped)");
+        return (0, 0, 0);
+    }
+
+    bool sendTelegram = IsOwnerWithTelegram(user);
+    using var discoveryTelegram = sendTelegram ? new TelegramNotifier(botToken!, chatId!) : null;
+    var discovery = new JobDiscoveryWorker(
+        userDb, fetchers, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), discoveryTelegram);
+    return await discovery.RunAsync();
+}
+
+// ---------------------------------------------------------------------------
+// Per-user pipeline: fetch, classify, track applications, process job alerts, send
+// notifications. Runs against its own AppDbContext (fresh per user, not the bootstrap `db`
+// above) so tracked entities and CurrentUserId never leak between users.
 // ---------------------------------------------------------------------------
 async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> ProcessUserAsync(User user)
 {
     await using var userDb = new AppDbContext(dbOptions) { CurrentUserId = user.Id };
-    bool sendTelegram = user.Id == owner.Id && botToken is not null && chatId is not null;
+    bool sendTelegram = IsOwnerWithTelegram(user);
 
     var refreshToken = await userSecrets.GetAsync(userDb, user.Id, UserSecretKey.GmailRefreshToken);
     if (refreshToken is null || clientId is null || clientSecret is null)
@@ -231,33 +283,6 @@ async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> Proce
         });
     }
     await userDb.SaveChangesAsync();
-
-    // Job discovery — always runs, even when there are no new emails to classify
-    if (!testMode)
-    {
-        Console.WriteLine();
-        if (adzunaAppId is null || adzunaAppKey is null)
-        {
-            Console.WriteLine("Job discovery: skipped (ADZUNA_APP_ID / ADZUNA_APP_KEY not set).");
-        }
-        else
-        {
-            using var discoveryTelegram = sendTelegram ? new TelegramNotifier(botToken!, chatId!) : null;
-            var discovery = new JobDiscoveryWorker(
-                userDb,
-                [
-                    new AdzunaFetcher(adzunaAppId, adzunaAppKey),
-                    new GreenhouseFetcher(),
-                    new LeverFetcher(),
-                ],
-                new JobPostingFetcher(),
-                new PostingEvaluator(apiKey, usageLogger),
-                discoveryTelegram);
-
-            var (discovered, evaluated, notified) = await discovery.RunAsync();
-            Console.WriteLine($"Job discovery: {discovered} new, {evaluated} evaluated, {notified} notified.");
-        }
-    }
 
     // Determine what to classify
     List<RawEmail> emailsToClassify;
