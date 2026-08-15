@@ -135,6 +135,17 @@ export interface Profile {
   updatedAt: string;
 }
 
+export interface SourceCatalogItem {
+  key: string;
+  label: string;
+  automatic: boolean;
+}
+
+export interface SourcesResponse {
+  catalog: SourceCatalogItem[];
+  enabled: string[];
+}
+
 export interface HealthStatus {
   status: "ok" | "stale" | "unknown";
   lastRunAt: string | null;

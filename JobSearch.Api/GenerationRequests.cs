@@ -20,3 +20,6 @@ public record ProfileUpdateRequest(string? Background, string? CvBase, string? J
 
 // POST /api/v1/support
 public record SupportMessageRequest(string Message);
+
+// PUT /api/v1/sources
+public record SourcesUpdateRequest(string[] Sources);

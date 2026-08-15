@@ -10,6 +10,7 @@ import type {
   Profile,
   GenerationResult,
   PostingCandidate,
+  SourcesResponse,
 } from "./types";
 
 // VITE_API_URL is set in production to the API's own Railway URL — the frontend and API are
@@ -91,8 +92,21 @@ export async function fetchDiscoveries(params: {
   return request(`/discoveries${qs(params)}`);
 }
 
-export async function fetchMe(): Promise<{ email: string; needsOnboarding: boolean }> {
+export async function fetchMe(): Promise<{
+  email: string;
+  tier: string;
+  needsOnboarding: boolean;
+  needsSourceSelection: boolean;
+}> {
   return request("/auth/me");
+}
+
+export async function fetchSources(): Promise<SourcesResponse> {
+  return request("/sources");
+}
+
+export async function updateSources(sources: string[]): Promise<{ enabled: string[] }> {
+  return request("/sources", { method: "PUT", ...json({ sources }) });
 }
 
 export async function logout(): Promise<void> {

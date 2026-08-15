@@ -333,8 +333,9 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
     // owner's is always seeded with real content, so this only ever flags a genuine first-timer.
     var profile = await db.UserProfiles.FindAsync(userId);
     bool needsOnboarding = string.IsNullOrEmpty(profile?.Background);
+    bool needsSourceSelection = user.Tier == UserTier.Tier2 && user.EnabledSources is null;
 
-    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding });
+    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsSourceSelection });
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>
@@ -755,6 +756,30 @@ api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbC
     return Results.Ok(new { profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt });
 });
 
+// GET /api/v1/sources — Tier 2 only. Source catalog plus the user's current selection.
+api.MapGet("/sources", async (HttpContext ctx, AppDbContext db) =>
+{
+    var (user, error) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (error is not null) return error;
+
+    var catalog = JobSource.Catalog.Select(c => new { key = c.Key, label = c.Label, automatic = c.Automatic });
+    var enabled = user!.EnabledSources?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
+    return Results.Ok(new { catalog, enabled });
+});
+
+// PUT /api/v1/sources — body: { sources: string[] }. Unknown keys are dropped silently
+// rather than rejected, so an older frontend build never hard-fails against a trimmed catalog.
+api.MapPut("/sources", async (HttpContext ctx, SourcesUpdateRequest body, AppDbContext db) =>
+{
+    var (user, error) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (error is not null) return error;
+
+    var sanitized = JobSource.Sanitize(body.Sources);
+    user!.EnabledSources = string.Join(',', sanitized);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { enabled = sanitized });
+});
+
 // POST /api/v1/account/cancel — soft-deactivates the account (blocks future login, data is
 // kept) and signs out the current session immediately. Doesn't revoke any other active
 // session for this account elsewhere — there's no server-side session store to revoke
@@ -884,6 +909,16 @@ static async Task<(string? PostingText, string EvalJson, string? Company, string
 
 static int CurrentUserId(HttpContext ctx, string claimType) =>
     int.Parse(ctx.User.FindFirstValue(claimType)!, CultureInfo.InvariantCulture);
+
+// Shared by every Tier 2-only endpoint (sources, and the Gmail/SendGrid ones still to come).
+static async Task<(User? User, IResult? Error)> RequireTier2Async(AppDbContext db, int userId)
+{
+    var user = await db.Users.FindAsync(userId);
+    if (user is null) return (null, Results.NotFound());
+    if (user.Tier != UserTier.Tier2)
+        return (null, Results.Json(new { error = "Tier 2 only" }, statusCode: StatusCodes.Status403Forbidden));
+    return (user, null);
+}
 
 // Shared by /cv and /letter — identical shape (resolve posting → generate → save a Complete
 // thread → spend a credit → return { threadId, text }), differing only in which agent

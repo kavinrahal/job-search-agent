@@ -18,6 +18,10 @@ public class User
     // to block sign-in, so a returning user's data is still there if they come back. Null
     // means active.
     public DateTime? DeactivatedAt { get; set; }
+
+    // CSV of JobSource keys chosen in the Tier 2 "choose your sources" step. Null means the
+    // step hasn't been completed yet — Tier 1 users never see it, so stays null for them.
+    public string? EnabledSources { get; set; }
 }
 
 // Bare entitlement fields — Stripe/billing wiring is a separate later ticket.

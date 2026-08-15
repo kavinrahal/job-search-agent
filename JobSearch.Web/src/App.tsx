@@ -11,6 +11,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { LandingPage } from "./pages/LandingPage";
 import { GeneratePage } from "./pages/GeneratePage";
 import { SupportPage } from "./pages/SupportPage";
+import { SourcesPage } from "./pages/SourcesPage";
 import { useMe, useLogout } from "./hooks/useAuth";
 
 const NAV_LINKS = [
@@ -19,6 +20,7 @@ const NAV_LINKS = [
   { to: "/discover",     label: "Discover"     },
   { to: "/applications", label: "Applications" },
   { to: "/activity",     label: "Activity"     },
+  { to: "/sources",      label: "Sources",     tier2Only: true },
   { to: "/profile",      label: "Profile"      },
   { to: "/criteria",     label: "Criteria"     },
   { to: "/settings",     label: "Settings"     },
@@ -31,16 +33,22 @@ const NAV_LINKS = [
 // or settings without a redirect loop, but still funnels them away from the empty Dashboard.
 const ONBOARDING_ROUTES = ["/profile", "/criteria", "/settings"];
 
-function OnboardingRedirect() {
+// Same idea, one step later: a Tier 2 user who hasn't picked sources yet (needsSourceSelection)
+// can still reach Settings to back out, but everything else bounces to /sources first.
+const SOURCES_ROUTES = ["/sources", "/settings"];
+
+function StepRedirect({ allowedRoutes, to }: { allowedRoutes: string[]; to: string }) {
   const location = useLocation();
-  if (ONBOARDING_ROUTES.includes(location.pathname)) return null;
-  return <Navigate to="/profile" replace />;
+  if (allowedRoutes.includes(location.pathname)) return null;
+  return <Navigate to={to} replace />;
 }
 
-function NavLinks({ onNavigate, className }: { onNavigate?: () => void; className: (isActive: boolean) => string }) {
+function NavLinks({ links, onNavigate, className }: {
+  links: typeof NAV_LINKS; onNavigate?: () => void; className: (isActive: boolean) => string;
+}) {
   return (
     <>
-      {NAV_LINKS.map(({ to, label }) => (
+      {links.map(({ to, label }) => (
         <NavLink
           key={to}
           to={to}
@@ -82,6 +90,8 @@ export default function App() {
   if (loading) return null;
   if (!me) return <LandingPage />;
 
+  const navLinks = NAV_LINKS.filter(l => !l.tier2Only || me.tier === "Tier2");
+
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50">
@@ -91,6 +101,7 @@ export default function App() {
 
             <nav className="hidden items-center gap-1 md:flex">
               <NavLinks
+                links={navLinks}
                 className={isActive =>
                   `rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                     isActive
@@ -122,6 +133,7 @@ export default function App() {
           {menuOpen && (
             <nav className="flex flex-col gap-1 border-t border-gray-100 px-4 py-3 md:hidden">
               <NavLinks
+                links={navLinks}
                 onNavigate={() => setMenuOpen(false)}
                 className={isActive =>
                   `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
@@ -137,13 +149,15 @@ export default function App() {
         </header>
 
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-          {me.needsOnboarding && <OnboardingRedirect />}
+          {me.needsOnboarding && <StepRedirect allowedRoutes={ONBOARDING_ROUTES} to="/profile" />}
+          {!me.needsOnboarding && me.needsSourceSelection && <StepRedirect allowedRoutes={SOURCES_ROUTES} to="/sources" />}
           <Routes>
             <Route path="/"             element={<DashboardPage />} />
             <Route path="/generate"     element={<GeneratePage />} />
             <Route path="/discover"     element={<DiscoveriesPage />} />
             <Route path="/applications" element={<ApplicationsPage />} />
             <Route path="/activity"     element={<ActivityPage />} />
+            <Route path="/sources"      element={<SourcesPage />} />
             <Route path="/profile"      element={<ResumeIntakePage />} />
             <Route path="/criteria"     element={<JobCriteriaPage />} />
             <Route path="/settings"     element={<SettingsPage />} />
