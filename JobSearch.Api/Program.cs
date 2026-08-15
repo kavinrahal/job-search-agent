@@ -1084,15 +1084,31 @@ api.MapPost("/threads/{id:int}/edit", async (
     return Results.Ok(new { threadId = thread.Id, text, mode = answerMode, content = answerContent });
 }).RequireRateLimiting("generation");
 
-// GET /api/v1/threads/{id}/pdf — renders a completed CV thread's content as a downloadable PDF
+// GET /api/v1/threads/{id}/pdf — renders a completed CV or cover-letter thread as a PDF
 api.MapGet("/threads/{id:int}/pdf", async (int id, AppDbContext db) =>
 {
     var thread = await db.AgentThreads.FindAsync(id);
-    if (thread is null || thread.ArtifactType != AgentThreadType.Cv || thread.CurrentContent is null)
+    if (thread?.CurrentContent is null) return Results.NotFound();
+
+    return thread.ArtifactType switch
+    {
+        AgentThreadType.Cv => Results.File(JobSearch.Api.Services.PdfRenderer.RenderCv(thread.CurrentContent), "application/pdf", "CV.pdf"),
+        AgentThreadType.CoverLetter => Results.File(JobSearch.Api.Services.PdfRenderer.RenderLetter(thread.CurrentContent), "application/pdf", "Cover Letter.pdf"),
+        _ => Results.NotFound(),
+    };
+});
+
+// GET /api/v1/threads/{id}/docx — cover letter as a Word document
+api.MapGet("/threads/{id:int}/docx", async (int id, AppDbContext db) =>
+{
+    var thread = await db.AgentThreads.FindAsync(id);
+    if (thread?.CurrentContent is null || thread.ArtifactType != AgentThreadType.CoverLetter)
         return Results.NotFound();
 
-    var pdf = JobSearch.Api.Services.PdfRenderer.RenderCv(thread.CurrentContent);
-    return Results.File(pdf, "application/pdf", "CV.pdf");
+    var docx = JobSearch.Api.Services.WordRenderer.RenderLetter(thread.CurrentContent);
+    return Results.File(docx,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "Cover Letter.docx");
 });
 
 // Recognizes our own "couldn't fetch, paste the description" prompt (identified by its

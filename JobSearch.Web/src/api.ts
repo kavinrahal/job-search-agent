@@ -149,6 +149,12 @@ export async function editThread(threadId: number, message: string): Promise<Gen
   return request(`/threads/${threadId}/edit`, { method: "POST", ...json({ message }) });
 }
 
-export function cvPdfUrl(threadId: number): string {
+// Works for both CV and cover-letter threads — the endpoint renders based on the thread's
+// own stored artifact type.
+export function threadPdfUrl(threadId: number): string {
   return `${BASE}/threads/${threadId}/pdf`;
+}
+
+export function threadDocxUrl(threadId: number): string {
+  return `${BASE}/threads/${threadId}/docx`;
 }

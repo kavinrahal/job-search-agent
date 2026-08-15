@@ -9,7 +9,15 @@ public static class PdfRenderer
 {
     static PdfRenderer() => QuestPDF.Settings.License = LicenseType.Community;
 
-    public static byte[] RenderCv(string markdown)
+    // Cover letters are plain paragraphs with no markdown syntax (see write_cover_letter.md's
+    // "no markdown headers" rule), which Render already handles correctly as-is — each
+    // non-blank line falls through to the plain-text branch below. Same renderer, named per
+    // call site so it doesn't read as CV-specific where it's used for a letter.
+    public static byte[] RenderLetter(string text) => Render(text);
+
+    public static byte[] RenderCv(string markdown) => Render(markdown);
+
+    private static byte[] Render(string markdown)
     {
         var lines = markdown.ReplaceLineEndings("\n").Split('\n');
 

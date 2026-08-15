@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { cvPdfUrl } from "../api";
+import { threadPdfUrl, threadDocxUrl } from "../api";
 import { useGenerateCv, useGenerateLetter, useAskQuestion, useEditThread, useSearchPostingCandidates } from "../hooks/useGeneration";
 import type { GenerationResult, PostingCandidate } from "../types";
 
@@ -193,7 +193,7 @@ export function GeneratePage() {
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <p className="mb-2 text-sm font-medium text-gray-700">CV ready</p>
           <a
-            href={cvPdfUrl(cvResult.threadId)}
+            href={threadPdfUrl(cvResult.threadId)}
             className="inline-block rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
           >
             Download PDF
@@ -210,6 +210,20 @@ export function GeneratePage() {
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <p className="mb-2 text-sm font-medium text-gray-700">Cover letter</p>
           <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700">{letterResult.text}</pre>
+          <div className="mt-3 flex gap-2">
+            <a
+              href={threadPdfUrl(letterResult.threadId)}
+              className="inline-block rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
+            >
+              Download PDF
+            </a>
+            <a
+              href={threadDocxUrl(letterResult.threadId)}
+              className="inline-block rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
+            >
+              Download Word
+            </a>
+          </div>
           <RevisionBox
             threadId={letterResult.threadId}
             placeholder="Request changes"
