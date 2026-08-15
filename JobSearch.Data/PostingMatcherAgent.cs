@@ -1,11 +1,12 @@
 using System.Text.Json;
 using Anthropic;
 using Anthropic.Models.Messages;
-using JobSearch.Data;
-using JobSearchAgent.Integrations;
 
-namespace JobSearchAgent.Agents;
+namespace JobSearch.Data;
 
+// Used by both JobAlertProcessor's Seek cross-check (JobSearchAgent worker) and the
+// /cv,/letter,/answer generation endpoints (JobSearch.Api) when a pasted Seek URL can't be
+// fetched — same matching decision either way, just different candidate sources.
 public class PostingMatcherAgent
 {
     private readonly AnthropicClient _client;
@@ -43,10 +44,10 @@ public class PostingMatcherAgent
 
     protected PostingMatcherAgent() { _client = null!; _systemPrompt = ""; _tool = null!; _usageLogger = null; }
 
-    // targetContext is a short raw excerpt from the alert email around the job's mention
-    // (title/company/location/salary, in whatever order the email happened to list them) —
-    // deliberately not pre-parsed into fields, since letting the model read the messy
-    // original text is more robust than a hand-rolled parser tied to one email template.
+    // targetContext is a short raw excerpt of whatever's known about the job (from an alert
+    // email, or a user-supplied title/company hint) — deliberately not pre-parsed into
+    // fields, since letting the model read the messy original text is more robust than a
+    // hand-rolled parser tied to one source's format.
     public virtual async Task<JobFeedItem?> FindMatchAsync(
         int userId, string targetContext, IReadOnlyList<JobFeedItem> candidates)
     {
@@ -56,7 +57,7 @@ public class PostingMatcherAgent
             $"[{i}] {c.Title} — {c.Company} — {c.Location}"));
 
         string userContent = $"""
-            Target job, from an alert email (the posting page itself couldn't be fetched):
+            Target job (the posting page itself couldn't be fetched):
             {targetContext}
 
             Candidate postings found via search:

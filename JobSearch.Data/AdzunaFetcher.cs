@@ -2,7 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace JobSearchAgent.Integrations;
+namespace JobSearch.Data;
 
 public class AdzunaFetcher : IJobFetcher
 {
@@ -13,7 +13,7 @@ public class AdzunaFetcher : IJobFetcher
     public AdzunaFetcher(string appId, string appKey)
         : this(appId, appKey, new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
 
-    internal AdzunaFetcher(string appId, string appKey, HttpClient http)
+    public AdzunaFetcher(string appId, string appKey, HttpClient http)
     {
         _appId = appId;
         _appKey = appKey;
@@ -53,8 +53,9 @@ public class AdzunaFetcher : IJobFetcher
         return results;
     }
 
-    // Used for the Seek cross-check (JobAlertProcessor): a one-off targeted search rather
-    // than the fixed keyword sweep FetchAllAsync runs for proactive discovery.
+    // Used for the Seek cross-check (JobAlertProcessor / the /cv,/letter,/answer generation
+    // endpoints): a one-off targeted search rather than the fixed keyword sweep FetchAllAsync
+    // runs for proactive discovery.
     public virtual async Task<List<JobFeedItem>> SearchAsync(string keywords, string location)
     {
         try

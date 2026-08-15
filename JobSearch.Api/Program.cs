@@ -155,6 +155,11 @@ var telegramWebhookSecret = builder.Configuration["TELEGRAM_WEBHOOK_SECRET"]
 var telegramChatId = builder.Configuration["TELEGRAM_CHAT_ID"]
     ?? throw new InvalidOperationException("TELEGRAM_CHAT_ID not set");
 
+// Optional — only needed for the Seek cross-check hint fallback below; that fallback just
+// skips Adzuna (Jora alone still runs) if these aren't configured.
+var adzunaAppId = builder.Configuration["ADZUNA_APP_ID"];
+var adzunaAppKey = builder.Configuration["ADZUNA_APP_KEY"];
+
 builder.Services.AddSingleton(_ => new JobPostingFetcher());
 builder.Services.AddSingleton(sp => new ClaudeUsageLogger(sp.GetRequiredService<DbContextOptions<AppDbContext>>()));
 builder.Services.AddSingleton(sp => new PostingEvaluator(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
@@ -162,6 +167,17 @@ builder.Services.AddSingleton(sp => new CoverLetterAgent(anthropicApiKey, sp.Get
 builder.Services.AddSingleton(sp => new CvTailorAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new AnswerAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new ResumeIntakeAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(sp => new PostingMatcherAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(_ => new JoraFetcher());
+// Left unregistered when unset. Deliberately NOT an endpoint parameter (AdzunaFetcher?) —
+// minimal API infers an unregistered type's parameter source at startup from the DI
+// container's contents, so an endpoint requesting a type that isn't registered fails with a
+// 500 ("did you mean to register this as a service?") instead of resolving to null. Resolved
+// per-request instead via ctx.RequestServices.GetService<AdzunaFetcher>(), which does return
+// null safely for an unregistered type — this is plain IServiceProvider behavior, not a
+// minimal-API inference decision made once at startup.
+if (adzunaAppId is not null && adzunaAppKey is not null)
+    builder.Services.AddSingleton(new AdzunaFetcher(adzunaAppId, adzunaAppKey));
 builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
 
 // Trust X-Forwarded-Proto from Railway's load balancer regardless of its IP.
@@ -764,13 +780,27 @@ api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db) =>
 // this to work correctly).
 // ---------------------------------------------------------------------------
 
+// A pasted URL alone carries no title/company to search Jora/Adzuna with (unlike the Seek
+// email-alert pipeline, which always has those from the alert itself) — postingHint covers
+// that gap when the direct fetch fails. Same matching mechanism as JobAlertProcessor's
+// cross-check, just a user-supplied hint instead of text pulled from an alert email.
+static async Task<JobFeedItem?> TryCrossCheckAsync(CrossCheckDeps deps, int userId, string hint)
+{
+    var candidates = new List<JobFeedItem>(await deps.Jora.SearchAsync(hint, "Melbourne"));
+    if (deps.Adzuna is not null)
+        candidates.AddRange(await deps.Adzuna.SearchAsync(hint, "melbourne"));
+
+    return candidates.Count > 0 ? await deps.Matcher.FindMatchAsync(userId, hint, candidates) : null;
+}
+
 // Resolves posting text from a pasted URL, an existing (per-user) DiscoveredPosting, or
 // pasted text directly — in that priority order. Falls back to the cached evaluation summary
 // if a DiscoveredPosting can't be re-fetched — same fallback Telegram uses — but unlike
 // Telegram's reply-to-this-message trick, the caller just retries the same POST with
 // postingText set; no stateful correlation needed.
 static async Task<(string? PostingText, string EvalJson, string? Error)> ResolvePostingTextAsync(
-    AppDbContext db, JobPostingFetcher fetcher, int? discoveryId, string? postingText, string? postingUrl = null)
+    AppDbContext db, JobPostingFetcher fetcher, CrossCheckDeps crossCheck, int userId, int? discoveryId,
+    string? postingText, string? postingUrl = null, string? postingHint = null)
 {
     if (postingText is not null)
         return (postingText, "{}", null);
@@ -783,7 +813,15 @@ static async Task<(string? PostingText, string EvalJson, string? Error)> Resolve
         }
         catch
         {
-            return (null, "{}", "Could not fetch that URL. Paste the posting text instead.");
+            if (!string.IsNullOrWhiteSpace(postingHint))
+            {
+                var match = await TryCrossCheckAsync(crossCheck, userId, postingHint);
+                if (match is not null)
+                    return (match.ToPostingText(), "{}", null);
+                return (null, "{}", $"Couldn't fetch that URL, and no confident match for \"{postingHint}\" on Jora or Adzuna either. Paste the posting text instead.");
+            }
+
+            return (null, "{}", "Could not fetch that URL — this happens with Seek links specifically. Add a job title/company as a hint and we'll try finding it on Jora, or paste the posting text instead.");
         }
     }
 
@@ -819,12 +857,13 @@ static int CurrentUserId(HttpContext ctx, string claimType) =>
 // thread → spend a credit → return { threadId, text }), differing only in which agent
 // generates and how the initial user turn is built.
 static async Task<IResult> GenerateArtifactAsync(
-    AppDbContext db, JobPostingFetcher fetcher, int userId,
-    int? discoveryId, string? postingText, string? postingUrl, string artifactType,
+    AppDbContext db, JobPostingFetcher fetcher, CrossCheckDeps crossCheck, int userId,
+    int? discoveryId, string? postingText, string? postingUrl, string? postingHint, string artifactType,
     Func<string, string, Task<string>> generate,
     Func<string, string, string> buildInitialUserContent)
 {
-    var (resolvedText, evalJson, error) = await ResolvePostingTextAsync(db, fetcher, discoveryId, postingText, postingUrl);
+    var (resolvedText, evalJson, error) = await ResolvePostingTextAsync(
+        db, fetcher, crossCheck, userId, discoveryId, postingText, postingUrl, postingHint);
     if (resolvedText is null)
         return Results.BadRequest(new { error });
 
@@ -857,8 +896,9 @@ static async Task<IResult> GenerateArtifactAsync(
     return Results.Ok(new { threadId = thread.Id, text });
 }
 
-// POST /api/v1/cv — body: { discoveryId?: int, postingText?: string }
-api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher, CvTailorAgent cvAgent) =>
+// POST /api/v1/cv — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingHint?: string }
+api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher,
+    JoraFetcher joraFetcher, PostingMatcherAgent matcher, CvTailorAgent cvAgent) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     if (!await CreditService.HasCreditAsync(db, userId))
@@ -867,14 +907,17 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
     var profile = await db.UserProfiles.FindAsync(userId)
         ?? throw new InvalidOperationException("UserProfile not found for the current user.");
 
-    return await GenerateArtifactAsync(db, fetcher, userId, body.DiscoveryId, body.PostingText, body.PostingUrl,
+    var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
+    return await GenerateArtifactAsync(db, fetcher, crossCheck, userId,
+        body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingHint,
         AgentThreadType.Cv,
         (text, evalJson) => cvAgent.GenerateAsync(profile, text, evalJson),
         CvTailorAgent.BuildInitialUserContent);
 }).RequireRateLimiting("generation");
 
-// POST /api/v1/letter — body: { discoveryId?: int, postingText?: string }
-api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher, CoverLetterAgent letterAgent) =>
+// POST /api/v1/letter — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingHint?: string }
+api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher,
+    JoraFetcher joraFetcher, PostingMatcherAgent matcher, CoverLetterAgent letterAgent) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     if (!await CreditService.HasCreditAsync(db, userId))
@@ -883,14 +926,17 @@ api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContex
     var profile = await db.UserProfiles.FindAsync(userId)
         ?? throw new InvalidOperationException("UserProfile not found for the current user.");
 
-    return await GenerateArtifactAsync(db, fetcher, userId, body.DiscoveryId, body.PostingText, body.PostingUrl,
+    var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
+    return await GenerateArtifactAsync(db, fetcher, crossCheck, userId,
+        body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingHint,
         AgentThreadType.CoverLetter,
         (text, evalJson) => letterAgent.GenerateAsync(profile, text, evalJson),
         CoverLetterAgent.BuildInitialUserContent);
 }).RequireRateLimiting("generation");
 
-// POST /api/v1/answer — body: { question: string, discoveryId?: int, postingUrl?: string }
-api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext db, JobPostingFetcher fetcher, AnswerAgent answerAgent) =>
+// POST /api/v1/answer — body: { question: string, discoveryId?: int, postingUrl?: string, postingHint?: string }
+api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext db, JobPostingFetcher fetcher,
+    JoraFetcher joraFetcher, PostingMatcherAgent matcher, AnswerAgent answerAgent) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     if (!await CreditService.HasCreditAsync(db, userId))
@@ -900,7 +946,17 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
     if (body.PostingUrl is not null)
     {
         try { jobContext = await fetcher.FetchAsync(body.PostingUrl); }
-        catch { /* no job context is fine — the question can still be answered generically */ }
+        catch
+        {
+            // No job context is fine — the question can still be answered generically. But
+            // try the same cross-check /cv and /letter use first, if a hint was given.
+            if (!string.IsNullOrWhiteSpace(body.PostingHint))
+            {
+                var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
+                var match = await TryCrossCheckAsync(crossCheck, userId, body.PostingHint);
+                if (match is not null) jobContext = match.ToPostingText();
+            }
+        }
     }
     else if (body.DiscoveryId is int discoveryId)
     {

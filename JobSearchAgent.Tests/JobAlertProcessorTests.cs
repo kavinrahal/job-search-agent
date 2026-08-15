@@ -1,5 +1,4 @@
 using JobSearch.Data;
-using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
 using JobSearchAgent.Workers;
 

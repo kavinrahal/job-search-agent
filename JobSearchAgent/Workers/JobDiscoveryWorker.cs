@@ -1,6 +1,5 @@
 using System.Text.Json;
 using JobSearch.Data;
-using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
 using Microsoft.EntityFrameworkCore;
 
@@ -102,13 +101,13 @@ public class JobDiscoveryWorker
                     }
                     catch
                     {
-                        postingText = FormatPostingText(item);
+                        postingText = item.ToPostingText();
                         Console.WriteLine($"    (full fetch failed, using feed description)");
                     }
                 }
                 else
                 {
-                    postingText = FormatPostingText(item);
+                    postingText = item.ToPostingText();
                 }
                 var eval = await _evaluator.EvaluateAsync(profile, postingText, item.Url);
 
@@ -146,25 +145,4 @@ public class JobDiscoveryWorker
 
         return (newItems.Count, evaluated, notified);
     }
-
-    internal static string FormatPostingText(JobFeedItem item)
-    {
-        string salary;
-        if (item.SalaryMin.HasValue && item.SalaryMax.HasValue)
-            salary = $"${item.SalaryMin:N0} – ${item.SalaryMax:N0} AUD";
-        else if (item.SalaryMin.HasValue)
-            salary = $"From ${item.SalaryMin:N0} AUD";
-        else
-            salary = "Not stated";
-
-        return $"""
-            Company: {item.Company}
-            Job Title: {item.Title}
-            Location: {item.Location}
-            Salary: {salary}
-
-            {item.Description}
-            """;
-    }
-
 }

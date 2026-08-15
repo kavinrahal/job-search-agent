@@ -128,15 +128,15 @@ export async function updateProfile(
   return request("/profile", { method: "PUT", ...json(fields) });
 }
 
-export async function generateCv(input: { postingUrl?: string; postingText?: string }): Promise<GenerationResult> {
+export async function generateCv(input: { postingUrl?: string; postingText?: string; postingHint?: string }): Promise<GenerationResult> {
   return request("/cv", { method: "POST", ...json(input) });
 }
 
-export async function generateLetter(input: { postingUrl?: string; postingText?: string }): Promise<GenerationResult> {
+export async function generateLetter(input: { postingUrl?: string; postingText?: string; postingHint?: string }): Promise<GenerationResult> {
   return request("/letter", { method: "POST", ...json(input) });
 }
 
-export async function askQuestion(input: { question: string; postingUrl?: string }): Promise<GenerationResult> {
+export async function askQuestion(input: { question: string; postingUrl?: string; postingHint?: string }): Promise<GenerationResult> {
   return request("/answer", { method: "POST", ...json(input) });
 }
 

@@ -16,7 +16,7 @@ public class JobDiscoveryWorkerTests
     {
         var item = FeedItem(salaryMin: 100_000, salaryMax: 140_000);
 
-        var result = JobDiscoveryWorker.FormatPostingText(item);
+        var result = item.ToPostingText();
 
         Assert.Contains("$100,000", result);
         Assert.Contains("$140,000", result);
@@ -29,7 +29,7 @@ public class JobDiscoveryWorkerTests
     {
         var item = FeedItem(salaryMin: 90_000, salaryMax: null);
 
-        var result = JobDiscoveryWorker.FormatPostingText(item);
+        var result = item.ToPostingText();
 
         Assert.Contains("From $90,000 AUD", result);
     }
@@ -41,7 +41,7 @@ public class JobDiscoveryWorkerTests
     {
         var item = FeedItem(salaryMin: null, salaryMax: null);
 
-        var result = JobDiscoveryWorker.FormatPostingText(item);
+        var result = item.ToPostingText();
 
         Assert.Contains("Not stated", result);
     }

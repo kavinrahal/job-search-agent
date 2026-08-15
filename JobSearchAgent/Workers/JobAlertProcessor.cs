@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using JobSearch.Data;
-using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
 using JobSearchAgent.Models;
 using Microsoft.EntityFrameworkCore;
@@ -203,7 +202,7 @@ public class JobAlertProcessor
         if (match is not null)
         {
             Console.WriteLine($"    (cross-check matched via {match.Source}: {match.Url})");
-            return JobDiscoveryWorker.FormatPostingText(match);
+            return match.ToPostingText();
         }
 
         Console.WriteLine("    (no confident cross-check match — evaluating from alert metadata only)");

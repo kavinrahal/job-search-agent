@@ -1,4 +1,5 @@
 using System.Net;
+using JobSearch.Data;
 using JobSearchAgent.Integrations;
 
 namespace JobSearchAgent.Tests;

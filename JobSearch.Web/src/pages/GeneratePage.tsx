@@ -58,6 +58,7 @@ export function GeneratePage() {
   const [mode, setMode] = useState<Mode>("url");
   const [postingUrl, setPostingUrl] = useState("");
   const [postingText, setPostingText] = useState("");
+  const [postingHint, setPostingHint] = useState("");
   const [question, setQuestion] = useState("");
   const [cvResult, setCvResult] = useState<GenerationResult | null>(null);
   const [letterResult, setLetterResult] = useState<GenerationResult | null>(null);
@@ -67,9 +68,12 @@ export function GeneratePage() {
   const generateLetter = useGenerateLetter();
   const askQuestion = useAskQuestion();
 
-  const postingInput = mode === "url" ? { postingUrl } : { postingText };
+  const postingInput = mode === "url" ? { postingUrl, postingHint: postingHint || undefined } : { postingText };
   const canSubmitPosting = mode === "url" ? postingUrl.trim().length > 0 : postingText.trim().length > 0;
   const error = generateCv.error ?? generateLetter.error ?? askQuestion.error;
+  // A URL fetch failure is the only case a hint helps with — reveal the field once that's
+  // happened rather than cluttering the common case where the link just works.
+  const showHintField = mode === "url" && (error !== null || postingHint.length > 0);
 
   async function handleGenerateCv() {
     setCvResult(await generateCv.execute(postingInput));
@@ -80,7 +84,11 @@ export function GeneratePage() {
   }
 
   async function handleAskQuestion() {
-    setAnswerResult(await askQuestion.execute({ question, postingUrl: mode === "url" ? postingUrl : undefined }));
+    setAnswerResult(await askQuestion.execute({
+      question,
+      postingUrl: mode === "url" ? postingUrl : undefined,
+      postingHint: mode === "url" ? (postingHint || undefined) : undefined,
+    }));
   }
 
   return (
@@ -94,12 +102,22 @@ export function GeneratePage() {
         </div>
 
         {mode === "url" ? (
-          <input
-            value={postingUrl}
-            onChange={e => setPostingUrl(e.target.value)}
-            placeholder="https://…"
-            className="w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-          />
+          <div className="space-y-2">
+            <input
+              value={postingUrl}
+              onChange={e => setPostingUrl(e.target.value)}
+              placeholder="https://…"
+              className="w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+            {showHintField && (
+              <input
+                value={postingHint}
+                onChange={e => setPostingHint(e.target.value)}
+                placeholder="Job title or company — helps us find it elsewhere if the link can't be fetched directly (e.g. Seek)"
+                className="w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+            )}
+          </div>
         ) : (
           <textarea
             value={postingText}

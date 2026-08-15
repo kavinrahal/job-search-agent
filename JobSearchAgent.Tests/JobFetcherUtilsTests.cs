@@ -1,4 +1,4 @@
-using JobSearchAgent.Integrations;
+using JobSearch.Data;
 
 namespace JobSearchAgent.Tests;
 

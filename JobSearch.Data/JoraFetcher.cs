@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text.RegularExpressions;
 
-namespace JobSearchAgent.Integrations;
+namespace JobSearch.Data;
 
 // Jora has no public search API, unlike Adzuna — this scrapes their public search results
 // page, which (unlike Seek) isn't blocked by bot protection from this app's host (confirmed
@@ -11,7 +11,7 @@ public class JoraFetcher
 {
     private readonly HttpClient _http;
     public JoraFetcher() : this(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
-    internal JoraFetcher(HttpClient http) { _http = http; }
+    public JoraFetcher(HttpClient http) { _http = http; }
 
     // ponytail: best-effort HTML scrape tied to Jora's current markup (the save-job button's
     // data-* attributes, which conveniently carry title/company/location together) — if Jora
