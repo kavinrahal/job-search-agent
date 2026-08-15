@@ -225,4 +225,36 @@ public class HttpFetcherTests
 
         Assert.Empty(items);
     }
+
+    // TC14 — requests the "pretty URL" pattern (/{keywords}-jobs-in-{location}), not the
+    // query-string form (/j?q=...&l=...) — confirmed live that Jora blocks the query-string
+    // endpoint (403) from this app's host while leaving the pretty-URL form open. Silent
+    // failure: reverting to ?q= here would silently zero out every Jora result again, exactly
+    // what happened before this was caught.
+    [Fact]
+    public async Task Jora_Search_RequestsPrettyUrlNotQueryString()
+    {
+        var handler = new RecordingStubHandler(Fixture("jora_search.html"));
+        var fetcher = new JoraFetcher(new HttpClient(handler));
+
+        await fetcher.SearchAsync("full stack .net developer", "Melbourne");
+
+        Assert.NotNull(handler.RequestedUri);
+        Assert.DoesNotContain("?q=", handler.RequestedUri!.ToString());
+        Assert.Contains("/full-stack-net-developer-jobs-in-Melbourne", handler.RequestedUri.ToString());
+    }
+
+    private sealed class RecordingStubHandler(string html) : HttpMessageHandler
+    {
+        public Uri? RequestedUri { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken _)
+        {
+            RequestedUri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(html, System.Text.Encoding.UTF8, "text/html"),
+            });
+        }
+    }
 }

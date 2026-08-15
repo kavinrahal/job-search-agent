@@ -4,8 +4,10 @@ using System.Text.RegularExpressions;
 namespace JobSearch.Data;
 
 // Jora has no public search API, unlike Adzuna — this scrapes their public search results
-// page, which (unlike Seek) isn't blocked by bot protection from this app's host (confirmed
-// via a live production fetch). Used only for the Seek cross-check: searching a handful of
+// page. Uses the "pretty URL" pattern (/{keywords}-jobs-in-{location}) rather than the
+// query-string form (/j?q=...&l=...) — confirmed live from production that Jora blocks the
+// query-string search endpoint (403) while leaving both individual job pages and this
+// pretty-URL search form open. Used only for the Seek cross-check: searching a handful of
 // keywords per failed Seek fetch, not a full catalog sweep.
 public class JoraFetcher
 {
@@ -25,7 +27,7 @@ public class JoraFetcher
 
     public virtual async Task<List<JobFeedItem>> SearchAsync(string keywords, string location)
     {
-        var url = $"https://au.jora.com/j?q={Uri.EscapeDataString(keywords)}&l={Uri.EscapeDataString(location)}";
+        var url = $"https://au.jora.com/{Slugify(keywords)}-jobs-in-{Slugify(location)}";
         string html;
         try
         {
@@ -54,5 +56,14 @@ public class JoraFetcher
         var pattern = "href=\"(/job/[^\"?]*" + Regex.Escape(jobId) + ")[^\"]*\"";
         var match = Regex.Match(html, pattern);
         return match.Success ? match.Groups[1].Value : null;
+    }
+
+    // "full stack .net developer" -> "full-stack-net-developer". Jora canonicalizes casing
+    // and exact separators itself via a redirect, so this only needs to be close enough —
+    // confirmed live that a plain lowercase/hyphenated guess like this lands correctly.
+    private static string Slugify(string text)
+    {
+        var alphanumericAndSpaces = Regex.Replace(text, @"[^a-zA-Z0-9\s]", "");
+        return Regex.Replace(alphanumericAndSpaces.Trim(), @"\s+", "-");
     }
 }
