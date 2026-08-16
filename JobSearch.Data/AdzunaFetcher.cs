@@ -74,7 +74,10 @@ public class AdzunaFetcher : IJobFetcher
         var url = "https://api.adzuna.com/v1/api/jobs/au/search/1" +
             $"?app_id={Uri.EscapeDataString(_appId)}" +
             $"&app_key={Uri.EscapeDataString(_appKey)}" +
-            $"&results_per_page=20" +
+            // More recall for a specific-listing search (a generic title keyword can have
+            // hundreds of live results) — Adzuna's docs don't publish a stated cap, and a
+            // rejected/clamped value fails safe here (SearchAsync's catch returns []).
+            $"&results_per_page=50" +
             $"&what={Uri.EscapeDataString(keyword)}" +
             $"&where={Uri.EscapeDataString(location)}" +
             $"&max_days_old=14" +

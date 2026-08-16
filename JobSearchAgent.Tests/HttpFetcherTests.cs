@@ -257,4 +257,90 @@ public class HttpFetcherTests
             });
         }
     }
+
+    // -------------------------------------------------------------------------
+    // JoraFetcher — company-driven pagination
+    // -------------------------------------------------------------------------
+
+    // A second page's worth of results, containing a company neither present nor a partial
+    // match for anything in jora_search.html's two cards (Lead Group Consultancy, Mintec
+    // Systems) — stands in for "the real listing is buried past page 1".
+    private const string JoraPageTwoWithCodafication = """
+        <!DOCTYPE html><html><body>
+        <div class="job-card">
+          <button name="button" type="submit" class="tertiary save-job-button" data-job-id="cdf001" data-tk="tok" data-saved="false" data-disabled="" data-ga4="{}" data-job-title="Software Engineer" data-location="Melbourne VIC" data-company-name="Codafication">Save</button>
+          <a href="/job/Software-Engineer-cdf001">Software Engineer</a>
+        </div>
+        </body></html>
+        """;
+
+    private sealed class SequenceStubHandler(params string[] pages) : HttpMessageHandler
+    {
+        public List<Uri> RequestedUris { get; } = [];
+        private int _index;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken _)
+        {
+            RequestedUris.Add(request.RequestUri!);
+            var body = pages[Math.Min(_index, pages.Length - 1)];
+            _index++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "text/html"),
+            });
+        }
+    }
+
+    // TC15 — no company given → exactly one request, even though a second page (with more
+    // results) is available. Matters because JobAlertProcessor's cross-check has no separate
+    // company field and must not silently start paying for 5x the requests per failed alert.
+    [Fact]
+    public async Task Jora_SearchWithoutCompany_FetchesOnlyOnePage()
+    {
+        var handler = new SequenceStubHandler(Fixture("jora_search.html"), JoraPageTwoWithCodafication);
+        var fetcher = new JoraFetcher(new HttpClient(handler));
+
+        await fetcher.SearchAsync("software engineer", "Melbourne");
+
+        Assert.Single(handler.RequestedUris);
+    }
+
+    // TC16 — company given, not on page 1, found on page 2 → pages fetched until it's found,
+    // then stops (doesn't burn through all 5 allowed pages once the target is in hand).
+    [Fact]
+    public async Task Jora_SearchWithCompany_PagesUntilFound_ThenStops()
+    {
+        var handler = new SequenceStubHandler(Fixture("jora_search.html"), JoraPageTwoWithCodafication);
+        var fetcher = new JoraFetcher(new HttpClient(handler));
+
+        var items = await fetcher.SearchAsync("software engineer", "Melbourne", "Codafication");
+
+        Assert.Equal(2, handler.RequestedUris.Count);
+        Assert.Contains(items, i => i.Company == "Codafication");
+    }
+
+    // TC17 — company given and found immediately on page 1 → no wasted extra requests.
+    [Fact]
+    public async Task Jora_SearchWithCompany_FoundOnFirstPage_MakesOneRequest()
+    {
+        var handler = new SequenceStubHandler(Fixture("jora_search.html"));
+        var fetcher = new JoraFetcher(new HttpClient(handler));
+
+        await fetcher.SearchAsync("software engineer", "Melbourne", "Mintec Systems");
+
+        Assert.Single(handler.RequestedUris);
+    }
+
+    // TC18 — company given but never found across every page → bounded at 5 requests, not
+    // an unbounded/runaway loop.
+    [Fact]
+    public async Task Jora_SearchWithCompany_NeverFound_StopsAtPageCap()
+    {
+        var handler = new SequenceStubHandler(Fixture("jora_search.html"));
+        var fetcher = new JoraFetcher(new HttpClient(handler));
+
+        await fetcher.SearchAsync("software engineer", "Melbourne", "Nonexistent Company");
+
+        Assert.Equal(5, handler.RequestedUris.Count);
+    }
 }

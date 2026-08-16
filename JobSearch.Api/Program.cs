@@ -826,11 +826,12 @@ api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db) =>
 // Search by title alone — Jora/Adzuna's keyword search ranks on job-title/skill tokens, and
 // blending a company name into that same query dilutes it (confirmed: "software engineer
 // codafication" failed to surface an actual Codafication listing that a plain "software
-// engineer" search finds easily). Company, when given, reorders the results instead — it's a
-// much better fit for that role than for a literal search keyword.
+// engineer" search finds easily). Company, when given, is passed to Jora separately so it can
+// page further looking for it (see JoraFetcher.SearchAsync), then used again to reorder the
+// combined results — it's a much better fit for either of those than for a literal keyword.
 static async Task<List<JobFeedItem>> SearchCandidatesAsync(JoraFetcher jora, AdzunaFetcher? adzuna, string title, string? company)
 {
-    var candidates = new List<JobFeedItem>(await jora.SearchAsync(title, "Melbourne"));
+    var candidates = new List<JobFeedItem>(await jora.SearchAsync(title, "Melbourne", company));
     if (adzuna is not null)
         candidates.AddRange(await adzuna.SearchAsync(title, "melbourne"));
     return JobFetcherUtils.RankByCompany(candidates, company);

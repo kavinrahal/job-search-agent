@@ -488,7 +488,7 @@ public class JobAlertProcessorTests
     {
         private readonly Func<string, List<JobFeedItem>> _fn;
         public FakeJoraFetcher(Func<string, List<JobFeedItem>> fn) => _fn = fn;
-        public override Task<List<JobFeedItem>> SearchAsync(string keywords, string location) =>
+        public override Task<List<JobFeedItem>> SearchAsync(string keywords, string location, string? company = null) =>
             Task.FromResult(_fn(keywords));
     }
 
