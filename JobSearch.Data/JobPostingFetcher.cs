@@ -29,6 +29,27 @@ public class JobPostingFetcher
     // r.jina.ai fetches the page on our behalf from IPs that generally aren't on those
     // blocklists and returns cleaned text directly — a well-known workaround for exactly
     // this class of failure, used only as a fallback so most sites never touch it.
+    // Links copied from a search results page carry tracking query params (search position,
+    // session/referral tokens) that identify the browsing session that generated them —
+    // Cloudflare on these sites can treat a token replayed from an unrelated IP (this app's
+    // server, no matching session) as suspicious and block a request that would succeed
+    // against the bare canonical URL. These hosts' job pages render identically without a
+    // query string (see JobAlertProcessor's canonical seek/linkedin/jora URLs), so stripping
+    // it first is strictly safer — left alone for any other host, where a query string might
+    // be load-bearing (e.g. a Greenhouse/Lever board's own paging or embed params).
+    private static readonly HashSet<string> TrackingParamHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "au.jora.com", "au.seek.com", "www.linkedin.com",
+    };
+
+    public static string StripTrackingParams(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return url;
+        if (!TrackingParamHosts.Contains(uri.Host)) return url;
+        if (uri.Query.Length == 0 && uri.Fragment.Length == 0) return url;
+        return uri.GetLeftPart(UriPartial.Path);
+    }
+
     public virtual async Task<string> FetchAsync(string url)
     {
         var diagnostics = await DiagnoseAsync(url);
@@ -48,6 +69,8 @@ public class JobPostingFetcher
     // reputation than where this runs in production). FetchAsync is a thin wrapper over this.
     public virtual async Task<FetchDiagnostics> DiagnoseAsync(string url)
     {
+        url = StripTrackingParams(url);
+
         int? directStatus = null, directLength = null;
         bool directChallenge = false;
         string? directError = null, resultText = null;
