@@ -183,6 +183,82 @@ public class HttpFetcherTests
             Task.FromResult(factory());
     }
 
+    // -------------------------------------------------------------------------
+    // AdzunaFetcher — company-driven pagination (same shape as Jora's, see below —
+    // a real structured API here rather than a scrape, so paging further is low-risk)
+    // -------------------------------------------------------------------------
+
+    private const string AdzunaPageTwoWithCodafication = """
+        {
+          "results": [
+            {
+              "title": "Software Engineer",
+              "description": "Build things.",
+              "redirect_url": "https://www.adzuna.com.au/jobs/details/9999",
+              "created": "2026-06-11T00:00:00Z",
+              "location": { "display_name": "Melbourne, VIC" },
+              "company": { "display_name": "Codafication" },
+              "salary_min": null,
+              "salary_max": null,
+              "contract_type": null,
+              "contract_time": null
+            }
+          ],
+          "count": 1
+        }
+        """;
+
+    // TC19 — no company given → exactly one request (matches the pre-pagination behavior;
+    // JobAlertProcessor's cross-check has no separate company field and must not silently
+    // start paying for 5x the requests per failed alert).
+    [Fact]
+    public async Task Adzuna_SearchWithoutCompany_FetchesOnlyOnePage()
+    {
+        var handler = new SequenceStubHandler(Fixture("adzuna_response.json"), AdzunaPageTwoWithCodafication);
+        var fetcher = new AdzunaFetcher("id", "key", new HttpClient(handler));
+
+        await fetcher.SearchAsync("software engineer", "melbourne");
+
+        Assert.Single(handler.RequestedUris);
+    }
+
+    // TC20 — company given, not on page 1, found on page 2 → pages until found, then stops.
+    [Fact]
+    public async Task Adzuna_SearchWithCompany_PagesUntilFound_ThenStops()
+    {
+        var handler = new SequenceStubHandler(Fixture("adzuna_response.json"), AdzunaPageTwoWithCodafication);
+        var fetcher = new AdzunaFetcher("id", "key", new HttpClient(handler));
+
+        var items = await fetcher.SearchAsync("software engineer", "melbourne", "Codafication");
+
+        Assert.Equal(2, handler.RequestedUris.Count);
+        Assert.Contains(items, i => i.Company == "Codafication");
+    }
+
+    // TC21 — company given and found immediately on page 1 → no wasted extra requests.
+    [Fact]
+    public async Task Adzuna_SearchWithCompany_FoundOnFirstPage_MakesOneRequest()
+    {
+        var handler = new SequenceStubHandler(Fixture("adzuna_response.json"));
+        var fetcher = new AdzunaFetcher("id", "key", new HttpClient(handler));
+
+        await fetcher.SearchAsync("full stack developer", "melbourne", "Acme Corp");
+
+        Assert.Single(handler.RequestedUris);
+    }
+
+    // TC22 — company given but never found across every page → bounded at 5 requests.
+    [Fact]
+    public async Task Adzuna_SearchWithCompany_NeverFound_StopsAtPageCap()
+    {
+        var handler = new SequenceStubHandler(Fixture("adzuna_response.json"));
+        var fetcher = new AdzunaFetcher("id", "key", new HttpClient(handler));
+
+        await fetcher.SearchAsync("software engineer", "melbourne", "Nonexistent Company");
+
+        Assert.Equal(5, handler.RequestedUris.Count);
+    }
+
     // =========================================================================
     // JoraFetcher
     // =========================================================================

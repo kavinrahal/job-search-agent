@@ -29,48 +29,18 @@ public class JoraFetcher
     // 30+ pages deep — a single fetch only ever sees the first ~15, so a specific company's
     // listing is very unlikely to be in it (confirmed live: Jora accepts a "p" page param on
     // this same pretty-URL search — distinct from the query-string search form that's blocked
-    // — so paging further is possible without hitting that block). Only paginate when a
-    // company was given to look for — without one there's no criterion to decide "found it,
-    // stop", and JobAlertProcessor's cross-check (context is a blended string, no separate
-    // company) would otherwise pay for 5x the requests on every failed alert for no benefit.
+    // — so paging further is possible without hitting that block). See
+    // JobFetcherUtils.PaginateWithCompanyMatch for the pagination/early-stop shape.
     private const int MaxPagesWithCompany = 5;
 
-    public virtual async Task<List<JobFeedItem>> SearchAsync(string keywords, string location, string? company = null)
-    {
-        var results = new List<JobFeedItem>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        int maxPages = company is null ? 1 : MaxPagesWithCompany;
-
-        for (int page = 1; page <= maxPages; page++)
+    public virtual Task<List<JobFeedItem>> SearchAsync(string keywords, string location, string? company = null) =>
+        JobFetcherUtils.PaginateWithCompanyMatch(company, MaxPagesWithCompany, async page =>
         {
             var url = $"https://au.jora.com/{Slugify(keywords)}-jobs-in-{Slugify(location)}"
                 + (page > 1 ? $"?p={page}" : "");
-            string html;
-            try
-            {
-                html = await _http.GetStringAsync(url);
-            }
-            catch
-            {
-                break;
-            }
-
-            var pageItems = ParseCards(html);
-            if (pageItems.Count == 0) break;
-
-            foreach (var item in pageItems.Where(i => seen.Add(i.Url)))
-                results.Add(item);
-
-            bool foundCompanyMatch = company is not null && pageItems.Any(i =>
-                i.Company.Contains(company, StringComparison.OrdinalIgnoreCase) ||
-                company.Contains(i.Company, StringComparison.OrdinalIgnoreCase));
-            if (foundCompanyMatch) break;
-
-            if (page < maxPages) await Task.Delay(400);
-        }
-
-        return results;
-    }
+            var html = await _http.GetStringAsync(url);
+            return ParseCards(html);
+        });
 
     private static List<JobFeedItem> ParseCards(string html) =>
         [.. CardPattern.Matches(html)

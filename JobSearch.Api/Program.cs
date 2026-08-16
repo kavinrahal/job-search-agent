@@ -833,7 +833,7 @@ static async Task<List<JobFeedItem>> SearchCandidatesAsync(JoraFetcher jora, Adz
 {
     var candidates = new List<JobFeedItem>(await jora.SearchAsync(title, "Melbourne", company));
     if (adzuna is not null)
-        candidates.AddRange(await adzuna.SearchAsync(title, "melbourne"));
+        candidates.AddRange(await adzuna.SearchAsync(title, "melbourne", company));
     return JobFetcherUtils.RankByCompany(candidates, company);
 }
 

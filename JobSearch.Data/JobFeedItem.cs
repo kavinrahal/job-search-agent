@@ -41,6 +41,12 @@ public static class JobFetcherUtils
         return Regex.Replace(text, @"\s{2,}", " ").Trim();
     }
 
+    // Either name containing the other — handles abbreviations ("Codafication" vs "Codafication
+    // Pty Ltd") in both directions.
+    private static bool MatchesCompany(JobFeedItem item, string company) =>
+        item.Company.Contains(company, StringComparison.OrdinalIgnoreCase) ||
+        company.Contains(item.Company, StringComparison.OrdinalIgnoreCase);
+
     // Reorders (never filters) search results so a company-name match comes first — used when
     // a user supplies both a job title and a company for the Generate-tab candidate search.
     // Company match is intentionally not part of the search keywords themselves: Jora/Adzuna's
@@ -51,12 +57,45 @@ public static class JobFetcherUtils
     public static List<JobFeedItem> RankByCompany(List<JobFeedItem> candidates, string? company)
     {
         if (string.IsNullOrWhiteSpace(company)) return candidates;
-        return
-        [
-            .. candidates.OrderByDescending(c =>
-                c.Company.Contains(company, StringComparison.OrdinalIgnoreCase) ||
-                company.Contains(c.Company, StringComparison.OrdinalIgnoreCase)),
-        ];
+        return [.. candidates.OrderByDescending(c => MatchesCompany(c, company))];
+    }
+
+    // Shared pagination shape for JoraFetcher/AdzunaFetcher's company-driven search: only page
+    // beyond 1 when a company was given — without one there's no criterion to decide "found it,
+    // stop", and JobAlertProcessor's cross-check (a blended context string, no separate company)
+    // would otherwise pay for the full page cap in requests on every failed alert for no
+    // benefit. Stops as soon as a page contains a company match, so the common case doesn't
+    // always pay for the worst case either.
+    public static async Task<List<JobFeedItem>> PaginateWithCompanyMatch(
+        string? company, int maxPagesWithCompany, Func<int, Task<List<JobFeedItem>>> fetchPage)
+    {
+        var results = new List<JobFeedItem>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int maxPages = company is null ? 1 : maxPagesWithCompany;
+
+        for (int page = 1; page <= maxPages; page++)
+        {
+            List<JobFeedItem> pageItems;
+            try
+            {
+                pageItems = await fetchPage(page);
+            }
+            catch
+            {
+                break;
+            }
+            if (pageItems.Count == 0) break;
+
+            foreach (var item in pageItems.Where(i => seen.Add(i.Url)))
+                results.Add(item);
+
+            if (company is not null && pageItems.Any(i => MatchesCompany(i, company)))
+                break;
+
+            if (page < maxPages) await Task.Delay(300);
+        }
+
+        return results;
     }
 
     // Shared by JobDiscoveryWorker (feed items too short to warrant a full page fetch) and

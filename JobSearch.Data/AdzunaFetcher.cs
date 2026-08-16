@@ -55,23 +55,19 @@ public class AdzunaFetcher : IJobFetcher
 
     // Used for the Seek cross-check (JobAlertProcessor / the /cv,/letter,/answer generation
     // endpoints): a one-off targeted search rather than the fixed keyword sweep FetchAllAsync
-    // runs for proactive discovery.
-    public virtual async Task<List<JobFeedItem>> SearchAsync(string keywords, string location)
-    {
-        try
-        {
-            return await FetchKeywordAsync(keywords, location);
-        }
-        catch
-        {
-            return [];
-        }
-    }
+    // runs for proactive discovery. A real structured API (unlike Jora's HTML scrape), so
+    // paging further to find a specific company is cheap and low-risk. See
+    // JobFetcherUtils.PaginateWithCompanyMatch for the pagination/early-stop shape.
+    private const int MaxPagesWithCompany = 5;
 
-    private async Task<List<JobFeedItem>> FetchKeywordAsync(string keyword, string location)
+    public virtual Task<List<JobFeedItem>> SearchAsync(string keywords, string location, string? company = null) =>
+        JobFetcherUtils.PaginateWithCompanyMatch(company, MaxPagesWithCompany,
+            page => FetchKeywordAsync(keywords, location, page));
+
+    private async Task<List<JobFeedItem>> FetchKeywordAsync(string keyword, string location, int page = 1)
     {
 #pragma warning disable S1075 // Adzuna public API base URL — not a configurable path
-        var url = "https://api.adzuna.com/v1/api/jobs/au/search/1" +
+        var url = $"https://api.adzuna.com/v1/api/jobs/au/search/{page}" +
             $"?app_id={Uri.EscapeDataString(_appId)}" +
             $"&app_key={Uri.EscapeDataString(_appKey)}" +
             // More recall for a specific-listing search (a generic title keyword can have
