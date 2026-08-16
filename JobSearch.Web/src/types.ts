@@ -126,6 +126,7 @@ export interface PostingCandidate {
   location: string;
   url: string;
   source: string;
+  postingText: string;
 }
 
 export interface Profile {

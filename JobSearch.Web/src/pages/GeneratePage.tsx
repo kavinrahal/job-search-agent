@@ -82,8 +82,14 @@ export function GeneratePage() {
     setCandidates((await searchCandidates.execute(postingHint)).candidates);
   }
 
+  // Uses the candidate's own PostingText (built from the search result itself) rather than
+  // re-fetching candidate.url — a site that blocked the original link will just as readily
+  // block this URL too, even though it's the same listing. Switching to text mode makes that
+  // switch visible rather than silently sending different content than the "Paste URL" tab
+  // still shows.
   function handlePickCandidate(candidate: PostingCandidate) {
-    setPostingUrl(candidate.url);
+    setPostingText(candidate.postingText);
+    setMode("text");
     setCandidates(null);
   }
 

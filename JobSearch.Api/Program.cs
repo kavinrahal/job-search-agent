@@ -844,8 +844,11 @@ static async Task<JobFeedItem?> TryCrossCheckAsync(CrossCheckDeps deps, int user
 // GET /api/v1/postings/search-candidates?hint=... — the manual counterpart to the automatic
 // cross-check above: no Claude call, just the raw Jora/Adzuna search results, for the Generate
 // UI to show as pickable suggestions when the auto-match isn't confident enough (or the user
-// wants to search directly). Picking one just sets it as postingUrl — Jora/Adzuna links
-// already fetch fine directly, no special-casing needed once a URL is chosen.
+// wants to search directly). Includes each candidate's own PostingText (built from the search
+// result itself, same as the automatic cross-check's match.ToPostingText()) — picking one must
+// use that directly rather than re-fetching candidate.Url, since a site that blocks the
+// original link (the whole reason the user is searching) will just as readily block that URL
+// too even though it points at the same listing.
 api.MapGet("/postings/search-candidates", async (HttpContext ctx, string hint, JoraFetcher joraFetcher) =>
 {
     if (string.IsNullOrWhiteSpace(hint))
@@ -855,7 +858,8 @@ api.MapGet("/postings/search-candidates", async (HttpContext ctx, string hint, J
 
     return Results.Ok(new
     {
-        candidates = candidates.Take(6).Select(c => new { c.Title, c.Company, c.Location, c.Url, c.Source }),
+        candidates = candidates.Take(6).Select(c =>
+            new { c.Title, c.Company, c.Location, c.Url, c.Source, PostingText = c.ToPostingText() }),
     });
 });
 
