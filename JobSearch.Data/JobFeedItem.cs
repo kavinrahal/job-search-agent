@@ -41,6 +41,24 @@ public static class JobFetcherUtils
         return Regex.Replace(text, @"\s{2,}", " ").Trim();
     }
 
+    // Reorders (never filters) search results so a company-name match comes first — used when
+    // a user supplies both a job title and a company for the Generate-tab candidate search.
+    // Company match is intentionally not part of the search keywords themselves: Jora/Adzuna's
+    // keyword search ranks worse when a company name is blended into the title query (confirmed
+    // — "software engineer codafication" missed a real Codafication listing that a plain
+    // "software engineer" search surfaces easily), so title stays the sole search term and
+    // company only re-ranks what came back.
+    public static List<JobFeedItem> RankByCompany(List<JobFeedItem> candidates, string? company)
+    {
+        if (string.IsNullOrWhiteSpace(company)) return candidates;
+        return
+        [
+            .. candidates.OrderByDescending(c =>
+                c.Company.Contains(company, StringComparison.OrdinalIgnoreCase) ||
+                company.Contains(c.Company, StringComparison.OrdinalIgnoreCase)),
+        ];
+    }
+
     // Shared by JobDiscoveryWorker (feed items too short to warrant a full page fetch) and
     // JobAlertProcessor's Seek cross-check (a matched Jora/Adzuna candidate) — same shape
     // either way: a JobFeedItem standing in for a posting's full text.

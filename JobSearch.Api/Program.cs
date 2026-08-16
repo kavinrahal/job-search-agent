@@ -823,38 +823,45 @@ api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db) =>
 // A pasted URL alone carries no title/company to search Jora/Adzuna with (unlike the Seek
 // email-alert pipeline, which always has those from the alert itself) — postingHint covers
 // that gap when the direct fetch fails.
-static async Task<List<JobFeedItem>> SearchCandidatesAsync(JoraFetcher jora, AdzunaFetcher? adzuna, string hint)
+// Search by title alone — Jora/Adzuna's keyword search ranks on job-title/skill tokens, and
+// blending a company name into that same query dilutes it (confirmed: "software engineer
+// codafication" failed to surface an actual Codafication listing that a plain "software
+// engineer" search finds easily). Company, when given, reorders the results instead — it's a
+// much better fit for that role than for a literal search keyword.
+static async Task<List<JobFeedItem>> SearchCandidatesAsync(JoraFetcher jora, AdzunaFetcher? adzuna, string title, string? company)
 {
-    var candidates = new List<JobFeedItem>(await jora.SearchAsync(hint, "Melbourne"));
+    var candidates = new List<JobFeedItem>(await jora.SearchAsync(title, "Melbourne"));
     if (adzuna is not null)
-        candidates.AddRange(await adzuna.SearchAsync(hint, "melbourne"));
-    return candidates;
+        candidates.AddRange(await adzuna.SearchAsync(title, "melbourne"));
+    return JobFetcherUtils.RankByCompany(candidates, company);
 }
 
-// Same matching mechanism as JobAlertProcessor's cross-check, just a user-supplied hint
+// Same matching mechanism as JobAlertProcessor's cross-check, just user-supplied title/company
 // instead of text pulled from an alert email. Used by /cv,/letter,/answer as a fast path —
 // when confident, skips the manual "pick from search results" step (/postings/search-candidates
 // below) entirely.
-static async Task<JobFeedItem?> TryCrossCheckAsync(CrossCheckDeps deps, int userId, string hint)
+static async Task<JobFeedItem?> TryCrossCheckAsync(CrossCheckDeps deps, int userId, string title, string? company)
 {
-    var candidates = await SearchCandidatesAsync(deps.Jora, deps.Adzuna, hint);
-    return candidates.Count > 0 ? await deps.Matcher.FindMatchAsync(userId, hint, candidates) : null;
+    var candidates = await SearchCandidatesAsync(deps.Jora, deps.Adzuna, title, company);
+    if (candidates.Count == 0) return null;
+    var targetContext = string.IsNullOrWhiteSpace(company) ? title : $"{title} at {company}";
+    return await deps.Matcher.FindMatchAsync(userId, targetContext, candidates);
 }
 
-// GET /api/v1/postings/search-candidates?hint=... — the manual counterpart to the automatic
-// cross-check above: no Claude call, just the raw Jora/Adzuna search results, for the Generate
-// UI to show as pickable suggestions when the auto-match isn't confident enough (or the user
-// wants to search directly). Includes each candidate's own PostingText (built from the search
-// result itself, same as the automatic cross-check's match.ToPostingText()) — picking one must
-// use that directly rather than re-fetching candidate.Url, since a site that blocks the
-// original link (the whole reason the user is searching) will just as readily block that URL
-// too even though it points at the same listing.
-api.MapGet("/postings/search-candidates", async (HttpContext ctx, string hint, JoraFetcher joraFetcher) =>
+// GET /api/v1/postings/search-candidates?title=...&company=... — the manual counterpart to
+// the automatic cross-check above: no Claude call, just the raw Jora/Adzuna search results,
+// for the Generate UI to show as pickable suggestions when the auto-match isn't confident
+// enough (or the user wants to search directly). Includes each candidate's own PostingText
+// (built from the search result itself, same as the automatic cross-check's
+// match.ToPostingText()) — picking one must use that directly rather than re-fetching
+// candidate.Url, since a site that blocks the original link (the whole reason the user is
+// searching) will just as readily block that URL too even though it points at the same listing.
+api.MapGet("/postings/search-candidates", async (HttpContext ctx, string title, string? company, JoraFetcher joraFetcher) =>
 {
-    if (string.IsNullOrWhiteSpace(hint))
-        return Results.BadRequest(new { error = "hint is required." });
+    if (string.IsNullOrWhiteSpace(title))
+        return Results.BadRequest(new { error = "title is required." });
 
-    var candidates = await SearchCandidatesAsync(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), hint);
+    var candidates = await SearchCandidatesAsync(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), title, company);
 
     return Results.Ok(new
     {
@@ -874,7 +881,7 @@ api.MapGet("/postings/search-candidates", async (HttpContext ctx, string hint, J
 // back null, rather than this function always paying for that call even when it's redundant.
 static async Task<(string? PostingText, string EvalJson, string? Company, string? Error)> ResolvePostingTextAsync(
     AppDbContext db, JobPostingFetcher fetcher, CrossCheckDeps crossCheck, int userId, int? discoveryId,
-    string? postingText, string? postingUrl = null, string? postingHint = null)
+    string? postingText, string? postingUrl = null, string? postingTitle = null, string? postingCompany = null)
 {
     if (postingText is not null)
         return (postingText, "{}", null, null);
@@ -887,15 +894,15 @@ static async Task<(string? PostingText, string EvalJson, string? Company, string
         }
         catch
         {
-            if (!string.IsNullOrWhiteSpace(postingHint))
+            if (!string.IsNullOrWhiteSpace(postingTitle))
             {
-                var match = await TryCrossCheckAsync(crossCheck, userId, postingHint);
+                var match = await TryCrossCheckAsync(crossCheck, userId, postingTitle, postingCompany);
                 if (match is not null)
                     return (match.ToPostingText(), "{}", match.Company, null);
-                return (null, "{}", null, $"Couldn't fetch that URL, and no confident match for \"{postingHint}\" on Jora or Adzuna either. Paste the posting text instead.");
+                return (null, "{}", null, $"Couldn't fetch that URL, and no confident match for \"{postingTitle}\" on Jora or Adzuna either. Paste the posting text instead.");
             }
 
-            return (null, "{}", null, "Could not fetch that URL — this happens with Seek links specifically. Add a job title/company as a hint and we'll try finding it on Jora, or paste the posting text instead.");
+            return (null, "{}", null, "Could not fetch that URL — this happens with Seek/Jora/LinkedIn links specifically. Add the job title (and company, if known) and we'll try finding it, or paste the posting text instead.");
         }
     }
 
@@ -942,12 +949,13 @@ static async Task<(User? User, IResult? Error)> RequireTier2Async(AppDbContext d
 // generates and how the initial user turn is built.
 static async Task<IResult> GenerateArtifactAsync(
     AppDbContext db, JobPostingFetcher fetcher, CrossCheckDeps crossCheck, CompanyExtractorAgent companyExtractor,
-    int userId, int? discoveryId, string? postingText, string? postingUrl, string? postingHint, string artifactType,
+    int userId, int? discoveryId, string? postingText, string? postingUrl, string? postingTitle, string? postingCompany,
+    string artifactType,
     Func<string, string, Task<string>> generate,
     Func<string, string, string> buildInitialUserContent)
 {
     var (resolvedText, evalJson, company, error) = await ResolvePostingTextAsync(
-        db, fetcher, crossCheck, userId, discoveryId, postingText, postingUrl, postingHint);
+        db, fetcher, crossCheck, userId, discoveryId, postingText, postingUrl, postingTitle, postingCompany);
     if (resolvedText is null)
         return Results.BadRequest(new { error });
 
@@ -985,7 +993,7 @@ static async Task<IResult> GenerateArtifactAsync(
     return Results.Ok(new { threadId = thread.Id, text });
 }
 
-// POST /api/v1/cv — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingHint?: string }
+// POST /api/v1/cv — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingTitle?: string, postingCompany?: string }
 api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher,
     JoraFetcher joraFetcher, PostingMatcherAgent matcher, CompanyExtractorAgent companyExtractor, CvTailorAgent cvAgent) =>
 {
@@ -998,13 +1006,13 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
 
     var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
     return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, userId,
-        body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingHint,
+        body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingTitle, body.PostingCompany,
         AgentThreadType.Cv,
         (text, evalJson) => cvAgent.GenerateAsync(profile, text, evalJson),
         CvTailorAgent.BuildInitialUserContent);
 }).RequireRateLimiting("generation");
 
-// POST /api/v1/letter — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingHint?: string }
+// POST /api/v1/letter — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingTitle?: string, postingCompany?: string }
 api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher,
     JoraFetcher joraFetcher, PostingMatcherAgent matcher, CompanyExtractorAgent companyExtractor, CoverLetterAgent letterAgent) =>
 {
@@ -1017,13 +1025,13 @@ api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContex
 
     var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
     return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, userId,
-        body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingHint,
+        body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingTitle, body.PostingCompany,
         AgentThreadType.CoverLetter,
         (text, evalJson) => letterAgent.GenerateAsync(profile, text, evalJson),
         CoverLetterAgent.BuildInitialUserContent);
 }).RequireRateLimiting("generation");
 
-// POST /api/v1/answer — body: { question: string, discoveryId?: int, postingUrl?: string, postingHint?: string }
+// POST /api/v1/answer — body: { question: string, discoveryId?: int, postingUrl?: string, postingTitle?: string, postingCompany?: string }
 api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext db, JobPostingFetcher fetcher,
     JoraFetcher joraFetcher, PostingMatcherAgent matcher, AnswerAgent answerAgent) =>
 {
@@ -1038,11 +1046,11 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
         catch
         {
             // No job context is fine — the question can still be answered generically. But
-            // try the same cross-check /cv and /letter use first, if a hint was given.
-            if (!string.IsNullOrWhiteSpace(body.PostingHint))
+            // try the same cross-check /cv and /letter use first, if a title was given.
+            if (!string.IsNullOrWhiteSpace(body.PostingTitle))
             {
                 var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
-                var match = await TryCrossCheckAsync(crossCheck, userId, body.PostingHint);
+                var match = await TryCrossCheckAsync(crossCheck, userId, body.PostingTitle, body.PostingCompany);
                 if (match is not null) jobContext = match.ToPostingText();
             }
         }

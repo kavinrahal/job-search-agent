@@ -5,6 +5,14 @@ import type { GenerationResult, PostingCandidate } from "../types";
 
 type Mode = "url" | "text";
 
+function PasteInsteadLink({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="text-xs font-medium text-blue-600 hover:text-blue-700">
+      {label}
+    </button>
+  );
+}
+
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
@@ -58,7 +66,8 @@ export function GeneratePage() {
   const [mode, setMode] = useState<Mode>("url");
   const [postingUrl, setPostingUrl] = useState("");
   const [postingText, setPostingText] = useState("");
-  const [postingHint, setPostingHint] = useState("");
+  const [postingTitle, setPostingTitle] = useState("");
+  const [postingCompany, setPostingCompany] = useState("");
   const [question, setQuestion] = useState("");
   const [cvResult, setCvResult] = useState<GenerationResult | null>(null);
   const [letterResult, setLetterResult] = useState<GenerationResult | null>(null);
@@ -71,15 +80,17 @@ export function GeneratePage() {
   const askQuestion = useAskQuestion();
   const searchCandidates = useSearchPostingCandidates();
 
-  const postingInput = mode === "url" ? { postingUrl, postingHint: postingHint || undefined } : { postingText };
+  const postingInput = mode === "url"
+    ? { postingUrl, postingTitle: postingTitle || undefined, postingCompany: postingCompany || undefined }
+    : { postingText };
   const canSubmitPosting = mode === "url" ? postingUrl.trim().length > 0 : postingText.trim().length > 0;
   const error = generateCv.error ?? generateLetter.error ?? askQuestion.error ?? searchCandidates.error;
-  // A URL fetch failure is the only case a hint helps with — reveal the field once that's
-  // happened rather than cluttering the common case where the link just works.
-  const showHintField = mode === "url" && (error !== null || postingHint.length > 0);
+  // A URL fetch failure is the only case title/company help with — reveal the fields once
+  // that's happened rather than cluttering the common case where the link just works.
+  const showHintFields = mode === "url" && (error !== null || postingTitle.length > 0);
 
   async function handleSearchCandidates() {
-    setCandidates((await searchCandidates.execute(postingHint)).candidates);
+    setCandidates((await searchCandidates.execute(postingTitle, postingCompany || undefined)).candidates);
   }
 
   // Uses the candidate's own PostingText (built from the search result itself) rather than
@@ -120,7 +131,8 @@ export function GeneratePage() {
     setAnswerResult(await askQuestion.execute({
       question,
       postingUrl: mode === "url" ? postingUrl : undefined,
-      postingHint: mode === "url" ? (postingHint || undefined) : undefined,
+      postingTitle: mode === "url" ? (postingTitle || undefined) : undefined,
+      postingCompany: mode === "url" ? (postingCompany || undefined) : undefined,
     }));
   }
 
@@ -142,30 +154,42 @@ export function GeneratePage() {
               placeholder="https://…"
               className="w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
             />
-            {showHintField && (
-              <div className="flex gap-2">
-                <input
-                  value={postingHint}
-                  onChange={e => { setPostingHint(e.target.value); setCandidates(null); }}
-                  placeholder="Job title or company — helps us find it elsewhere if the link can't be fetched directly (e.g. Seek)"
-                  className="flex-1 rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                />
-                <button
-                  onClick={handleSearchCandidates}
-                  disabled={postingHint.trim().length === 0 || searchCandidates.loading}
-                  className="shrink-0 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {searchCandidates.loading ? "Searching…" : "Search Jora/Adzuna"}
-                </button>
+            {showHintFields && (
+              <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs text-gray-500">Couldn't fetch that link directly — search for it instead.</p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={postingTitle}
+                    onChange={e => { setPostingTitle(e.target.value); setCandidates(null); }}
+                    placeholder="Job title (required)"
+                    className="flex-1 rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  <input
+                    value={postingCompany}
+                    onChange={e => { setPostingCompany(e.target.value); setCandidates(null); }}
+                    placeholder="Company (optional)"
+                    className="flex-1 rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  <button
+                    onClick={handleSearchCandidates}
+                    disabled={postingTitle.trim().length === 0 || searchCandidates.loading}
+                    className="shrink-0 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {searchCandidates.loading ? "Searching…" : "Search Jora/Adzuna"}
+                  </button>
+                </div>
               </div>
             )}
 
             {candidates && (
               candidates.length === 0 ? (
-                <p className="text-xs text-gray-400">No results for that search.</p>
+                <div className="space-y-1.5">
+                  <p className="text-xs text-gray-400">No results for that search.</p>
+                  <PasteInsteadLink label="Paste the job description instead →" onClick={() => setMode("text")} />
+                </div>
               ) : (
                 <div className="space-y-1.5">
-                  <p className="text-xs text-gray-400">Pick the one you meant — it'll be used as the posting URL.</p>
+                  <p className="text-xs text-gray-400">Pick the one you meant.</p>
                   {candidates.map(c => (
                     <button
                       key={c.url}
@@ -179,6 +203,7 @@ export function GeneratePage() {
                       <span className="ml-2 shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">{c.source}</span>
                     </button>
                   ))}
+                  <PasteInsteadLink label="None of these? Paste the job description instead →" onClick={() => setMode("text")} />
                 </div>
               )
             )}

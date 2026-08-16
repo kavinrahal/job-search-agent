@@ -3,11 +3,13 @@ using JobSearch.Data;
 namespace JobSearch.Api;
 
 // Request bodies for the CV/letter/answer/edit generation endpoints.
-// PostingHint: optional job title/company, used only if PostingUrl fails to fetch directly —
-// searched against Jora/Adzuna as a cross-check (same mechanism as the Seek email-alert
-// pipeline), since a bare URL alone carries no title/company to search with.
-public record GenerateRequest(int? DiscoveryId, string? PostingText, string? PostingUrl, string? PostingHint);
-public record AnswerRequest(string Question, int? DiscoveryId, string? PostingUrl, string? PostingHint);
+// PostingTitle/PostingCompany: used only if PostingUrl fails to fetch directly — searched
+// against Jora/Adzuna as a cross-check (same mechanism as the Seek email-alert pipeline),
+// since a bare URL alone carries no title/company to search with. Kept as separate fields
+// rather than one combined hint because Jora/Adzuna's keyword search ranks worse when a
+// company name is blended into the search query — see SearchCandidatesAsync in Program.cs.
+public record GenerateRequest(int? DiscoveryId, string? PostingText, string? PostingUrl, string? PostingTitle, string? PostingCompany);
+public record AnswerRequest(string Question, int? DiscoveryId, string? PostingUrl, string? PostingTitle, string? PostingCompany);
 public record EditRequest(string Message);
 
 // The three dependencies behind the Seek cross-check always travel together (they only ever

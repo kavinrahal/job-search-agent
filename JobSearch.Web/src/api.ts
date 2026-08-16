@@ -143,19 +143,24 @@ export async function updateProfile(
   return request("/profile", { method: "PUT", ...json(fields) });
 }
 
-export async function searchPostingCandidates(hint: string): Promise<{ candidates: PostingCandidate[] }> {
-  return request(`/postings/search-candidates?hint=${encodeURIComponent(hint)}`);
+// Company is a separate query param, not folded into the title search string — Jora/Adzuna's
+// keyword search ranks worse when a company name is blended into the query. See
+// JobFetcherUtils.RankByCompany for how the backend uses it instead (reorders results, doesn't
+// search on it).
+export async function searchPostingCandidates(title: string, company?: string): Promise<{ candidates: PostingCandidate[] }> {
+  const companyParam = company ? `&company=${encodeURIComponent(company)}` : "";
+  return request(`/postings/search-candidates?title=${encodeURIComponent(title)}${companyParam}`);
 }
 
-export async function generateCv(input: { postingUrl?: string; postingText?: string; postingHint?: string }): Promise<GenerationResult> {
+export async function generateCv(input: { postingUrl?: string; postingText?: string; postingTitle?: string; postingCompany?: string }): Promise<GenerationResult> {
   return request("/cv", { method: "POST", ...json(input) });
 }
 
-export async function generateLetter(input: { postingUrl?: string; postingText?: string; postingHint?: string }): Promise<GenerationResult> {
+export async function generateLetter(input: { postingUrl?: string; postingText?: string; postingTitle?: string; postingCompany?: string }): Promise<GenerationResult> {
   return request("/letter", { method: "POST", ...json(input) });
 }
 
-export async function askQuestion(input: { question: string; postingUrl?: string; postingHint?: string }): Promise<GenerationResult> {
+export async function askQuestion(input: { question: string; postingUrl?: string; postingTitle?: string; postingCompany?: string }): Promise<GenerationResult> {
   return request("/answer", { method: "POST", ...json(input) });
 }
 

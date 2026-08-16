@@ -101,4 +101,69 @@ public class JobFetcherUtilsTests
     {
         Assert.False(JobFetcherUtils.IsAuLocation("San Francisco, CA"));
     }
+
+    // =========================================================================
+    // RankByCompany
+    // =========================================================================
+
+    private static JobFeedItem Item(string company, string url) => new() { Company = company, Url = url };
+
+    // TC12 — No company given → candidates returned in original order, untouched.
+    [Fact]
+    public void RankByCompany_NoCompany_OrderUnchanged()
+    {
+        var items = new List<JobFeedItem> { Item("Acme", "a"), Item("Codafication", "b") };
+
+        var result = JobFetcherUtils.RankByCompany(items, null);
+
+        Assert.Equal(["a", "b"], result.Select(i => i.Url));
+    }
+
+    // TC13 — A matching company is moved to the front; this is the exact bug reported: a real
+    // Codafication listing ranked outside the visible results when a plain title search alone
+    // couldn't distinguish it from unrelated "software engineer" postings.
+    [Fact]
+    public void RankByCompany_MatchPresent_MovesMatchFirst()
+    {
+        var items = new List<JobFeedItem> { Item("Acme", "a"), Item("Codafication", "b"), Item("Beta Corp", "c") };
+
+        var result = JobFetcherUtils.RankByCompany(items, "Codafication");
+
+        Assert.Equal("b", result[0].Url);
+    }
+
+    // TC14 — No candidate matches the given company → original relative order preserved
+    // (a stable no-op, not an error or empty result).
+    [Fact]
+    public void RankByCompany_NoMatch_OrderUnchanged()
+    {
+        var items = new List<JobFeedItem> { Item("Acme", "a"), Item("Beta Corp", "b") };
+
+        var result = JobFetcherUtils.RankByCompany(items, "Codafication");
+
+        Assert.Equal(["a", "b"], result.Select(i => i.Url));
+    }
+
+    // TC15 — Match is case-insensitive.
+    [Fact]
+    public void RankByCompany_DifferentCase_StillMatches()
+    {
+        var items = new List<JobFeedItem> { Item("Acme", "a"), Item("CODAFICATION", "b") };
+
+        var result = JobFetcherUtils.RankByCompany(items, "codafication");
+
+        Assert.Equal("b", result[0].Url);
+    }
+
+    // TC16 — Matches in either containment direction, so "Codafication Pty Ltd" typed by the
+    // user still matches a candidate whose Company field is just "Codafication".
+    [Fact]
+    public void RankByCompany_PartialNameEitherDirection_Matches()
+    {
+        var items = new List<JobFeedItem> { Item("Acme", "a"), Item("Codafication", "b") };
+
+        var result = JobFetcherUtils.RankByCompany(items, "Codafication Pty Ltd");
+
+        Assert.Equal("b", result[0].Url);
+    }
 }
