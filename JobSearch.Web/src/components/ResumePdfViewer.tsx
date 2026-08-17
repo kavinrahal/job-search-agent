@@ -32,7 +32,13 @@ export function ResumePdfViewer({ source }: { source: string | File }) {
         file={source}
         options={typeof source === "string" ? DOCUMENT_OPTIONS : undefined}
         onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-        onLoadError={() => setError("Couldn't load the PDF.")}
+        // Surface the real reason (e.g. a CORS/auth failure vs. a genuinely corrupt PDF look
+        // completely different here) instead of a single generic message for every failure
+        // mode — and suppress react-pdf's own default "Failed to load PDF file." text (the
+        // `error` prop below) so we don't show two stacked, differently-worded messages for
+        // the same failure.
+        error=""
+        onLoadError={err => setError(`Couldn't load the PDF (${err.message || err.name}).`)}
         loading={<p className="py-8 text-center text-sm text-gray-400">Loading PDF…</p>}
       >
         <div className="flex gap-4">

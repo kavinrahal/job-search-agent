@@ -48,9 +48,14 @@ education:
     graduation_year: ...
 
 skills:
-  # Group however the source resume groups them (by category, or one flat list under
-  # a single "general" key if the source doesn't categorize). Do not invent categories
-  # the source doesn't support.
+  # Group however the source resume groups them. Most resumes DO categorize their skills
+  # even without an explicit "Category:" label — by separate lines, columns, or visual
+  # grouping (e.g. a "Languages" line followed by a "Frameworks" line, or a table/columns
+  # in a PDF). Read the layout carefully and use those groupings as category keys (e.g.
+  # languages, frameworks, tools, cloud, databases) rather than flattening everything.
+  # Only fall back to a single flat list under "general" if the source is genuinely one
+  # undifferentiated run of skills with no grouping signal at all. Do not invent categories
+  # the source doesn't support, and do not merge categories the source keeps separate.
 
 projects:
   - name: ...
