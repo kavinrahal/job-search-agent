@@ -9,6 +9,7 @@ using JobSearch.Data;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -252,6 +253,22 @@ app.Use(async (ctx, next) =>
 });
 
 app.UseCors();
+
+// Must come after UseCors so its response (a clean JSON 500) still flows back out through
+// CORS's response-header logic. Without this, an unhandled exception fell through to the
+// framework's bare default handler, whose response carries no CORS headers — the browser's
+// Network tab shows the real status code, but fetch() itself gets blocked from reading it and
+// throws a generic "Failed to fetch" instead, hiding the actual error from both the user and
+// the frontend's own error handling. Real production incident: a resume-parsing 500 (a genuine
+// bug) was reported as "Failed to fetch" with no other information, only diagnosable by reading
+// server logs directly.
+app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
+{
+    var ex = ctx.Features.Get<IExceptionHandlerFeature>()?.Error;
+    await Console.Error.WriteLineAsync($"[UnhandledException] {ex}");
+    ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    await ctx.Response.WriteAsJsonAsync(new { error = "Something went wrong. Please try again." });
+}));
 
 Console.WriteLine("[Startup] Running database migration...");
 try

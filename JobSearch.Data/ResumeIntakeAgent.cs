@@ -51,7 +51,11 @@ public class ResumeIntakeAgent
         var response = await _client.Messages.Create(new MessageCreateParams
         {
             Model = OpusModel,
-            MaxTokens = 4000,
+            // Double CvTailorAgent's budget (also 4000) since this has to reproduce the whole
+            // resume twice over — once as background_yaml, once as cv_base_markdown — not just
+            // once. Too low a cap here doesn't truncate gracefully: it silently drops a whole
+            // required tool field, throwing a KeyNotFoundException on a dense resume.
+            MaxTokens = 8000,
             System = new List<TextBlockParam>
             {
                 new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
@@ -67,15 +71,24 @@ public class ResumeIntakeAgent
         foreach (var block in response.Content)
         {
             if (block.TryPickToolUse(out ToolUseBlock? toolUse))
-            {
-                var i = toolUse.Input;
-                return new ParsedResume(
-                    i["background_yaml"].GetString() ?? "",
-                    i["cv_base_markdown"].GetString() ?? "");
-            }
+                return ExtractParsedResume(toolUse.Input);
         }
 
         throw new InvalidOperationException("Resume intake did not return a tool use block.");
+    }
+
+    // A missing required field (rather than a truncated-but-present one) is exactly what a
+    // response cut off by MaxTokens looks like — the model runs out of budget partway through
+    // and never starts the second field at all. Split out from ParseAsync so this failure mode
+    // is unit-testable without a live API call.
+    public static ParsedResume ExtractParsedResume(IReadOnlyDictionary<string, JsonElement> toolInput)
+    {
+        if (!toolInput.TryGetValue("background_yaml", out var backgroundEl) ||
+            !toolInput.TryGetValue("cv_base_markdown", out var cvBaseEl))
+            throw new InvalidOperationException(
+                "Resume intake response was missing a required field — the resume is likely too " +
+                "dense to fit the current token budget. Increase MaxTokens above if this recurs.");
+        return new ParsedResume(backgroundEl.GetString() ?? "", cvBaseEl.GetString() ?? "");
     }
 
     private static JsonElement Prop(string type, string description) =>
