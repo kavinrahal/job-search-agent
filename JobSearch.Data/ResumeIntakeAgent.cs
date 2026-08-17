@@ -9,7 +9,10 @@ public record ParsedResume(string Background, string CvBase);
 public class ResumeIntakeAgent
 {
     private readonly AnthropicClient _client;
-    private const string OpusModel = "claude-opus-4-8";
+    // Sonnet, not Opus — this task is faithful transcription and reorganisation of text
+    // that's already on the page, not novel reasoning. Opus's extra depth buys nothing here
+    // and its extra latency was most of the 53s a dense resume took to parse.
+    private const string SonnetModel = "claude-sonnet-5";
     private const int MaxTokens = 8000;
     private readonly string _skillText;
     private readonly Tool _backgroundTool;
@@ -81,7 +84,7 @@ public class ResumeIntakeAgent
     {
         var response = await _client.Messages.Create(new MessageCreateParams
         {
-            Model = OpusModel,
+            Model = SonnetModel,
             MaxTokens = MaxTokens,
             System = new List<TextBlockParam>
             {
@@ -93,7 +96,7 @@ public class ResumeIntakeAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeIntakeAgent, OpusModel, response.Usage);
+            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeIntakeAgent, SonnetModel, response.Usage);
 
         foreach (var block in response.Content)
         {
