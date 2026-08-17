@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useSources, useUpdateSources } from "../hooks/useSources";
+import { gmailOAuthStartUrl } from "../api";
 
 const LABEL = "mb-2 block text-sm font-medium text-gray-700";
 
@@ -22,6 +24,8 @@ export function SourcesPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const { execute, loading: saving, error } = useUpdateSources();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (data) setSelected(data.enabled);
@@ -36,12 +40,20 @@ export function SourcesPage() {
     const result = await execute(selected);
     setSelected(result.enabled);
     setSaved(true);
+    // Nothing further needed if no alert-based source was chosen — move on to the
+    // dashboard. Otherwise stay here so the Connect Gmail button below stays reachable.
+    // alertKeys is declared below but already assigned by the time this ever runs — it's
+    // only invoked from the onClick binding, after the render that declares it.
+    if (!result.enabled.some(k => alertKeys.has(k))) navigate("/");
   }
 
   if (loadingSources) return <div className="py-12 text-center text-sm text-gray-400">Loading…</div>;
 
   const automatic = data?.catalog.filter(c => c.automatic) ?? [];
   const alertBased = data?.catalog.filter(c => !c.automatic) ?? [];
+  const alertKeys = new Set(alertBased.map(s => s.key));
+  const needsGmail = selected.some(k => alertKeys.has(k));
+  const gmailStatus = searchParams.get("gmail");
 
   return (
     <div className="space-y-6">
@@ -51,6 +63,17 @@ export function SourcesPage() {
         Alert-based sources need a job alert set up on that platform, forwarded in once you
         connect Gmail — that's the next step.
       </p>
+
+      {gmailStatus === "connected" && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          Gmail connected.
+        </div>
+      )}
+      {gmailStatus === "error" && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          Couldn't connect Gmail — please try again.
+        </div>
+      )}
 
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <label className={LABEL}>Automatic</label>
@@ -69,6 +92,22 @@ export function SourcesPage() {
           ))}
         </div>
       </div>
+
+      {needsGmail && (
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <label className={LABEL}>Connect Gmail</label>
+          <p className="mb-3 text-sm text-gray-500">
+            Lets the app manage a filter that forwards matching job alerts to us — it can only
+            manage filters and settings, never read your mail.
+          </p>
+          <a
+            href={gmailOAuthStartUrl()}
+            className="inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          >
+            Connect Gmail
+          </a>
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         <button

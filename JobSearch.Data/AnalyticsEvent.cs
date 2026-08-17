@@ -18,4 +18,5 @@ public static class AnalyticsEventType
     public const string CvGenerated = "cv_generated";
     public const string LetterGenerated = "letter_generated";
     public const string AnswerGenerated = "answer_generated";
+    public const string Tier2Upgrade = "tier2_upgrade";
 }

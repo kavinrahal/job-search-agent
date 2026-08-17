@@ -117,6 +117,17 @@ export async function cancelAccount(): Promise<void> {
   await request("/account/cancel", { method: "POST" });
 }
 
+// Beta-only, no payment gate — see the matching backend endpoint's comment.
+export async function upgradeToTier2(): Promise<void> {
+  await request("/account/upgrade-to-tier2", { method: "POST" });
+}
+
+// A real navigable link (redirects through Google's consent screen), not a fetch — same
+// direct-URL pattern as resumePdfUrl.
+export function gmailOAuthStartUrl(): string {
+  return `${BASE}/gmail-oauth/start`;
+}
+
 export async function submitSupportMessage(message: string): Promise<void> {
   await request("/support", { method: "POST", ...json({ message }) });
 }

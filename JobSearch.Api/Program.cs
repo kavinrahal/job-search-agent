@@ -961,6 +961,17 @@ api.MapGet("/gmail-oauth/callback", async (HttpContext ctx, AppDbContext db, Use
     return Results.Redirect($"{redirectBase}/sources?gmail=connected");
 });
 
+// POST /api/v1/account/upgrade-to-tier2 — self-serve, no payment gate. Beta-only mechanism
+// (see TierUpgradeService); the frontend hard-redirects to /sources afterward, same pattern
+// as /account/cancel below, since a tier change needs a fresh /auth/me fetch to take effect
+// and useMe() only fetches once on mount.
+api.MapPost("/account/upgrade-to-tier2", async (HttpContext ctx, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var upgraded = await TierUpgradeService.UpgradeToTier2Async(db, userId);
+    return upgraded ? Results.Ok() : Results.BadRequest(new { error = "Already Tier 2." });
+});
+
 // POST /api/v1/account/cancel — soft-deactivates the account (blocks future login, data is
 // kept) and signs out the current session immediately. Doesn't revoke any other active
 // session for this account elsewhere — there's no server-side session store to revoke

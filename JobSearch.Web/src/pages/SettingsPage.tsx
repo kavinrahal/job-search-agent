@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useProfile, useUpdateProfile, useParseResumePdf, useUploadResumePdf } from "../hooks/useProfile";
-import { useCancelAccount } from "../hooks/useAuth";
+import { useMe, useCancelAccount, useUpgradeToTier2 } from "../hooks/useAuth";
 import { resumePdfUrl } from "../api";
 import { BackgroundEditor } from "../components/BackgroundEditor";
 import { JobCriteriaEditor } from "../components/JobCriteriaEditor";
@@ -21,8 +21,10 @@ export function SettingsPage() {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const { data: me } = useMe();
   const save = useUpdateProfile();
   const cancel = useCancelAccount();
+  const upgrade = useUpgradeToTier2();
   const parsePdf = useParseResumePdf();
   const uploadPdf = useUploadResumePdf();
 
@@ -66,6 +68,14 @@ export function SettingsPage() {
     if (!confirm("Cancel your account? You'll be signed out and won't be able to log back in unless it's reactivated. Your data is kept, not deleted.")) return;
     await cancel.execute();
     window.location.href = "/";
+  }
+
+  // Hard redirect, not client-side navigate — useMe() only fetches /auth/me once on mount,
+  // same reasoning as handleCancelAccount above, so a tier change needs a fresh page load
+  // to actually take effect anywhere that reads it (nav bar, the /sources funnel gate).
+  async function handleUpgrade() {
+    await upgrade.execute();
+    window.location.href = "/sources";
   }
 
   if (loadingProfile || !background || !jobCriteria) {
@@ -140,6 +150,24 @@ export function SettingsPage() {
       {(save.error ?? parsePdf.error ?? uploadPdf.error) && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {save.error ?? parsePdf.error ?? uploadPdf.error}
+        </div>
+      )}
+
+      {me?.tier === "Tier1" && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
+          <p className="mb-1 text-sm font-medium text-blue-700">Tier 2 (Beta)</p>
+          <p className="mb-3 text-sm text-gray-600">
+            Unlock automatic job discovery, application tracking, and inbox alert forwarding.
+            Free while the beta is running — no payment required yet.
+          </p>
+          <button
+            onClick={handleUpgrade}
+            disabled={upgrade.loading}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          >
+            {upgrade.loading ? "Upgrading…" : "Upgrade to Tier 2"}
+          </button>
+          {upgrade.error && <p className="mt-2 text-sm text-red-700">{upgrade.error}</p>}
         </div>
       )}
 
