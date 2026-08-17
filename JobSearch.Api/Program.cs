@@ -927,7 +927,11 @@ api.MapGet("/gmail-oauth/start", async (HttpContext ctx, AppDbContext db) =>
 api.MapGet("/gmail-oauth/callback", async (HttpContext ctx, AppDbContext db, UserSecretService secrets) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
-    var redirectBase = frontendUrl ?? "http://localhost:5173";
+    // FRONTEND_URL is configured with a trailing slash in Railway (used standalone
+    // elsewhere, e.g. /auth/login's redirect, where that's harmless) — trimmed here since
+    // this is the only place a path gets appended onto it, or "https://x.com/" + "/sources"
+    // produces a double slash that fails React Router's path matching entirely.
+    var redirectBase = (frontendUrl ?? "http://localhost:5173").TrimEnd('/');
 
     var expectedState = ctx.Request.Cookies["gmail_oauth_state"];
     ctx.Response.Cookies.Delete("gmail_oauth_state");
