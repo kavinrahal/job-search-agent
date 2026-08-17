@@ -92,7 +92,11 @@ function EducationSection({ value, onChange }: { value: EducationEntry[]; onChan
               <Field label="Institution" value={entry.institution} onChange={v => update(i, { institution: v })} />
               <Field label="Degree" value={entry.degree} onChange={v => update(i, { degree: v })} />
               <Field label="Location" value={entry.location} onChange={v => update(i, { location: v })} />
-              <Field label="Graduation year" value={String(entry.graduation_year)} onChange={v => update(i, { graduation_year: v })} />
+              <Field
+                label="Graduation year"
+                value={entry.graduation_year == null ? "" : String(entry.graduation_year)}
+                onChange={v => update(i, { graduation_year: v })}
+              />
             </div>
           </EntryCard>
         ))}

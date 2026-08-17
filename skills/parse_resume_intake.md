@@ -45,17 +45,19 @@ education:
   - institution: ...
     degree: ...
     location: ...
-    graduation_year: ...
+    graduation_year: ...   # omit the key entirely if not stated in the source — do not guess
 
 skills:
-  # Group however the source resume groups them. Most resumes DO categorize their skills
-  # even without an explicit "Category:" label — by separate lines, columns, or visual
-  # grouping (e.g. a "Languages" line followed by a "Frameworks" line, or a table/columns
-  # in a PDF). Read the layout carefully and use those groupings as category keys (e.g.
-  # languages, frameworks, tools, cloud, databases) rather than flattening everything.
-  # Only fall back to a single flat list under "general" if the source is genuinely one
-  # undifferentiated run of skills with no grouping signal at all. Do not invent categories
-  # the source doesn't support, and do not merge categories the source keeps separate.
+  # Only split into multiple categories if the source shows an EXPLICIT structural signal —
+  # a labeled line/row ("Languages: ...", "Frameworks: ..."), separate columns, or a clearly
+  # distinct visual block per category. If the source is one continuous run of skills (e.g.
+  # a single comma-separated line or paragraph under one "Skills" heading, even if some
+  # items are technical and others are soft skills), keep it as ONE list under a single
+  # "general" key, in the same order as the source. Do not split it yourself based on what
+  # kind of skill something looks like — inferring a Technical/Soft-Skills split (or any
+  # other category) the source doesn't visually show is exactly the invented content this
+  # skill must avoid. The candidate can recategorize by hand afterward if they want to;
+  # your job here is faithful extraction, not deciding on a better structure.
 
 projects:
   - name: ...
