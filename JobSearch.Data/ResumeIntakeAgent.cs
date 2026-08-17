@@ -10,8 +10,10 @@ public class ResumeIntakeAgent
 {
     private readonly AnthropicClient _client;
     private const string OpusModel = "claude-opus-4-8";
+    private const int MaxTokens = 8000;
     private readonly string _skillText;
-    private readonly Tool _tool;
+    private readonly Tool _backgroundTool;
+    private readonly Tool _cvBaseTool;
     private readonly ClaudeUsageLogger? _usageLogger;
 
     public ResumeIntakeAgent(string apiKey, ClaudeUsageLogger? usageLogger = null)
@@ -20,18 +22,39 @@ public class ResumeIntakeAgent
         _skillText = SkillLoader.Load("parse_resume_intake.md");
         _usageLogger = usageLogger;
 
-        _tool = new Tool
+        // Two separate tools/calls rather than one combined one — a single call asking for
+        // both background_yaml and cv_base_markdown at once means the two fields compete for
+        // the same MaxTokens budget. For a dense resume, one field can consume most of it,
+        // leaving the response cut off before the other field is even started — that failed in
+        // production twice (missing field at 4000 tokens, then again at 8000, ~1 minute each
+        // time). Splitting gives each field its own full budget with no competition, and
+        // running them in parallel keeps latency roughly the same as the single-call version.
+        _backgroundTool = new Tool
         {
-            Name = "submit_parsed_resume",
-            Description = "Submit the parsed background data and base CV extracted from the resume.",
+            Name = "submit_background",
+            Description = "Submit the parsed background data extracted from the resume.",
             InputSchema = new InputSchema
             {
                 Properties = new Dictionary<string, JsonElement>
                 {
-                    ["background_yaml"]   = Prop("string", "YAML with personal/experience/education/skills/projects sections."),
-                    ["cv_base_markdown"]  = Prop("string", "Base CV in Markdown, Summary section left as the placeholder."),
+                    ["background_yaml"] = Prop("string", "YAML with personal/experience/education/skills/projects sections."),
                 },
-                Required = ["background_yaml", "cv_base_markdown"],
+                Required = ["background_yaml"],
+            },
+            CacheControl = new CacheControlEphemeral(),
+        };
+
+        _cvBaseTool = new Tool
+        {
+            Name = "submit_cv_base",
+            Description = "Submit the base CV extracted from the resume.",
+            InputSchema = new InputSchema
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["cv_base_markdown"] = Prop("string", "Base CV in Markdown, Summary section left as the placeholder."),
+                },
+                Required = ["cv_base_markdown"],
             },
             CacheControl = new CacheControlEphemeral(),
         };
@@ -48,19 +71,23 @@ public class ResumeIntakeAgent
 
     private async Task<ParsedResume> ParseAsync(int userId, List<ContentBlockParam> content)
     {
+        var backgroundTask = ExtractFieldAsync(userId, content, _backgroundTool, "background_yaml");
+        var cvBaseTask = ExtractFieldAsync(userId, content, _cvBaseTool, "cv_base_markdown");
+        await Task.WhenAll(backgroundTask, cvBaseTask);
+        return new ParsedResume(backgroundTask.Result, cvBaseTask.Result);
+    }
+
+    private async Task<string> ExtractFieldAsync(int userId, List<ContentBlockParam> content, Tool tool, string fieldName)
+    {
         var response = await _client.Messages.Create(new MessageCreateParams
         {
             Model = OpusModel,
-            // Double CvTailorAgent's budget (also 4000) since this has to reproduce the whole
-            // resume twice over — once as background_yaml, once as cv_base_markdown — not just
-            // once. Too low a cap here doesn't truncate gracefully: it silently drops a whole
-            // required tool field, throwing a KeyNotFoundException on a dense resume.
-            MaxTokens = 8000,
+            MaxTokens = MaxTokens,
             System = new List<TextBlockParam>
             {
                 new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
             },
-            Tools = [_tool],
+            Tools = [tool],
             ToolChoice = new ToolChoiceAny(),
             Messages = [new() { Role = Role.User, Content = content }],
         });
@@ -71,24 +98,21 @@ public class ResumeIntakeAgent
         foreach (var block in response.Content)
         {
             if (block.TryPickToolUse(out ToolUseBlock? toolUse))
-                return ExtractParsedResume(toolUse.Input);
+                return ExtractField(toolUse.Input, fieldName);
         }
-
-        throw new InvalidOperationException("Resume intake did not return a tool use block.");
+        throw new InvalidOperationException($"Resume intake did not return a tool use block for \"{fieldName}\".");
     }
 
-    // A missing required field (rather than a truncated-but-present one) is exactly what a
-    // response cut off by MaxTokens looks like — the model runs out of budget partway through
-    // and never starts the second field at all. Split out from ParseAsync so this failure mode
-    // is unit-testable without a live API call.
-    public static ParsedResume ExtractParsedResume(IReadOnlyDictionary<string, JsonElement> toolInput)
+    // Split out from ExtractFieldAsync so this failure mode is unit-testable without a live
+    // API call. A missing field (rather than a truncated-but-present one) is exactly what a
+    // response cut off by MaxTokens looks like.
+    public static string ExtractField(IReadOnlyDictionary<string, JsonElement> toolInput, string fieldName)
     {
-        if (!toolInput.TryGetValue("background_yaml", out var backgroundEl) ||
-            !toolInput.TryGetValue("cv_base_markdown", out var cvBaseEl))
-            throw new InvalidOperationException(
-                "Resume intake response was missing a required field — the resume is likely too " +
-                "dense to fit the current token budget. Increase MaxTokens above if this recurs.");
-        return new ParsedResume(backgroundEl.GetString() ?? "", cvBaseEl.GetString() ?? "");
+        if (toolInput.TryGetValue(fieldName, out var el))
+            return el.GetString() ?? "";
+        throw new InvalidOperationException(
+            $"Resume intake response did not include \"{fieldName}\" — the resume is likely too " +
+            "dense to fit the current token budget. Increase MaxTokens above if this recurs.");
     }
 
     private static JsonElement Prop(string type, string description) =>
