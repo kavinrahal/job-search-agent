@@ -22,6 +22,10 @@ public class User
     // CSV of JobSource keys chosen in the Tier 2 "choose your sources" step. Null means the
     // step hasn't been completed yet — Tier 1 users never see it, so stays null for them.
     public string? EnabledSources { get; set; }
+
+    // Opaque local-part of this user's SendGrid inbound-forwarding address (see
+    // InboundEmailService). Null until first requested — most users never need one.
+    public string? InboundEmailToken { get; set; }
 }
 
 // Bare entitlement fields — Stripe/billing wiring is a separate later ticket.

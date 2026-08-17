@@ -79,6 +79,10 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         {
             e.HasIndex(u => u.Email).IsUnique();
             e.Property(u => u.CreditVersion).IsConcurrencyToken();
+            // Unique so a SendGrid inbound lookup by token can never match more than one
+            // user; Postgres doesn't count NULLs as equal, so the many users without one
+            // yet don't collide with each other.
+            e.HasIndex(u => u.InboundEmailToken).IsUnique();
         });
 
         modelBuilder.Entity<UserProfile>(e =>

@@ -162,6 +162,13 @@ var telegramChatId = builder.Configuration["TELEGRAM_CHAT_ID"]
 var adzunaAppId = builder.Configuration["ADZUNA_APP_ID"];
 var adzunaAppKey = builder.Configuration["ADZUNA_APP_KEY"];
 
+// Optional, deliberately not required-and-throw like the secrets above — these depend on
+// external SendGrid/DNS setup finishing first. Until both are set, the webhook always
+// rejects (see below) and GET /inbound-email returns 503, rather than the whole API
+// failing to start over a domain that isn't ready yet.
+var sendGridInboundSecret = builder.Configuration["SENDGRID_INBOUND_SECRET"];
+var sendGridInboundDomain = builder.Configuration["SENDGRID_INBOUND_DOMAIN"];
+
 builder.Services.AddSingleton(_ => new JobPostingFetcher());
 builder.Services.AddSingleton(sp => new ClaudeUsageLogger(sp.GetRequiredService<DbContextOptions<AppDbContext>>()));
 builder.Services.AddSingleton(sp => new PostingEvaluator(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
@@ -846,6 +853,20 @@ api.MapPut("/sources", async (HttpContext ctx, SourcesUpdateRequest body, AppDbC
     user!.EnabledSources = string.Join(',', sanitized);
     await db.SaveChangesAsync();
     return Results.Ok(new { enabled = sanitized });
+});
+
+// GET /api/v1/inbound-email — Tier 2 only. The user's opaque SendGrid forwarding address,
+// generated on first request. 503 if the domain isn't configured yet (external SendGrid/DNS
+// setup not finished) — see the SENDGRID_INBOUND_DOMAIN comment above.
+api.MapGet("/inbound-email", async (HttpContext ctx, AppDbContext db) =>
+{
+    var (user, error) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (error is not null) return error;
+    if (sendGridInboundDomain is null)
+        return Results.Json(new { error = "Inbound email forwarding isn't set up yet." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+
+    var address = await InboundEmailService.GetOrCreateAddressAsync(db, user!.Id, sendGridInboundDomain);
+    return Results.Ok(new { address });
 });
 
 // POST /api/v1/account/cancel — soft-deactivates the account (blocks future login, data is
@@ -1700,6 +1721,63 @@ app.MapPost("/api/v1/telegram/webhook", async (
             try { await telegram.SendMessageAsync($"Unexpected error: {ex.Message}", parseMode: null); } catch { }
 #pragma warning restore S2486, S108
         }
+    });
+
+    return Results.Ok();
+}).AllowAnonymous().RequireRateLimiting("webhook");
+
+// ---------------------------------------------------------------------------
+// SendGrid inbound webhook — unauthenticated but verified by a shared secret query param.
+// SendGrid's Inbound Parse POST can't be configured with custom headers, so a header-based
+// secret (like Telegram's above) isn't an option — the secret is appended to the
+// Destination URL configured in SendGrid instead (?secret=...).
+// ---------------------------------------------------------------------------
+app.MapPost("/api/v1/sendgrid/inbound", async (
+    HttpRequest request, AppDbContext db, IServiceScopeFactory scopeFactory) =>
+{
+    // No secret configured yet (external SendGrid/DNS setup not finished) — reject
+    // everything rather than accept mail with nothing to verify it against.
+    if (sendGridInboundSecret is null
+        || !string.Equals(request.Query["secret"], sendGridInboundSecret, StringComparison.Ordinal))
+        return Results.Unauthorized();
+
+    var form = await request.ReadFormAsync();
+    var to = form["to"].ToString();
+    var userId = await InboundEmailService.ResolveUserIdAsync(db, to);
+
+    // No match — a stale/mistyped address, or something hitting the wildcard domain
+    // directly rather than a real per-user address. 200 either way so SendGrid doesn't
+    // retry; there's nothing to recover by retrying an address that will never resolve.
+    if (userId is null) return Results.Ok();
+
+    var from = form["from"].ToString();
+    var subject = form["subject"].ToString();
+    // SendGrid usually provides a plain-text part; fall back to raw HTML on the rare
+    // message that only has one, rather than dropping the email entirely.
+    var text = form["text"].ToString();
+    if (string.IsNullOrEmpty(text)) text = form["html"].ToString();
+
+    // Fire-and-forget: respond 200 immediately, insert in the background via a fresh
+    // scope — the request-scoped `db` above is gone by the time this runs (same pattern
+    // as the Telegram webhook below/above).
+    _ = Task.Run(async () =>
+    {
+        using var scope = scopeFactory.CreateScope();
+        var scopedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        scopedDb.CurrentUserId = userId;
+        scopedDb.RawEmails.Add(new RawEmailRecord
+        {
+            UserId = userId.Value,
+            // SendGrid doesn't provide a stable message id — each webhook POST is treated
+            // as a genuinely new message, so a fresh id per call is correct, not a gap.
+            MessageId = Guid.NewGuid().ToString(),
+            ThreadId = Guid.NewGuid().ToString(),
+            FromAddress = from,
+            Subject = subject,
+            BodyText = text,
+            ReceivedAt = DateTime.UtcNow,
+        });
+        await scopedDb.SaveChangesAsync();
     });
 
     return Results.Ok();
