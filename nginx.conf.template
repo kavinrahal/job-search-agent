@@ -14,6 +14,15 @@ server {
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ${VITE_API_URL} https://accounts.google.com; font-src 'self'; frame-src 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com" always;
 
+    # nginx's stock mime.types has no entry for .mjs, so it was falling back to
+    # application/octet-stream — combined with X-Content-Type-Options: nosniff above, browsers
+    # refuse to execute it as a script. pdfjs-dist ships its worker as .mjs (react-pdf/pdf.js),
+    # so without this the PDF viewer's worker setup fails to load entirely.
+    location ~* \.mjs$ {
+        default_type application/javascript;
+        try_files $uri =404;
+    }
+
     # Client-side routing (react-router) — unknown paths fall back to index.html.
     location / {
         try_files $uri /index.html;
