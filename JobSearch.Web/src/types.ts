@@ -146,6 +146,7 @@ export interface SourceCatalogItem {
 export interface SourcesResponse {
   catalog: SourceCatalogItem[];
   enabled: string[];
+  gmailConnected: boolean;
 }
 
 export interface HealthStatus {

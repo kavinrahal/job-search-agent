@@ -854,7 +854,9 @@ api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbC
     return Results.Ok(new { profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt });
 });
 
-// GET /api/v1/sources — Tier 2 only. Source catalog plus the user's current selection.
+// GET /api/v1/sources — Tier 2 only. Source catalog, the user's current selection, and
+// whether Gmail is already connected (so the frontend can hide the Connect Gmail button
+// instead of inviting a pointless re-consent).
 api.MapGet("/sources", async (HttpContext ctx, AppDbContext db) =>
 {
     var (user, error) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
@@ -862,7 +864,9 @@ api.MapGet("/sources", async (HttpContext ctx, AppDbContext db) =>
 
     var catalog = JobSource.Catalog.Select(c => new { key = c.Key, label = c.Label, automatic = c.Automatic });
     var enabled = user!.EnabledSources?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
-    return Results.Ok(new { catalog, enabled });
+    // Existence check only — no need to decrypt the token just to know it's there.
+    var gmailConnected = await db.UserSecrets.AnyAsync(s => s.UserId == user.Id && s.Key == UserSecretKey.GmailRefreshToken);
+    return Results.Ok(new { catalog, enabled, gmailConnected });
 });
 
 // PUT /api/v1/sources — body: { sources: string[] }. Unknown keys are dropped silently
