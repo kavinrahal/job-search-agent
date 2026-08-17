@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
@@ -9,6 +10,7 @@ using JobSearch.Data;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
@@ -31,6 +33,14 @@ var isDev = builder.Environment.IsDevelopment();
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(AppDbContext.GetConnectionString(
         builder.Configuration.GetConnectionString("DefaultConnection"))));
+
+// Key ring persisted to Postgres, not the framework's local-disk default — this API and
+// JobSearchAgent are separate processes on ephemeral containers that both need to decrypt
+// UserSecrets encrypted by either one. Must match JobSearchAgent's ApplicationName exactly
+// (JobSearchAgent/Program.cs) or the two processes derive different keys from the same
+// stored key material and neither can read the other's ciphertext.
+builder.Services.AddDataProtection().PersistKeysToDbContext<AppDbContext>().SetApplicationName("JobFindr");
+builder.Services.AddSingleton<UserSecretService>();
 
 // ---------------------------------------------------------------------------
 // Authentication — Google OAuth + cookie session
@@ -169,6 +179,17 @@ var adzunaAppKey = builder.Configuration["ADZUNA_APP_KEY"];
 var sendGridInboundSecret = builder.Configuration["SENDGRID_INBOUND_SECRET"];
 var sendGridInboundDomain = builder.Configuration["SENDGRID_INBOUND_DOMAIN"];
 
+// GMAIL_CLIENT_ID/SECRET: the same Google Cloud OAuth client JobSearchAgent's existing
+// single-user Gmail flow already uses — one client can request different scopes on
+// different authorization requests, so this reuses it rather than provisioning a second
+// one. GMAIL_OAUTH_REDIRECT_URI is this flow's own callback URL (must be added to that
+// client's authorized redirect URIs in Google Cloud Console — see the Set up Google Cloud
+// OAuth setup ticket). All optional, same reasoning as the SendGrid config above: external
+// setup not finished yet, so /gmail-oauth/start 503s until they're all configured.
+var gmailClientId = builder.Configuration["GMAIL_CLIENT_ID"];
+var gmailClientSecret = builder.Configuration["GMAIL_CLIENT_SECRET"];
+var gmailOAuthRedirectUri = builder.Configuration["GMAIL_OAUTH_REDIRECT_URI"];
+
 builder.Services.AddSingleton(_ => new JobPostingFetcher());
 builder.Services.AddSingleton(sp => new ClaudeUsageLogger(sp.GetRequiredService<DbContextOptions<AppDbContext>>()));
 builder.Services.AddSingleton(sp => new PostingEvaluator(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
@@ -188,6 +209,8 @@ builder.Services.AddSingleton(_ => new JoraFetcher());
 // minimal-API inference decision made once at startup.
 if (adzunaAppId is not null && adzunaAppKey is not null)
     builder.Services.AddSingleton(new AdzunaFetcher(adzunaAppId, adzunaAppKey));
+if (gmailClientId is not null && gmailClientSecret is not null && gmailOAuthRedirectUri is not null)
+    builder.Services.AddSingleton(new GmailOAuthService(gmailClientId, gmailClientSecret, gmailOAuthRedirectUri));
 builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
 
 // Trust X-Forwarded-Proto from Railway's load balancer regardless of its IP.
@@ -867,6 +890,71 @@ api.MapGet("/inbound-email", async (HttpContext ctx, AppDbContext db) =>
 
     var address = await InboundEmailService.GetOrCreateAddressAsync(db, user!.Id, sendGridInboundDomain);
     return Results.Ok(new { address });
+});
+
+// GET /api/v1/gmail-oauth/start — Tier 2 only. Redirects to Google's consent screen for the
+// gmail.settings.basic scope. Runs while already signed in via the cookie session — not a
+// login flow, a second, narrower connection on top of it. 503 if the app's own Gmail OAuth
+// client isn't configured yet (see the GMAIL_CLIENT_ID comment above).
+api.MapGet("/gmail-oauth/start", async (HttpContext ctx, AppDbContext db) =>
+{
+    var (_, error) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (error is not null) return error;
+
+    var gmailOAuth = ctx.RequestServices.GetService<GmailOAuthService>();
+    if (gmailOAuth is null)
+        return Results.Json(new { error = "Gmail connection isn't set up yet." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+
+    // CSRF protection: a random nonce round-tripped through a short-lived cookie, checked
+    // against the "state" Google echoes back to /gmail-oauth/callback below.
+    var state = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+    ctx.Response.Cookies.Append("gmail_oauth_state", state, new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = !isDev,
+        SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.None,
+        MaxAge = TimeSpan.FromMinutes(10),
+    });
+
+    return Results.Redirect(gmailOAuth.BuildAuthorizationUrl(state));
+});
+
+// GET /api/v1/gmail-oauth/callback — Google redirects the browser here after consent (or
+// denial). Exchanges the code for a refresh token, stores it encrypted, and sends the
+// browser back to the frontend's sources page either way — success or failure is signalled
+// via a query param there rather than an API-shaped JSON error, since this response goes
+// straight to the browser's address bar, not a fetch() caller.
+api.MapGet("/gmail-oauth/callback", async (HttpContext ctx, AppDbContext db, UserSecretService secrets) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var redirectBase = frontendUrl ?? "http://localhost:5173";
+
+    var expectedState = ctx.Request.Cookies["gmail_oauth_state"];
+    ctx.Response.Cookies.Delete("gmail_oauth_state");
+
+    var code = ctx.Request.Query["code"].FirstOrDefault();
+    var state = ctx.Request.Query["state"].FirstOrDefault();
+    var deniedOrErrored = ctx.Request.Query["error"].FirstOrDefault() is not null;
+
+    if (deniedOrErrored || code is null || expectedState is null || state != expectedState)
+        return Results.Redirect($"{redirectBase}/sources?gmail=error");
+
+    var gmailOAuth = ctx.RequestServices.GetService<GmailOAuthService>();
+    if (gmailOAuth is null)
+        return Results.Redirect($"{redirectBase}/sources?gmail=error");
+
+    try
+    {
+        var refreshToken = await gmailOAuth.ExchangeCodeForRefreshTokenAsync(code);
+        await secrets.SetAsync(db, userId, UserSecretKey.GmailRefreshToken, refreshToken);
+    }
+    catch (Exception ex)
+    {
+        await Console.Error.WriteLineAsync($"Gmail OAuth token exchange failed for user {userId}: {ex}");
+        return Results.Redirect($"{redirectBase}/sources?gmail=error");
+    }
+
+    return Results.Redirect($"{redirectBase}/sources?gmail=connected");
 });
 
 // POST /api/v1/account/cancel — soft-deactivates the account (blocks future login, data is
