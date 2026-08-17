@@ -733,7 +733,11 @@ api.MapGet("/admin/diagnose-fetch", async (HttpContext ctx, JobPostingFetcher fe
 // ---------------------------------------------------------------------------
 
 // POST /api/v1/onboarding/parse-resume — multipart form: either a "text" field (pasted
-// resume) or a "file" field (PDF). Returns a preview for the user to review/edit, not saved.
+// resume) or a "file" field (PDF). Returns a preview for the user to review/edit — nothing
+// is persisted here, including the PDF itself: persisting it immediately (before the user
+// has reviewed/saved anything) would leave the stored PDF and the stored CV text
+// inconsistent with each other until — or unless — they actually hit Save. The PDF is sent
+// again at save time instead (see POST /profile/resume-pdf), so both land together.
 api.MapPost("/onboarding/parse-resume", async (
     HttpRequest request, ResumeIntakeAgent intakeAgent, HttpContext ctx) =>
 {
@@ -767,8 +771,42 @@ api.MapGet("/profile", async (HttpContext ctx, AppDbContext db) =>
     int userId = CurrentUserId(ctx, UserIdClaimType);
     var profile = await db.UserProfiles.FindAsync(userId);
     if (profile is null) return Results.NotFound();
-    return Results.Ok(new { profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt });
+    return Results.Ok(new
+    {
+        profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt,
+        hasResumePdf = profile.ResumePdf is not null,
+    });
 });
+
+// GET /api/v1/profile/resume-pdf — the original uploaded PDF, for the dashboard's viewer.
+// 404 if the user has only ever pasted text (no file was ever uploaded).
+api.MapGet("/profile/resume-pdf", async (HttpContext ctx, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var profile = await db.UserProfiles.FindAsync(userId);
+    if (profile?.ResumePdf is not { } pdf) return Results.NotFound();
+    return Results.File(pdf, "application/pdf");
+});
+
+// POST /api/v1/profile/resume-pdf — multipart form, "file" field. Called alongside PUT
+// /profile at save time (not at parse time — see the comment on /onboarding/parse-resume).
+api.MapPost("/profile/resume-pdf", async (HttpRequest request, HttpContext ctx, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var form = await request.ReadFormAsync();
+    var file = form.Files["file"];
+    if (file is not { Length: > 0 }) return Results.BadRequest(new { error = "Provide a \"file\" (PDF) field." });
+
+    var profile = await db.UserProfiles.FindAsync(userId);
+    if (profile is null) return Results.NotFound();
+
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    profile.ResumePdf = ms.ToArray();
+    await db.SaveChangesAsync();
+
+    return Results.Ok();
+}).RequireRateLimiting("generation");
 
 // PUT /api/v1/profile — partial update: only provided fields change.
 api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbContext db) =>

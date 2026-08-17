@@ -14,5 +14,11 @@ public class UserProfile
     public string JobCriteria { get; set; } = "";
     public DateTime UpdatedAt { get; set; }
 
+    // The original resume PDF, when the user's most recent intake was a file upload rather
+    // than pasted text — CvBase (parsed markdown) stays the source of truth for CV tailoring
+    // regardless; this is purely so the dashboard can show the real PDF instead of the
+    // parsed-text approximation. Null if they've only ever pasted text.
+    public byte[]? ResumePdf { get; set; }
+
     public User User { get; set; } = null!;
 }

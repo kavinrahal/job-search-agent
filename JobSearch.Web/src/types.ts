@@ -134,6 +134,7 @@ export interface Profile {
   cvBase: string;
   jobCriteria: string;
   updatedAt: string;
+  hasResumePdf: boolean;
 }
 
 export interface SourceCatalogItem {

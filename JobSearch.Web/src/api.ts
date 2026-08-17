@@ -133,6 +133,19 @@ export async function parseResumePdf(file: File): Promise<ParsedResume> {
   return request("/onboarding/parse-resume", { method: "POST", body: form });
 }
 
+// Works the same way threadPdfUrl does — a direct URL for <embed>/<iframe> src or download,
+// relying on the browser's own session cookie rather than a fetched blob.
+export function resumePdfUrl(): string {
+  return `${BASE}/profile/resume-pdf`;
+}
+
+// Called at save time, not at parse time — see the comment on the matching backend endpoint.
+export async function uploadResumePdf(file: File): Promise<void> {
+  const form = new FormData();
+  form.set("file", file);
+  await request("/profile/resume-pdf", { method: "POST", body: form });
+}
+
 export async function fetchProfile(): Promise<Profile> {
   return request("/profile");
 }

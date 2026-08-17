@@ -1,4 +1,4 @@
-import { fetchProfile, updateProfile, parseResumeText, parseResumePdf } from "../api";
+import { fetchProfile, updateProfile, parseResumeText, parseResumePdf, uploadResumePdf } from "../api";
 import { useAsyncData, useAsyncAction } from "./useAsync";
 
 export function useProfile() {
@@ -15,4 +15,8 @@ export function useParseResumeText() {
 
 export function useParseResumePdf() {
   return useAsyncAction(parseResumePdf);
+}
+
+export function useUploadResumePdf() {
+  return useAsyncAction(uploadResumePdf);
 }
