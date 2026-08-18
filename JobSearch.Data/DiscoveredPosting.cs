@@ -14,4 +14,5 @@ public class DiscoveredPosting
     public DateTime DiscoveredAt { get; set; }
     public DateTime? EvaluatedAt { get; set; }
     public bool NotificationSent { get; set; }             // Telegram
+    public bool EmailNotificationSent { get; set; }
 }

@@ -17,25 +17,29 @@ public class JobDiscoveryWorker
     private readonly JobPostingFetcher _pageFetcher;
     private readonly PostingEvaluator _evaluator;
     private readonly TelegramNotifier? _telegram;
+    private readonly SendGridEmailService? _emailer;
 
     public JobDiscoveryWorker(
         AppDbContext db,
         IEnumerable<IJobFetcher> fetchers,
         JobPostingFetcher pageFetcher,
         PostingEvaluator evaluator,
-        TelegramNotifier? telegram)
+        TelegramNotifier? telegram,
+        SendGridEmailService? emailer = null)
     {
         _db = db;
         _fetchers = fetchers;
         _pageFetcher = pageFetcher;
         _evaluator = evaluator;
         _telegram = telegram;
+        _emailer = emailer;
     }
 
     public async Task<(int Discovered, int Evaluated, int Notified)> RunAsync()
     {
         var profile = await _db.UserProfiles.FindAsync(_db.CurrentUserId!.Value)
             ?? throw new InvalidOperationException("UserProfile not seeded for the current user.");
+        var user = await _db.Users.FindAsync(_db.CurrentUserId!.Value);
 
         Console.WriteLine("Job discovery: fetching from all sources...");
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -130,6 +134,14 @@ public class JobDiscoveryWorker
                     record.NotificationSent = true;
                     await _db.SaveChangesAsync();
                     notified++;
+                }
+
+                if (_emailer is not null && user is not null && isMatch && !record.EmailNotificationSent)
+                {
+                    var (subject, body) = EvalFormatter.FormatPlainTextEmail(eval);
+                    await _emailer.SendAsync(user.Email, subject, body);
+                    record.EmailNotificationSent = true;
+                    await _db.SaveChangesAsync();
                 }
             }
             catch (Exception ex)

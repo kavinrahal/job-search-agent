@@ -30,6 +30,7 @@ public class JobAlertProcessor
     private readonly JoraFetcher _joraFetcher;
     private readonly AdzunaFetcher? _adzunaFetcher;
     private readonly PostingMatcherAgent _matcher;
+    private readonly SendGridEmailService? _emailer;
 
     public JobAlertProcessor(
         AppDbContext db,
@@ -38,7 +39,8 @@ public class JobAlertProcessor
         TelegramNotifier? telegram,
         JoraFetcher joraFetcher,
         AdzunaFetcher? adzunaFetcher,
-        PostingMatcherAgent matcher)
+        PostingMatcherAgent matcher,
+        SendGridEmailService? emailer = null)
     {
         _db = db;
         _fetcher = fetcher;
@@ -47,6 +49,7 @@ public class JobAlertProcessor
         _joraFetcher = joraFetcher;
         _adzunaFetcher = adzunaFetcher;
         _matcher = matcher;
+        _emailer = emailer;
     }
 
     internal static Dictionary<string, string> ExtractJobUrls(IEnumerable<RawEmail> emails)
@@ -69,6 +72,7 @@ public class JobAlertProcessor
     {
         var profile = await _db.UserProfiles.FindAsync(_db.CurrentUserId!.Value)
             ?? throw new InvalidOperationException("UserProfile not seeded for the current user.");
+        var user = await _db.Users.FindAsync(_db.CurrentUserId!.Value);
 
         var emailList = alertEmails.ToList();
         var urls = ExtractJobUrls(emailList);
@@ -161,6 +165,14 @@ public class JobAlertProcessor
                     record.NotificationSent = true;
                     await _db.SaveChangesAsync();
                     notified++;
+                }
+
+                if (_emailer is not null && user is not null && isMatch && !record.EmailNotificationSent)
+                {
+                    var (subject, body) = EvalFormatter.FormatPlainTextEmail(eval, "via job alert");
+                    await _emailer.SendAsync(user.Email, subject, body);
+                    record.EmailNotificationSent = true;
+                    await _db.SaveChangesAsync();
                 }
             }
             catch (Exception ex)

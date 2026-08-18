@@ -58,6 +58,24 @@ public static class EvalFormatter
         return sb.ToString().TrimEnd();
     }
 
+    // Reuses Format's HTML body for email — SendGridEmailService only sends text/plain, and
+    // the only HTML Format actually uses is <b> for emphasis, so stripping those tags gives
+    // a clean plain-text body without duplicating the whole layout a second time.
+    public static (string Subject, string Body) FormatPlainTextEmail(PostingEvaluation ev, string? via = null)
+    {
+        var rec = ev.Recommendation switch
+        {
+            "strong_match" => "STRONG MATCH",
+            "good_match"   => "GOOD MATCH",
+            "weak_match"   => "WEAK MATCH",
+            "discard"      => "DISCARD",
+            _              => ev.Recommendation.ToUpperInvariant(),
+        };
+        var subject = $"{rec}: {ev.RoleTitle} at {ev.Company}";
+        var body = Format(ev, via).Replace("<b>", "").Replace("</b>", "");
+        return (subject, body);
+    }
+
     // Synthesizes a minimal posting description from stored evaluation fields.
     // Used when the original job page can't be re-fetched (bot protection, DNS, etc.).
     public static string ToPostingContext(PostingEvaluation ev)

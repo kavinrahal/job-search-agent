@@ -84,6 +84,16 @@ var chatId   = config["TELEGRAM_CHAT_ID"];
 var adzunaAppId  = config["ADZUNA_APP_ID"];
 var adzunaAppKey = config["ADZUNA_APP_KEY"];
 
+// Unlike Telegram, email notifications aren't owner-only — every user has an email from
+// their Google login, so this goes to any Tier2 user a match is found for. Same
+// SENDGRID_API_KEY/SENDGRID_FROM_EMAIL config the beta-invite email already uses (Mail
+// Send permission — separate from SENDGRID_INBOUND_SECRET, which only ever receives).
+var sendGridApiKey = config["SENDGRID_API_KEY"];
+var sendGridFromEmail = config["SENDGRID_FROM_EMAIL"];
+var emailer = sendGridApiKey is not null && sendGridFromEmail is not null
+    ? new SendGridEmailService(sendGridApiKey, sendGridFromEmail)
+    : null;
+
 // ---------------------------------------------------------------------------
 // Owner bootstrap — guarantees the owner is an "active user" (has a UserProfile and a
 // stored Gmail refresh token) by the time the loop below queries for active users. Only
@@ -214,7 +224,7 @@ async Task<(int Discovered, int Evaluated, int Notified)> RunDiscoveryForUserAsy
     bool sendTelegram = IsOwnerWithTelegram(user);
     using var discoveryTelegram = sendTelegram ? new TelegramNotifier(botToken!, chatId!) : null;
     var discovery = new JobDiscoveryWorker(
-        userDb, fetchers, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), discoveryTelegram);
+        userDb, fetchers, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), discoveryTelegram, emailer);
     return await discovery.RunAsync();
 }
 
@@ -445,7 +455,7 @@ async Task RunAlertProcessingAsync(AppDbContext userDb, bool sendTelegram)
         : null;
     var alertProcessor = new JobAlertProcessor(
         userDb, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), alertTelegram,
-        new JoraFetcher(), adzunaCrossCheckFetcher, new PostingMatcherAgent(apiKey, usageLogger));
+        new JoraFetcher(), adzunaCrossCheckFetcher, new PostingMatcherAgent(apiKey, usageLogger), emailer);
     var (found, evaluated, notified) = await alertProcessor.ProcessAsync(allAlertEmails);
     Console.WriteLine($"Job alerts: {found} URLs found, {evaluated} evaluated, {notified} notified.");
 }
