@@ -96,7 +96,7 @@ hard_disqualifiers:
 location:
   preferred:
     - country: Australia
-    notes: Anywhere in Australia is in scope — no city preference, all equally weighted.
+  notes: Anywhere in Australia is in scope — no city preference, all equally weighted.
 
   remote:
     accepted: true
@@ -282,9 +282,9 @@ company:
       - Collaborative team language
       - Concrete engineering culture described beyond "we move fast"
     negative:
-      - "Fast-paced" as the primary or only culture descriptor
-      - "Wear many hats" language (understaffing signal)
-      - "Rockstar", "ninja", "guru" language
+      - '"Fast-paced" as the primary or only culture descriptor'
+      - '"Wear many hats" language (understaffing signal)'
+      - '"Rockstar", "ninja", "guru" language'
       - Passion framed as a requirement rather than a nice-to-have
       - Excessive equity emphasis alongside vague salary information
 
