@@ -8,6 +8,7 @@ import {
   useHealth,
 } from "../hooks/useDashboardData";
 import type { Summary } from "../types";
+import { GeneratePage } from "../pages/GeneratePage";
 
 const STATUS_COLORS: Record<string, string> = {
   Applied:      "bg-blue-50 text-blue-700 hover:bg-blue-100",
@@ -84,7 +85,7 @@ function HealthStrip() {
           Last run {health.lastRunAgeMinutes != null ? `${Math.round(health.lastRunAgeMinutes)} min ago` : "unknown"}
         </span>
       )}
-      {health.lastError && <span className="text-xs text-red-600">{health.lastError}</span>}
+      {health.lastError && <span className="min-w-0 break-words text-xs text-red-600">{health.lastError}</span>}
     </div>
   );
 }
@@ -95,7 +96,7 @@ function RecentApplications() {
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-gray-700">Recent applications</p>
         <Link to="/applications" className="text-xs font-medium text-blue-600 hover:underline">View all</Link>
       </div>
@@ -126,7 +127,7 @@ function RecentDiscoveries() {
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-gray-700">Recent discoveries</p>
         <Link to="/discover" className="text-xs font-medium text-blue-600 hover:underline">View all</Link>
       </div>
@@ -156,19 +157,20 @@ function RecentDiscoveries() {
 // Absorbed from the old standalone Activity page — no separate route/nav item for it
 // anymore, this section is where that content lives now.
 function ActivityFeed() {
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(10);
   const { data, loading } = useActivity(limit);
   const items = data ?? [];
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-3">
         <p className="text-sm font-semibold text-gray-700">Activity</p>
         <select
           value={limit}
           onChange={e => setLimit(Number(e.target.value))}
           className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-300"
         >
+          <option value={10}>Last 10</option>
           <option value={20}>Last 20</option>
           <option value={50}>Last 50</option>
           <option value={100}>Last 100</option>
@@ -186,8 +188,8 @@ function ActivityFeed() {
                 {item.eventType === "StatusChanged" ? "Status" : item.eventType === "EmailReceived" ? "Email" : "Update"}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="font-medium text-gray-800">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                  <p className="min-w-0 truncate font-medium text-gray-800">
                     {item.company}
                     {item.roleTitle && <span className="ml-1 font-normal text-gray-400">— {item.roleTitle}</span>}
                   </p>
@@ -215,6 +217,8 @@ export function Tier2Dashboard() {
 
       <HealthStrip />
       {summary && <KpiStrip summary={summary} onStatusClick={status => navigate(`/applications?status=${status}`)} />}
+
+      <GeneratePage />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <RecentApplications />

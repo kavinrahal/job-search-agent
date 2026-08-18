@@ -11,7 +11,7 @@ export function Tier1Dashboard() {
   return (
     <div className="space-y-6">
       {me && (
-        <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-5 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-5 py-3 shadow-sm">
           <p className="text-sm text-gray-500">
             <span className="font-semibold text-gray-800">{me.creditBalance}</span> credits remaining
           </p>
