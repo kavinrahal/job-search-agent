@@ -2001,6 +2001,11 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
         });
         await scopedDb.SaveChangesAsync();
 
+        // Temporary diagnostic — every inbound email's from/subject, so mismatches (like a
+        // "resend confirmation" email with a different shape than the original) are visible
+        // without a direct DB read. Remove once the auto-confirm flow is fully understood.
+        Console.WriteLine($"[diag] Inbound email for user {userId} — From: {from} | Subject: {subject}");
+
         // Gmail's own "confirm this forwarding address" email — the target address is our
         // inbound webhook, not a mailbox anyone could actually click the link from, so the
         // app completes it server-side the moment the email arrives. See
@@ -2026,6 +2031,14 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
             {
                 await Console.Error.WriteLineAsync($"Gmail forwarding auto-confirm failed for user {userId}: {ex}");
             }
+        }
+        else if (from.Contains("google.com", StringComparison.OrdinalIgnoreCase))
+        {
+            // Temporary diagnostic — a Google-sender email that didn't match the expected
+            // verify-link shape (e.g. a "resend confirmation" email formatted differently
+            // from the original). Remove once the auto-confirm flow is fully understood.
+            var preview = text.Length > 3000 ? text[..3000] : text;
+            Console.WriteLine($"[diag] Unmatched Google-sender email for user {userId} — Subject: {subject} | Body preview: {preview}");
         }
     });
 
