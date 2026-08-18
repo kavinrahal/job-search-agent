@@ -1023,8 +1023,8 @@ api.MapPost("/admin/invite", async (HttpContext ctx, InviteRequest body, AppDbCo
     {
         try
         {
-            await emailSender.SendAsync(email, "You're invited to Job Search Agent",
-                $"You've been invited to Job Search Agent. Sign in with this Google account at " +
+            await emailSender.SendAsync(email, "You're invited to Work Santa",
+                $"You've been invited to Work Santa. Sign in with this Google account at " +
                 $"{frontendUrl ?? "the app"} to get started — you'll have full Tier 2 access right away.");
             emailSent = true;
         }
