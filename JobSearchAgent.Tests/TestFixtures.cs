@@ -87,7 +87,8 @@ public static class Seed
         AppDbContext db,
         string company = "Acme",
         string roleTitle = "Engineer",
-        string? status = null)
+        string? status = null,
+        string? companyDomain = null)
     {
         var app = new JobSearch.Data.Application
         {
@@ -95,6 +96,7 @@ public static class Seed
             Company = company,
             RoleTitle = roleTitle,
             Status = status ?? ApplicationStatus.Applied,
+            CompanyDomain = companyDomain,
             AppliedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };

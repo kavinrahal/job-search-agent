@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { useSources, useUpdateSources, useGmailForwardingStatus } from "../hooks/useSources";
+import { useSources, useUpdateSources, useUpdateGmailTrackingMode, useGmailForwardingStatus } from "../hooks/useSources";
 import { gmailOAuthStartUrl } from "../api";
+import type { SourcesResponse } from "../types";
 
 const LABEL = "mb-2 block text-sm font-medium text-gray-700";
 
@@ -77,6 +78,100 @@ function GmailForwardingSetup() {
         </span>
       </div>
       {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+    </div>
+  );
+}
+
+const TRACKING_MODES: { value: "full" | "filter" | "manual"; label: string; description: string }[] = [
+  {
+    value: "full",
+    label: "Full inbox access",
+    description:
+      "We read your inbox to catch application status changes automatically, regardless of " +
+      "which company emails you — the most complete option. This is the best experience if " +
+      "you're comfortable granting it.",
+  },
+  {
+    value: "filter",
+    label: "Filter only (no inbox access)",
+    description:
+      "We never read your inbox. When you log an application, we install a Gmail filter that " +
+      "simply forwards mail from that company's domain to your in-app address — the same " +
+      "mechanism your job alerts already use. Less automatic: misses anything from a " +
+      "different domain, and can't tell a rejection from an interview invite by content alone.",
+  },
+  {
+    value: "manual",
+    label: "Manual only",
+    description: "No automatic tracking at all — you log applications and update their status yourself.",
+  },
+];
+
+// Independent of the alert-based sources above — a user can track application status without
+// selecting any alert source, and vice versa. No mode is ever pre-selected: the user must
+// actively choose, since "full" implies reading inbox content.
+function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
+  const { execute, loading } = useUpdateGmailTrackingMode();
+  const [mode, setMode] = useState(sources.gmailTrackingMode);
+
+  async function select(next: "full" | "filter" | "manual") {
+    setMode(next);
+    await execute(next);
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <label className={LABEL}>Application status tracking</label>
+      <p className="mb-3 text-sm text-gray-500">
+        How should we track the status of jobs you've applied to? Pick whichever you're
+        comfortable with.
+      </p>
+      <div className="space-y-2">
+        {TRACKING_MODES.map(m => (
+          <button
+            key={m.value}
+            type="button"
+            disabled={loading}
+            onClick={() => select(m.value)}
+            className={`block w-full rounded-lg border p-3 text-left transition-colors ${
+              mode === m.value
+                ? "border-blue-300 bg-blue-50"
+                : "border-gray-200 bg-white hover:bg-gray-50"
+            }`}
+          >
+            <p className={`text-sm font-medium ${mode === m.value ? "text-blue-700" : "text-gray-700"}`}>
+              {m.label}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">{m.description}</p>
+          </button>
+        ))}
+      </div>
+
+      {mode === "filter" && !sources.gmailConnected && (
+        <div className="mt-3 flex items-center gap-3">
+          <a
+            href={gmailOAuthStartUrl()}
+            className="inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          >
+            Connect Gmail
+          </a>
+          <span className="text-sm text-gray-500">Needed to install per-company filters.</span>
+        </div>
+      )}
+      {mode === "full" && !sources.gmailReadonlyConnected && (
+        <div className="mt-3 flex items-center gap-3">
+          <a
+            href={gmailOAuthStartUrl("full")}
+            className="inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          >
+            Grant full inbox access
+          </a>
+          <span className="text-sm text-gray-500">Redirects to Google's consent screen.</span>
+        </div>
+      )}
+      {mode === "full" && sources.gmailReadonlyConnected && (
+        <p className="mt-3 text-sm text-emerald-600">✓ Connected — tracking automatically.</p>
+      )}
     </div>
   );
 }
@@ -172,6 +267,8 @@ export function SourcesPage() {
           </a>
         </div>
       )}
+
+      {data && <GmailTrackingModeSection sources={data} />}
 
       <div className="flex items-center gap-3">
         <button

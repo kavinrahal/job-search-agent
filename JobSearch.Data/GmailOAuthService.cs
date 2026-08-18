@@ -2,12 +2,14 @@ using System.Text.Json;
 
 namespace JobSearch.Data;
 
-// Manual OAuth 2.0 authorization-code flow against Google, scoped to gmail.settings.basic
-// only (filter management — structurally cannot read mail content). Deliberately not the
-// ASP.NET Core Google authentication handler already used for sign-in (JobSearch.Api's
-// AddGoogle) — that handler authenticates a browser session; this obtains and persists a
-// long-lived refresh token for a different, narrower API scope while the user is already
-// signed in, which is a different shape of problem entirely.
+// Manual OAuth 2.0 authorization-code flow against Google. Handles both application-tracking
+// modes' scopes (see GmailTrackingMode) — gmail.settings.basic (filter management, structurally
+// cannot read mail content) for filter mode, gmail.readonly for full mode — since the caller
+// picks the scope per authorization request, not this class. Deliberately not the ASP.NET Core
+// Google authentication handler already used for sign-in (JobSearch.Api's AddGoogle) — that
+// handler authenticates a browser session; this obtains and persists a long-lived refresh
+// token for a different, narrower API scope while the user is already signed in, which is a
+// different shape of problem entirely.
 //
 // Reuses the same Google Cloud OAuth client as JobSearchAgent's existing single-user Gmail
 // flow (GMAIL_CLIENT_ID/SECRET) — one client can request different scopes on different
@@ -15,8 +17,9 @@ namespace JobSearch.Data;
 // redirect URI for this flow's callback.
 public class GmailOAuthService
 {
-#pragma warning disable S1075 // Google's own fixed OAuth endpoints — not configurable paths
-    private const string Scope = "https://www.googleapis.com/auth/gmail.settings.basic";
+#pragma warning disable S1075 // Google's own fixed OAuth endpoints/scopes — not configurable paths
+    public const string SettingsBasicScope = "https://www.googleapis.com/auth/gmail.settings.basic";
+    public const string ReadonlyScope = "https://www.googleapis.com/auth/gmail.readonly";
     private const string AuthorizeUrl = "https://accounts.google.com/o/oauth2/v2/auth";
     private const string TokenUrl = "https://oauth2.googleapis.com/token";
 #pragma warning restore S1075
@@ -40,14 +43,14 @@ public class GmailOAuthService
     // Where to send the browser to start consent. access_type=offline + prompt=consent
     // guarantee a refresh token comes back on every run — Google only issues one on the
     // first-ever consent by default, which would silently break reconnecting later.
-    public string BuildAuthorizationUrl(string state)
+    public string BuildAuthorizationUrl(string state, string scope)
     {
         var query = new Dictionary<string, string>
         {
             ["client_id"] = _clientId,
             ["redirect_uri"] = _redirectUri,
             ["response_type"] = "code",
-            ["scope"] = Scope,
+            ["scope"] = scope,
             ["access_type"] = "offline",
             ["prompt"] = "consent",
             ["state"] = state,

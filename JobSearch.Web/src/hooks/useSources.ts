@@ -1,4 +1,4 @@
-import { fetchSources, updateSources, fetchGmailForwardingStatus } from "../api";
+import { fetchSources, updateSources, updateGmailTrackingMode, fetchGmailForwardingStatus } from "../api";
 import { useAsyncData, useAsyncAction } from "./useAsync";
 
 export function useSources() {
@@ -7,6 +7,10 @@ export function useSources() {
 
 export function useUpdateSources() {
   return useAsyncAction(updateSources);
+}
+
+export function useUpdateGmailTrackingMode() {
+  return useAsyncAction(updateGmailTrackingMode);
 }
 
 // Only ever mounted (via the component that calls this) once Gmail is already connected —

@@ -306,4 +306,38 @@ public class ApplicationTrackerTests
         Assert.Equal(ApplicationStatus.Rejected, app.Status);
         Assert.Equal(1, result.NotificationsQueued);
     }
+
+    // TC19 — The dedup gap this closes: realistic LLM classification variance ("Acme Corp"
+    // vs "Acme Corporation") wouldn't match on company name alone, but a manually-logged
+    // filter-tracking-mode application carries the company's email domain, and the real
+    // confirmation email's sender domain matches it — so this should update the existing
+    // row, not create a duplicate.
+    [Fact]
+    public async Task DomainMatch_DifferentCompanyNameSameDomain_MatchesExistingApplication()
+    {
+        var db = Db.Fresh();
+        Seed.Application(db, company: "Acme Corp", roleTitle: "", status: ApplicationStatus.Applied, companyDomain: "acmecorp.com");
+
+        var email = Make.Email(fromAddress: "HR Team <hr@acmecorp.com>");
+        var clf = Make.Classification(category: "interview_invitation", company: "Acme Corporation", roleTitle: "Engineer");
+
+        var result = await ApplicationTracker.ProcessClassificationsAsync(db, [Fixtures.Pair(email, clf)]);
+
+        Assert.Equal(1, db.Applications.Count()); // no duplicate created
+        Assert.Equal(0, result.Created);
+        Assert.Equal(ApplicationStatus.Interviewing, db.Applications.First().Status);
+    }
+
+    // TC20 — ExtractDomain in isolation, since it's a plain string-parsing helper that's easy
+    // to get subtly wrong (off-by-one on the '@'/'<'/'>' indices) without it ever showing up
+    // as a test failure elsewhere.
+    [Theory]
+    [InlineData("HR Team <hr@AcmeCorp.com>", "acmecorp.com")]
+    [InlineData("hr@acmecorp.com", "acmecorp.com")]
+    [InlineData("no-at-sign", null)]
+    [InlineData("trailing-at@", null)]
+    public void ExtractDomain_VariousFormats_ReturnsLowercasedDomainOrNull(string fromHeader, string? expected)
+    {
+        Assert.Equal(expected, ApplicationTracker.ExtractDomain(fromHeader));
+    }
 }

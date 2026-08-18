@@ -28,3 +28,14 @@ public record SourcesUpdateRequest(string[] Sources);
 
 // POST /api/v1/admin/invite
 public record InviteRequest(string Email);
+
+// POST /api/v1/applications — manually logging an application (the only creation path
+// besides ApplicationTracker's email-driven one). CompanyDomain is only meaningful in
+// filter tracking mode (see GmailTrackingMode) — installs a per-company Gmail filter.
+public record CreateApplicationRequest(string Company, string RoleTitle, string? JobUrl, string? CompanyDomain);
+
+// PATCH /api/v1/applications/{id}
+public record UpdateApplicationStatusRequest(string Status);
+
+// PUT /api/v1/gmail-tracking-mode
+public record GmailTrackingModeRequest(string Mode);

@@ -39,6 +39,11 @@ export interface Application {
   notes: string | null;
 }
 
+export const APPLICATION_STATUSES = [
+  "Applied", "Acknowledged", "Screening", "Interviewing",
+  "FinalRound", "Offer", "Rejected", "Ghosted", "Withdrawn",
+] as const;
+
 export interface ApplicationsResponse {
   items: Application[];
   total: number;
@@ -147,6 +152,8 @@ export interface SourcesResponse {
   catalog: SourceCatalogItem[];
   enabled: string[];
   gmailConnected: boolean;
+  gmailReadonlyConnected: boolean;
+  gmailTrackingMode: "full" | "filter" | "manual" | null;
 }
 
 export interface HealthStatus {

@@ -122,14 +122,22 @@ public static class ApplicationTracker
         string company = clf.Company.Trim();
         string role = clf.RoleTitle.Trim();
 
+        // Secondary match key: a filter-tracking-mode application logged manually carries the
+        // company's email domain (see POST /applications), which is far more reliable than
+        // company-name matching for catching the same real-world application under realistic
+        // LLM classification variance ("Acme Corp" vs "Acme Corporation" won't match on name
+        // alone, but both emails come from the same domain).
+        var fromDomain = ExtractDomain(email.FromAddress);
+
         // Case-insensitive match — EF Core translates ToLower() to LOWER() in PostgreSQL.
         // string.Equals(..., StringComparison.OrdinalIgnoreCase) looks equivalent and passes
         // against the test suite's InMemory provider, but Npgsql cannot translate that overload
         // to SQL at all and throws InvalidOperationException at runtime against real Postgres.
 #pragma warning disable RCS1155 // ToLower() is required here for SQL translation, not in-memory comparison
         var existing = await db.Applications.FirstOrDefaultAsync(a =>
-            a.Company.ToLower() == company.ToLower() &&
-            (role == "" || a.RoleTitle.ToLower() == role.ToLower()));
+            (a.Company.ToLower() == company.ToLower() &&
+             (role == "" || a.RoleTitle.ToLower() == role.ToLower()))
+            || (fromDomain != null && a.CompanyDomain == fromDomain));
 #pragma warning restore RCS1155
 
         if (existing is not null)
@@ -213,5 +221,14 @@ public static class ApplicationTracker
             "rejection"            => $"Rejection: {clf.Company}{ro}\n{subj}",
             _                      => $"{clf.Company}{ro}: {subj}",
         };
+    }
+
+    // Lowercased domain from a "From" header, e.g. "Name <hr@acmecorp.com>" -> "acmecorp.com".
+    // MailAddress already handles the quoted-display-name-plus-angle-brackets format (and
+    // a bare address with none of that) correctly, so no need to hand-parse it.
+    internal static string? ExtractDomain(string fromHeader)
+    {
+        try { return new System.Net.Mail.MailAddress(fromHeader).Host.ToLowerInvariant(); }
+        catch (FormatException) { return null; }
     }
 }

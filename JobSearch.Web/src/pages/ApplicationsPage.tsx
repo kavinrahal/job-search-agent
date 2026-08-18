@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useApplications, useApplicationEvents } from "../hooks/useDashboardData";
-import type { Application, ApplicationWithEvents } from "../types";
+import {
+  useApplications,
+  useApplicationEvents,
+  useCreateApplication,
+  useUpdateApplicationStatus,
+} from "../hooks/useDashboardData";
+import { APPLICATION_STATUSES, type Application, type ApplicationWithEvents } from "../types";
 
 const STATUS_COLORS: Record<string, string> = {
   Applied:      "bg-blue-100 text-blue-700",
@@ -17,11 +22,18 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STATUS_TABS = ["All", "Applied", "Acknowledged", "Screening", "Interviewing", "FinalRound", "Offer", "Rejected"];
 
-function StatusBadge({ status }: { status: string }) {
+// Fallback for anything automatic tracking misses — a plain <select> styled to still read as
+// a colored status pill. Stops propagation so picking a status doesn't also toggle the card.
+function StatusSelect({ status, onChange }: { status: string; onChange: (next: string) => void }) {
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[status] ?? "bg-gray-100 text-gray-600"}`}>
-      {status}
-    </span>
+    <select
+      value={status}
+      onClick={e => e.stopPropagation()}
+      onChange={e => onChange(e.target.value)}
+      className={`rounded-full border-0 px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[status] ?? "bg-gray-100 text-gray-600"}`}
+    >
+      {APPLICATION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+    </select>
   );
 }
 
@@ -54,16 +66,24 @@ function EventTimeline({ data }: { data: ApplicationWithEvents }) {
   );
 }
 
-function ApplicationCard({ app }: { app: Application }) {
+function ApplicationCard({ app, onStatusChanged }: { app: Application; onStatusChanged: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<ApplicationWithEvents | null>(null);
   const { execute, loading } = useApplicationEvents();
+  const { execute: updateStatus } = useUpdateApplicationStatus();
 
   async function toggle() {
     if (!expanded && !detail) {
       setDetail(await execute(app.id));
     }
     setExpanded(e => !e);
+  }
+
+  async function handleStatusChange(next: string) {
+    if (next === app.status) return;
+    await updateStatus(app.id, next);
+    setDetail(null); // stale timeline — refetched next time the card expands
+    onStatusChanged();
   }
 
   return (
@@ -77,7 +97,7 @@ function ApplicationCard({ app }: { app: Application }) {
           <p className="mt-0.5 truncate text-sm text-gray-500">{app.roleTitle || "—"}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <StatusBadge status={app.status} />
+          <StatusSelect status={app.status} onChange={handleStatusChange} />
           <span className="text-xs text-gray-400">
             Updated {new Date(app.updatedAt).toLocaleDateString("en-AU", {
               day: "2-digit", month: "short",
@@ -95,6 +115,100 @@ function ApplicationCard({ app }: { app: Application }) {
   );
 }
 
+function LogApplicationForm({ onDone }: { onDone: () => void }) {
+  const { execute, loading, error } = useCreateApplication();
+  const [company, setCompany] = useState("");
+  const [roleTitle, setRoleTitle] = useState("");
+  const [jobUrl, setJobUrl] = useState("");
+  const [companyDomain, setCompanyDomain] = useState("");
+
+  // Rough guess only — strip legal suffixes/punctuation, not a real lookup. The user must
+  // confirm or correct it; it's never trusted as-is.
+  function guessDomain(name: string) {
+    const slug = name
+      .toLowerCase()
+      .replace(/\b(inc|llc|corp|corporation|ltd|pty|co)\b\.?/g, "")
+      .replace(/[^a-z0-9]/g, "");
+    return slug ? `${slug}.com` : "";
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!company.trim() || !roleTitle.trim()) return;
+    await execute({
+      company: company.trim(),
+      roleTitle: roleTitle.trim(),
+      jobUrl: jobUrl.trim() || undefined,
+      companyDomain: companyDomain.trim() || undefined,
+    });
+    onDone();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Company</label>
+          <input
+            value={company}
+            onChange={e => {
+              setCompany(e.target.value);
+              if (!companyDomain) setCompanyDomain(guessDomain(e.target.value));
+            }}
+            required
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Role title</label>
+          <input
+            value={roleTitle}
+            onChange={e => setRoleTitle(e.target.value)}
+            required
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Job URL (optional)</label>
+          <input
+            value={jobUrl}
+            onChange={e => setJobUrl(e.target.value)}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-500">
+            Company email domain (optional)
+          </label>
+          <input
+            value={companyDomain}
+            onChange={e => setCompanyDomain(e.target.value)}
+            placeholder="acmecorp.com"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            Only used if you're on filter-only tracking — installs a Gmail filter forwarding
+            mail from this domain. A rough guess, not verified — check it's right.
+          </p>
+        </div>
+      </div>
+      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={loading}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+        >
+          {loading ? "Saving…" : "Log application"}
+        </button>
+        <button type="button" onClick={onDone} className="text-sm text-gray-500 hover:text-gray-700">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export function ApplicationsPage() {
   const [searchParams] = useSearchParams();
   const initialStatus = searchParams.get("status") ?? "All";
@@ -102,8 +216,9 @@ export function ApplicationsPage() {
   const [activeTab, setActiveTab] = useState(
     STATUS_TABS.includes(initialStatus) ? initialStatus : "All"
   );
+  const [showLogForm, setShowLogForm] = useState(false);
 
-  const { data, error, loading } = useApplications({
+  const { data, error, loading, reload } = useApplications({
     status: activeTab === "All" ? undefined : activeTab,
     pageSize: 100,
   });
@@ -114,8 +229,22 @@ export function ApplicationsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-700">Applications</h2>
-        <span className="text-sm text-gray-400">{total} total</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-400">{total} total</span>
+          {!showLogForm && (
+            <button
+              onClick={() => setShowLogForm(true)}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            >
+              Log an application
+            </button>
+          )}
+        </div>
       </div>
+
+      {showLogForm && (
+        <LogApplicationForm onDone={() => { setShowLogForm(false); reload(); }} />
+      )}
 
       {/* Status tabs */}
       <div className="flex flex-wrap gap-2">
@@ -146,7 +275,7 @@ export function ApplicationsPage() {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {apps.map(app => <ApplicationCard key={app.id} app={app} />)}
+          {apps.map(app => <ApplicationCard key={app.id} app={app} onStatusChanged={reload} />)}
         </div>
       )}
     </div>

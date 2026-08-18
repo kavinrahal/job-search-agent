@@ -3,6 +3,8 @@ import {
   fetchEmails,
   fetchApplications,
   fetchApplicationEvents,
+  createApplication,
+  updateApplicationStatus,
   fetchActivity,
   fetchHealth,
   fetchDiscoveries,
@@ -29,6 +31,14 @@ export function useApplications(params: { status?: string; page?: number; pageSi
 // not on mount, since fetching every application's events up front would be wasteful.
 export function useApplicationEvents() {
   return useAsyncAction(fetchApplicationEvents);
+}
+
+export function useCreateApplication() {
+  return useAsyncAction(createApplication);
+}
+
+export function useUpdateApplicationStatus() {
+  return useAsyncAction(updateApplicationStatus);
 }
 
 export function useActivity(limit = 30) {

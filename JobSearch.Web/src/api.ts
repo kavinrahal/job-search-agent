@@ -1,6 +1,7 @@
 import type {
   Summary,
   EmailsResponse,
+  Application,
   ApplicationsResponse,
   ApplicationWithEvents,
   ActivityItem,
@@ -76,6 +77,21 @@ export async function fetchApplicationEvents(id: number): Promise<ApplicationWit
   return request(`/applications/${id}/events`);
 }
 
+// The manual counterpart to the automatic email-driven tracker — companyDomain is only
+// meaningful in filter tracking mode (installs a per-company Gmail filter server-side).
+export async function createApplication(input: {
+  company: string;
+  roleTitle: string;
+  jobUrl?: string;
+  companyDomain?: string;
+}): Promise<Application> {
+  return request("/applications", { method: "POST", ...json(input) });
+}
+
+export async function updateApplicationStatus(id: number, status: string): Promise<{ id: number; status: string; updatedAt: string }> {
+  return request(`/applications/${id}`, { method: "PATCH", ...json({ status }) });
+}
+
 export async function fetchActivity(limit = 30): Promise<ActivityItem[]> {
   return request(`/activity?limit=${limit}`);
 }
@@ -113,6 +129,10 @@ export async function updateSources(sources: string[]): Promise<{ enabled: strin
   return request("/sources", { method: "PUT", ...json({ sources }) });
 }
 
+export async function updateGmailTrackingMode(mode: "full" | "filter" | "manual"): Promise<{ gmailTrackingMode: string }> {
+  return request("/gmail-tracking-mode", { method: "PUT", ...json({ mode }) });
+}
+
 export async function logout(): Promise<void> {
   await request("/auth/logout", { method: "POST" });
 }
@@ -127,9 +147,10 @@ export async function upgradeToTier2(): Promise<void> {
 }
 
 // A real navigable link (redirects through Google's consent screen), not a fetch — same
-// direct-URL pattern as resumePdfUrl.
-export function gmailOAuthStartUrl(): string {
-  return `${BASE}/gmail-oauth/start`;
+// direct-URL pattern as resumePdfUrl. mode "full" requests gmail.readonly instead of the
+// default gmail.settings.basic (see the matching backend endpoint's comment).
+export function gmailOAuthStartUrl(mode?: "full"): string {
+  return `${BASE}/gmail-oauth/start${mode ? `?mode=${mode}` : ""}`;
 }
 
 export interface GmailForwardingStatusResponse {

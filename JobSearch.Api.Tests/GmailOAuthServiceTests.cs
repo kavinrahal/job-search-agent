@@ -21,18 +21,31 @@ public class GmailOAuthServiceTests
     private static GmailOAuthService Service(StubHandler handler) =>
         new("client-id", "client-secret", "https://api.example.com/api/v1/gmail-oauth/callback", new HttpClient(handler));
 
-    // TC01 — The authorization URL requests exactly the narrow scope, never a broader one.
-    // Silent failure: the whole feature's trust pitch depends on this scope staying narrow.
+    // TC01 — Requesting the filter-mode scope never smuggles in a broader one. Silent
+    // failure: the filter mode's whole trust pitch depends on this scope staying narrow.
     [Fact]
-    public void BuildAuthorizationUrl_IncludesOnlyGmailSettingsBasicScope()
+    public void BuildAuthorizationUrl_SettingsBasicScope_ExcludesBroaderScopes()
     {
         var service = Service(new StubHandler("{}"));
 
-        var url = service.BuildAuthorizationUrl("some-state");
+        var url = service.BuildAuthorizationUrl("some-state", GmailOAuthService.SettingsBasicScope);
 
         Assert.Contains("scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.settings.basic", url);
         Assert.DoesNotContain("gmail.readonly", url);
         Assert.DoesNotContain("gmail.modify", url);
+    }
+
+    // TC01b — The full-access mode's readonly scope is requested when explicitly asked for,
+    // not silently coerced to the narrower scope.
+    [Fact]
+    public void BuildAuthorizationUrl_ReadonlyScope_RequestsReadonlyNotSettingsBasic()
+    {
+        var service = Service(new StubHandler("{}"));
+
+        var url = service.BuildAuthorizationUrl("some-state", GmailOAuthService.ReadonlyScope);
+
+        Assert.Contains("scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly", url);
+        Assert.DoesNotContain("gmail.settings.basic", url);
     }
 
     // TC02 — access_type=offline and prompt=consent are always present, not conditional.
@@ -43,7 +56,7 @@ public class GmailOAuthServiceTests
     {
         var service = Service(new StubHandler("{}"));
 
-        var url = service.BuildAuthorizationUrl("some-state");
+        var url = service.BuildAuthorizationUrl("some-state", GmailOAuthService.SettingsBasicScope);
 
         Assert.Contains("access_type=offline", url);
         Assert.Contains("prompt=consent", url);
@@ -55,7 +68,7 @@ public class GmailOAuthServiceTests
     {
         var service = Service(new StubHandler("{}"));
 
-        var url = service.BuildAuthorizationUrl("abc123state");
+        var url = service.BuildAuthorizationUrl("abc123state", GmailOAuthService.SettingsBasicScope);
 
         Assert.Contains("state=abc123state", url);
     }

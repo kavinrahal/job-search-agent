@@ -3,6 +3,7 @@ using System;
 using JobSearch.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JobSearch.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260818121617_AddApplicationCompanyDomain")]
+    partial class AddApplicationCompanyDomain
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -67,7 +70,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("AgentThreads", (string)null);
+                    b.ToTable("AgentThreads");
                 });
 
             modelBuilder.Entity("JobSearch.Data.AnalyticsEvent", b =>
@@ -94,7 +97,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasIndex("EventType");
 
-                    b.ToTable("AnalyticsEvents", (string)null);
+                    b.ToTable("AnalyticsEvents");
                 });
 
             modelBuilder.Entity("JobSearch.Data.Application", b =>
@@ -141,7 +144,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasIndex("Company", "RoleTitle");
 
-                    b.ToTable("Applications", (string)null);
+                    b.ToTable("Applications");
                 });
 
             modelBuilder.Entity("JobSearch.Data.ApplicationEvent", b =>
@@ -184,7 +187,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("ApplicationEvents", (string)null);
+                    b.ToTable("ApplicationEvents");
                 });
 
             modelBuilder.Entity("JobSearch.Data.BetaInvite", b =>
@@ -207,7 +210,7 @@ namespace JobSearch.Data.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("BetaInvites", (string)null);
+                    b.ToTable("BetaInvites");
                 });
 
             modelBuilder.Entity("JobSearch.Data.ClassificationRecord", b =>
@@ -253,7 +256,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Classifications", (string)null);
+                    b.ToTable("Classifications");
                 });
 
             modelBuilder.Entity("JobSearch.Data.ClaudeUsageLog", b =>
@@ -296,7 +299,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("ClaudeUsageLogs", (string)null);
+                    b.ToTable("ClaudeUsageLogs");
                 });
 
             modelBuilder.Entity("JobSearch.Data.DiscoveredPosting", b =>
@@ -356,7 +359,7 @@ namespace JobSearch.Data.Migrations
                     b.HasIndex("UserId", "Url")
                         .IsUnique();
 
-                    b.ToTable("DiscoveredPostings", (string)null);
+                    b.ToTable("DiscoveredPostings");
                 });
 
             modelBuilder.Entity("JobSearch.Data.Notification", b =>
@@ -395,7 +398,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Notifications", (string)null);
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("JobSearch.Data.RawEmailRecord", b =>
@@ -442,7 +445,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("RawEmails", (string)null);
+                    b.ToTable("RawEmails");
                 });
 
             modelBuilder.Entity("JobSearch.Data.SupportMessage", b =>
@@ -471,7 +474,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasIndex("CreatedAt");
 
-                    b.ToTable("SupportMessages", (string)null);
+                    b.ToTable("SupportMessages");
                 });
 
             modelBuilder.Entity("JobSearch.Data.SystemHealth", b =>
@@ -504,7 +507,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasIndex("CheckedAt");
 
-                    b.ToTable("SystemHealth", (string)null);
+                    b.ToTable("SystemHealth");
                 });
 
             modelBuilder.Entity("JobSearch.Data.User", b =>
@@ -553,7 +556,7 @@ namespace JobSearch.Data.Migrations
                     b.HasIndex("InboundEmailToken")
                         .IsUnique();
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("JobSearch.Data.UserProfile", b =>
@@ -581,7 +584,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasKey("UserId");
 
-                    b.ToTable("UserProfiles", (string)null);
+                    b.ToTable("UserProfiles");
                 });
 
             modelBuilder.Entity("JobSearch.Data.UserSecret", b =>
@@ -611,7 +614,7 @@ namespace JobSearch.Data.Migrations
                     b.HasIndex("UserId", "Key")
                         .IsUnique();
 
-                    b.ToTable("UserSecrets", (string)null);
+                    b.ToTable("UserSecrets");
                 });
 
             modelBuilder.Entity("JobSearch.Data.WorkerLock", b =>
@@ -627,7 +630,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("WorkerLocks", (string)null);
+                    b.ToTable("WorkerLocks");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
@@ -646,7 +649,7 @@ namespace JobSearch.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DataProtectionKeys", (string)null);
+                    b.ToTable("DataProtectionKeys");
                 });
 
             modelBuilder.Entity("JobSearch.Data.ApplicationEvent", b =>

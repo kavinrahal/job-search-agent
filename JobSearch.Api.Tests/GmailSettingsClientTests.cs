@@ -55,4 +55,39 @@ public class GmailSettingsClientTests
         Assert.Contains("jora.com", GmailSettingsClient.FilterQuery);
         Assert.Contains("adzuna.com.au", GmailSettingsClient.FilterQuery);
     }
+
+    // TC05 — Unlike the single job-alert filter, there can be many per-company filters
+    // forwarding to the same address, so idempotency has to key on the domain too — a
+    // filter for a different company must not be mistaken for this one already existing.
+    [Fact]
+    public void HasCompanyFilter_FilterForDifferentCompany_ReturnsFalse()
+    {
+        var filters = new List<Filter>
+        {
+            new()
+            {
+                Action = new FilterAction { Forward = "abc@alerts.worksanta.com" },
+                Criteria = new FilterCriteria { Query = GmailSettingsClient.CompanyFilterQuery("othercorp.com") },
+            },
+        };
+
+        Assert.False(GmailSettingsClient.HasCompanyFilter(filters, "acmecorp.com", "abc@alerts.worksanta.com"));
+    }
+
+    // TC06 — The actual idempotency guard: a filter for this exact company+address already
+    // exists, so EnsureCompanyFilterAsync must skip creating a duplicate.
+    [Fact]
+    public void HasCompanyFilter_MatchingFilterExists_ReturnsTrue()
+    {
+        var filters = new List<Filter>
+        {
+            new()
+            {
+                Action = new FilterAction { Forward = "abc@alerts.worksanta.com" },
+                Criteria = new FilterCriteria { Query = GmailSettingsClient.CompanyFilterQuery("acmecorp.com") },
+            },
+        };
+
+        Assert.True(GmailSettingsClient.HasCompanyFilter(filters, "acmecorp.com", "abc@alerts.worksanta.com"));
+    }
 }

@@ -580,10 +580,7 @@ api.MapGet("/applications", async (
     var (_, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
     if (tierError is not null) return tierError;
 
-    var validStatuses = new HashSet<string>
-        { "Applied", "Acknowledged", "Screening", "Interviewing",
-          "FinalRound", "Offer", "Rejected", "Ghosted", "Withdrawn" };
-    if (status is not null && !validStatuses.Contains(status))
+    if (status is not null && !ApplicationStatus.All.Contains(status))
         return Results.BadRequest(new { error = "Invalid status" });
 
     var query = db.Applications.AsQueryable();
@@ -649,6 +646,118 @@ api.MapGet("/applications/{id}/events", async (HttpContext ctx, int id, AppDbCon
         },
         events,
     });
+});
+
+// POST /api/v1/applications — Tier 2 only. The manual counterpart to ApplicationTracker's
+// email-driven FindOrCreateAsync — lets a user log an application directly instead of
+// waiting for a matching email. CompanyDomain (filter tracking mode only) is stored on the
+// row so a later classified email can match it even if the company name comes through
+// slightly differently worded (see ApplicationTracker.FindOrCreateAsync).
+api.MapPost("/applications", async (HttpContext ctx, AppDbContext db, UserSecretService secrets, CreateApplicationRequest body) =>
+{
+    var (user, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (tierError is not null) return tierError;
+
+    if (string.IsNullOrWhiteSpace(body.Company) || string.IsNullOrWhiteSpace(body.RoleTitle))
+        return Results.BadRequest(new { error = "Company and role title are required." });
+
+    var now = DateTime.UtcNow;
+    var application = new Application
+    {
+        UserId = user!.Id,
+        Company = body.Company.Trim(),
+        RoleTitle = body.RoleTitle.Trim(),
+        JobUrl = body.JobUrl,
+        CompanyDomain = body.CompanyDomain?.Trim().ToLowerInvariant(),
+        Status = ApplicationStatus.Applied,
+        AppliedAt = now,
+        UpdatedAt = now,
+    };
+    db.Applications.Add(application);
+    await db.SaveChangesAsync(); // flush to get application.Id before adding the event
+
+    db.ApplicationEvents.Add(new ApplicationEvent
+    {
+        UserId = user.Id,
+        ApplicationId = application.Id,
+        EventType = ApplicationEventType.ManualUpdate,
+        FromStatus = null,
+        ToStatus = ApplicationStatus.Applied,
+        Summary = $"Manually logged: {application.Company} — {application.RoleTitle}",
+        OccurredAt = now,
+    });
+    await db.SaveChangesAsync();
+
+    // Filter tracking mode: install a Gmail filter forwarding this company's domain, the
+    // same way job-alert forwarding already works. Best-effort — a failure here shouldn't
+    // fail the application creation itself, since the app row is already saved either way.
+    if (application.CompanyDomain is not null
+        && user.GmailTrackingMode == GmailTrackingMode.Filter
+        && sendGridInboundDomain is not null)
+    {
+        var gmailSettings = ctx.RequestServices.GetService<GmailSettingsClient>();
+        var refreshToken = gmailSettings is null ? null : await secrets.GetAsync(db, user.Id, UserSecretKey.GmailSettingsRefreshToken);
+        if (gmailSettings is not null && refreshToken is not null)
+        {
+            try
+            {
+                var address = await InboundEmailService.GetOrCreateAddressAsync(db, user.Id, sendGridInboundDomain);
+                await gmailSettings.EnsureCompanyFilterAsync(refreshToken, application.CompanyDomain, address);
+            }
+            catch (Exception ex)
+            {
+                await Console.Error.WriteLineAsync($"EnsureCompanyFilterAsync failed for user {user.Id}: {ex}");
+            }
+        }
+    }
+
+    return Results.Ok(new
+    {
+        id = application.Id,
+        company = application.Company,
+        roleTitle = application.RoleTitle,
+        jobUrl = application.JobUrl,
+        status = application.Status,
+        appliedAt = application.AppliedAt,
+        updatedAt = application.UpdatedAt,
+        notes = application.Notes,
+    });
+});
+
+// PATCH /api/v1/applications/{id} — Tier 2 only. Manual status correction — deliberately not
+// forward-only like ApplicationTracker.CanAdvanceTo: a user correcting their own application's
+// status is trusted, unlike an inferred email classification, so any valid status is allowed
+// including moving backward.
+api.MapPatch("/applications/{id}", async (HttpContext ctx, int id, AppDbContext db, UpdateApplicationStatusRequest body) =>
+{
+    var (user, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (tierError is not null) return tierError;
+
+    if (!ApplicationStatus.All.Contains(body.Status))
+        return Results.BadRequest(new { error = "Invalid status" });
+
+    var application = await db.Applications.FindAsync(id);
+    if (application is null) return Results.NotFound();
+
+    if (application.Status != body.Status)
+    {
+        var now = DateTime.UtcNow;
+        db.ApplicationEvents.Add(new ApplicationEvent
+        {
+            UserId = user!.Id,
+            ApplicationId = application.Id,
+            EventType = ApplicationEventType.ManualUpdate,
+            FromStatus = application.Status,
+            ToStatus = body.Status,
+            Summary = $"Manually updated: {application.Status} → {body.Status}",
+            OccurredAt = now,
+        });
+        application.Status = body.Status;
+        application.UpdatedAt = now;
+        await db.SaveChangesAsync();
+    }
+
+    return Results.Ok(new { id = application.Id, status = application.Status, updatedAt = application.UpdatedAt });
 });
 
 // GET /api/v1/activity — Tier 2 only: built entirely from application-tracking events.
@@ -892,7 +1001,8 @@ api.MapGet("/sources", async (HttpContext ctx, AppDbContext db) =>
     var enabled = user!.EnabledSources?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
     // Existence check only — no need to decrypt the token just to know it's there.
     var gmailConnected = await db.UserSecrets.AnyAsync(s => s.UserId == user.Id && s.Key == UserSecretKey.GmailSettingsRefreshToken);
-    return Results.Ok(new { catalog, enabled, gmailConnected });
+    var gmailReadonlyConnected = await db.UserSecrets.AnyAsync(s => s.UserId == user.Id && s.Key == UserSecretKey.GmailRefreshToken);
+    return Results.Ok(new { catalog, enabled, gmailConnected, gmailReadonlyConnected, gmailTrackingMode = user.GmailTrackingMode });
 });
 
 // PUT /api/v1/sources — body: { sources: string[] }. Unknown keys are dropped silently
@@ -906,6 +1016,23 @@ api.MapPut("/sources", async (HttpContext ctx, SourcesUpdateRequest body, AppDbC
     user!.EnabledSources = string.Join(',', sanitized);
     await db.SaveChangesAsync();
     return Results.Ok(new { enabled = sanitized });
+});
+
+// PUT /api/v1/gmail-tracking-mode — body: { mode: "full"|"filter"|"manual" }. Deliberately no
+// default is ever assumed server-side either — this only ever sets what the user explicitly
+// picked. "full" still requires the user to separately grant readonly access (see
+// /gmail-oauth/start?mode=full) — picking this mode alone doesn't request any new scope.
+api.MapPut("/gmail-tracking-mode", async (HttpContext ctx, GmailTrackingModeRequest body, AppDbContext db) =>
+{
+    var (user, error) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (error is not null) return error;
+
+    if (!GmailTrackingMode.All.Contains(body.Mode))
+        return Results.BadRequest(new { error = "Invalid mode" });
+
+    user!.GmailTrackingMode = body.Mode;
+    await db.SaveChangesAsync();
+    return Results.Ok(new { gmailTrackingMode = user.GmailTrackingMode });
 });
 
 // GET /api/v1/inbound-email — Tier 2 only. The user's opaque SendGrid forwarding address,
@@ -967,11 +1094,18 @@ api.MapGet("/gmail-forwarding-status", async (HttpContext ctx, AppDbContext db, 
     return Results.Ok(new { address, status, filterInstalled });
 });
 
-// GET /api/v1/gmail-oauth/start — Tier 2 only. Redirects to Google's consent screen for the
-// gmail.settings.basic scope. Runs while already signed in via the cookie session — not a
-// login flow, a second, narrower connection on top of it. 503 if the app's own Gmail OAuth
-// client isn't configured yet (see the GMAIL_CLIENT_ID comment above).
-api.MapGet("/gmail-oauth/start", async (HttpContext ctx, AppDbContext db) =>
+// GET /api/v1/gmail-oauth/start — Tier 2 only. Redirects to Google's consent screen. Runs
+// while already signed in via the cookie session — not a login flow, a second, narrower
+// connection on top of it. 503 if the app's own Gmail OAuth client isn't configured yet
+// (see the GMAIL_CLIENT_ID comment above).
+//
+// ?mode=full requests gmail.readonly (application-tracking full-access mode) instead of the
+// default gmail.settings.basic (filter mode, and the alert-forwarding flow that predates
+// tracking-mode choice — absent/unrecognized mode keeps that original behavior unchanged).
+// The mode travels to /gmail-oauth/callback via a second short-lived cookie, the same
+// pattern as the "state" CSRF cookie below — Google's redirect back only carries "state"
+// and "code", not any arbitrary query param we'd want to pass through ourselves.
+api.MapGet("/gmail-oauth/start", async (HttpContext ctx, AppDbContext db, string? mode) =>
 {
     var (_, error) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
     if (error is not null) return error;
@@ -980,18 +1114,23 @@ api.MapGet("/gmail-oauth/start", async (HttpContext ctx, AppDbContext db) =>
     if (gmailOAuth is null)
         return Results.Json(new { error = "Gmail connection isn't set up yet." }, statusCode: StatusCodes.Status503ServiceUnavailable);
 
+    bool full = mode == GmailTrackingMode.Full;
+    var scope = full ? GmailOAuthService.ReadonlyScope : GmailOAuthService.SettingsBasicScope;
+
     // CSRF protection: a random nonce round-tripped through a short-lived cookie, checked
     // against the "state" Google echoes back to /gmail-oauth/callback below.
     var state = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-    ctx.Response.Cookies.Append("gmail_oauth_state", state, new CookieOptions
+    var cookieOptions = new CookieOptions
     {
         HttpOnly = true,
         Secure = !isDev,
         SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.None,
         MaxAge = TimeSpan.FromMinutes(10),
-    });
+    };
+    ctx.Response.Cookies.Append("gmail_oauth_state", state, cookieOptions);
+    ctx.Response.Cookies.Append("gmail_oauth_mode", full ? GmailTrackingMode.Full : GmailTrackingMode.Filter, cookieOptions);
 
-    return Results.Redirect(gmailOAuth.BuildAuthorizationUrl(state));
+    return Results.Redirect(gmailOAuth.BuildAuthorizationUrl(state, scope));
 });
 
 // GET /api/v1/gmail-oauth/callback — Google redirects the browser here after consent (or
@@ -1010,6 +1149,10 @@ api.MapGet("/gmail-oauth/callback", async (HttpContext ctx, AppDbContext db, Use
 
     var expectedState = ctx.Request.Cookies["gmail_oauth_state"];
     ctx.Response.Cookies.Delete("gmail_oauth_state");
+    // Default "filter" preserves behavior for the original alert-forwarding flow, which
+    // never sent ?mode= at /start and so never set this cookie either.
+    bool full = ctx.Request.Cookies["gmail_oauth_mode"] == GmailTrackingMode.Full;
+    ctx.Response.Cookies.Delete("gmail_oauth_mode");
 
     var code = ctx.Request.Query["code"].FirstOrDefault();
     var state = ctx.Request.Query["state"].FirstOrDefault();
@@ -1025,7 +1168,22 @@ api.MapGet("/gmail-oauth/callback", async (HttpContext ctx, AppDbContext db, Use
     try
     {
         var refreshToken = await gmailOAuth.ExchangeCodeForRefreshTokenAsync(code);
-        await secrets.SetAsync(db, userId, UserSecretKey.GmailSettingsRefreshToken, refreshToken);
+        var key = full ? UserSecretKey.GmailRefreshToken : UserSecretKey.GmailSettingsRefreshToken;
+        await secrets.SetAsync(db, userId, key, refreshToken);
+
+        // A successful full-access grant is the mode confirmation itself for that path —
+        // filter mode is instead set explicitly via PUT /gmail-tracking-mode, since
+        // connecting Gmail for filters doesn't by itself mean the user chose that mode
+        // (e.g. it's also needed for plain alert forwarding, independent of tracking mode).
+        if (full)
+        {
+            var user = await db.Users.FindAsync(userId);
+            if (user is not null)
+            {
+                user.GmailTrackingMode = GmailTrackingMode.Full;
+                await db.SaveChangesAsync();
+            }
+        }
     }
     catch (Exception ex)
     {

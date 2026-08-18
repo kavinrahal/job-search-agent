@@ -85,8 +85,11 @@ public class GmailSettingsClient
         filters?.Any(f => f.Action?.Forward == address) == true;
 
     // Idempotent — safe to call on every status poll once verified. Returns whether it
-    // actually created a new filter (false if one forwarding to this address already existed).
-    public async Task<bool> EnsureJobAlertFilterAsync(string refreshToken, string forwardToAddress)
+    // actually created a new filter (false if one already existed). Shared by both filter
+    // kinds this app installs (the fixed job-alert filter and per-company ones) — only the
+    // query and the existence check differ between them.
+    private async Task<bool> EnsureFilterAsync(
+        string refreshToken, string query, string forwardToAddress, Func<IEnumerable<Filter>?, bool> alreadyExists)
     {
         var service = BuildService(refreshToken);
         var existing = await service.Users.Settings.Filters.List("me").ExecuteAsync();
@@ -95,15 +98,33 @@ public class GmailSettingsClient
         // ListFiltersResponse rather than one with a null/empty Filter property — confirmed
         // against a real freshly-authorized account. `existing?.Filter` (not `existing.Filter`)
         // is required here, not just on the nested property.
-        if (HasFilterForwardingTo(existing?.Filter, forwardToAddress))
+        if (alreadyExists(existing?.Filter))
             return false;
 
         var filter = new Filter
         {
-            Criteria = new FilterCriteria { Query = FilterQuery },
+            Criteria = new FilterCriteria { Query = query },
             Action = new FilterAction { Forward = forwardToAddress },
         };
         await service.Users.Settings.Filters.Create(filter, "me").ExecuteAsync();
         return true;
     }
+
+    public Task<bool> EnsureJobAlertFilterAsync(string refreshToken, string forwardToAddress) =>
+        EnsureFilterAsync(refreshToken, FilterQuery, forwardToAddress,
+            filters => HasFilterForwardingTo(filters, forwardToAddress));
+
+    // The filter-only tracking mode's mechanism: forwards mail from one company's domain,
+    // installed the moment a user logs an application with a CompanyDomain (see
+    // POST /applications). Unlike the job-alert filter there can be many of these per user
+    // (one per tracked company), so idempotency has to key on the domain too — not just the
+    // forward address, which every filter this app installs shares.
+    public static string CompanyFilterQuery(string companyDomain) => $"from:(*@{companyDomain})";
+
+    public static bool HasCompanyFilter(IEnumerable<Filter>? filters, string companyDomain, string address) =>
+        filters?.Any(f => f.Action?.Forward == address && f.Criteria?.Query == CompanyFilterQuery(companyDomain)) == true;
+
+    public Task<bool> EnsureCompanyFilterAsync(string refreshToken, string companyDomain, string forwardToAddress) =>
+        EnsureFilterAsync(refreshToken, CompanyFilterQuery(companyDomain), forwardToAddress,
+            filters => HasCompanyFilter(filters, companyDomain, forwardToAddress));
 }

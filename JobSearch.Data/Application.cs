@@ -12,6 +12,12 @@ public class Application
     public DateTime UpdatedAt { get; set; }
     public string? Notes { get; set; }
 
+    // Only set for filter-tracking-mode applications (GmailSettingsClient.EnsureCompanyFilterAsync
+    // installs a Gmail filter forwarding this domain's mail) — also used as a secondary,
+    // more reliable match key in ApplicationTracker.FindOrCreateAsync, since company-name
+    // matching alone misses realistic LLM classification variance ("Acme Corp" vs "Acme Corporation").
+    public string? CompanyDomain { get; set; }
+
     public List<ApplicationEvent> Events { get; set; } = [];
     public List<Notification> Notifications { get; set; } = [];
 }
@@ -28,4 +34,11 @@ public static class ApplicationStatus
     public const string Rejected      = "Rejected";
     public const string Ghosted       = "Ghosted";
     public const string Withdrawn     = "Withdrawn";
+
+    // Shared across the GET filter param and PATCH validation — previously duplicated inline.
+    public static readonly HashSet<string> All =
+    [
+        Applied, Acknowledged, Screening, Interviewing,
+        FinalRound, Offer, Rejected, Ghosted, Withdrawn,
+    ];
 }

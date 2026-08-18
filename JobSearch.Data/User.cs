@@ -26,6 +26,11 @@ public class User
     // Opaque local-part of this user's SendGrid inbound-forwarding address (see
     // InboundEmailService). Null until first requested — most users never need one.
     public string? InboundEmailToken { get; set; }
+
+    // How this user wants application-status tracking to work — see GmailTrackingMode.
+    // Null means not chosen yet (same convention as EnabledSources): no default is ever
+    // silently assumed, since "full" implies reading inbox content.
+    public string? GmailTrackingMode { get; set; }
 }
 
 // Bare entitlement fields — Stripe/billing wiring is a separate later ticket.
@@ -33,4 +38,14 @@ public static class UserTier
 {
     public const string Tier1 = "Tier1";
     public const string Tier2 = "Tier2";
+}
+
+// Values for User.GmailTrackingMode.
+public static class GmailTrackingMode
+{
+    public const string Full   = "full";   // gmail.readonly — reads inbox content
+    public const string Filter = "filter"; // gmail.settings.basic — per-company forwarding filters only
+    public const string Manual = "manual"; // no Gmail integration for this feature
+
+    public static readonly HashSet<string> All = [Full, Filter, Manual];
 }
