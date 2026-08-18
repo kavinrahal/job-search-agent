@@ -958,9 +958,8 @@ api.MapGet("/gmail-forwarding-status", async (HttpContext ctx, AppDbContext db, 
         }
         catch (Exception ex)
         {
-            // Don't let a filter-install failure hide an already-successful verification —
-            // the address status itself is still accurate and worth returning. Logged in
-            // full (not just the message) since this is still being diagnosed.
+            // Don't let a filter-install hiccup hide an already-successful verification —
+            // the address status itself is still accurate and worth returning regardless.
             await Console.Error.WriteLineAsync($"EnsureJobAlertFilterAsync failed for user {user.Id}: {ex}");
         }
     }
@@ -2011,11 +2010,6 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
         });
         await scopedDb.SaveChangesAsync();
 
-        // Temporary diagnostic — every inbound email's from/subject, so mismatches (like a
-        // "resend confirmation" email with a different shape than the original) are visible
-        // without a direct DB read. Remove once the auto-confirm flow is fully understood.
-        Console.WriteLine($"[diag] Inbound email for user {userId} — From: {from} | Subject: {subject}");
-
         // Gmail's own "confirm this forwarding address" email — the target address is our
         // inbound webhook, not a mailbox anyone could actually click the link from, so the
         // app completes it server-side the moment the email arrives. See
@@ -2025,37 +2019,24 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
             try
             {
                 // The verify link itself only serves an HTML confirmation page (a form with
-                // a "Confirm" submit button) — confirmed by inspecting the actual response
-                // body. A GET alone never completes anything; the confirmation only happens
-                // when that form is POSTed, same as a human clicking the button. The form's
-                // action is "" (post back to the same page), so submit to the final URL
-                // after any redirect, carrying cookies between the two calls in case Google
-                // ties the follow-up POST to a cookie set on the GET.
+                // a "Confirm" submit button) — a GET alone never completes anything; the
+                // confirmation only happens when that form is POSTed, same as a human
+                // clicking the button. The form's action is "" (post back to the same page),
+                // so submit to the final URL after any redirect, carrying cookies between the
+                // two calls in case Google ties the follow-up POST to a cookie set on the GET.
                 using var handler = new HttpClientHandler { CookieContainer = new System.Net.CookieContainer() };
                 using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
                 var getResponse = await http.GetAsync(verifyLink);
                 var confirmUrl = getResponse.RequestMessage?.RequestUri ?? new Uri(verifyLink);
                 var postResponse = await http.PostAsync(confirmUrl, new StringContent(""));
-                var postBody = await postResponse.Content.ReadAsStringAsync();
-                // Temporary diagnostic — confirming the POST actually registers with Google
-                // this time (GET-only previously left the address "pending"). Remove once
-                // verified working end-to-end.
-                Console.WriteLine(
-                    $"[diag] Gmail auto-confirm POST for user {userId} — status {postResponse.StatusCode}, " +
-                    $"body preview: " + (postBody.Length > 1500 ? postBody[..1500] : postBody));
+                Console.WriteLine(postResponse.IsSuccessStatusCode
+                    ? $"Auto-confirmed Gmail forwarding for user {userId}."
+                    : $"Gmail forwarding auto-confirm for user {userId} returned {postResponse.StatusCode}.");
             }
             catch (Exception ex)
             {
                 await Console.Error.WriteLineAsync($"Gmail forwarding auto-confirm failed for user {userId}: {ex}");
             }
-        }
-        else if (from.Contains("google.com", StringComparison.OrdinalIgnoreCase))
-        {
-            // Temporary diagnostic — a Google-sender email that didn't match the expected
-            // verify-link shape (e.g. a "resend confirmation" email formatted differently
-            // from the original). Remove once the auto-confirm flow is fully understood.
-            var preview = text.Length > 3000 ? text[..3000] : text;
-            Console.WriteLine($"[diag] Unmatched Google-sender email for user {userId} — Subject: {subject} | Body preview: {preview}");
         }
     });
 
