@@ -142,12 +142,6 @@ export async function submitSupportMessage(message: string): Promise<void> {
   await request("/support", { method: "POST", ...json({ message }) });
 }
 
-export async function parseResumeText(text: string): Promise<ParsedResume> {
-  const form = new FormData();
-  form.set("text", text);
-  return request("/onboarding/parse-resume", { method: "POST", body: form });
-}
-
 export async function parseResumePdf(file: File): Promise<ParsedResume> {
   const form = new FormData();
   form.set("file", file);
