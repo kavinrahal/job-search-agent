@@ -2014,18 +2014,25 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
         {
             try
             {
-                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-                var response = await http.GetAsync(verifyLink);
-                var body = await response.Content.ReadAsStringAsync();
-                // Temporary diagnostic — the fetch itself returns 200 but Google's
-                // ForwardingAddresses status still comes back "pending" afterward, so
-                // something about this GET isn't actually registering the confirmation
-                // server-side. Logging the final URL (after any redirects) and a body
-                // preview to see what Google is actually serving. Remove once understood.
+                // The verify link itself only serves an HTML confirmation page (a form with
+                // a "Confirm" submit button) — confirmed by inspecting the actual response
+                // body. A GET alone never completes anything; the confirmation only happens
+                // when that form is POSTed, same as a human clicking the button. The form's
+                // action is "" (post back to the same page), so submit to the final URL
+                // after any redirect, carrying cookies between the two calls in case Google
+                // ties the follow-up POST to a cookie set on the GET.
+                using var handler = new HttpClientHandler { CookieContainer = new System.Net.CookieContainer() };
+                using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+                var getResponse = await http.GetAsync(verifyLink);
+                var confirmUrl = getResponse.RequestMessage?.RequestUri ?? new Uri(verifyLink);
+                var postResponse = await http.PostAsync(confirmUrl, new StringContent(""));
+                var postBody = await postResponse.Content.ReadAsStringAsync();
+                // Temporary diagnostic — confirming the POST actually registers with Google
+                // this time (GET-only previously left the address "pending"). Remove once
+                // verified working end-to-end.
                 Console.WriteLine(
-                    $"[diag] Gmail auto-confirm GET for user {userId} — status {response.StatusCode}, " +
-                    $"final URL {response.RequestMessage?.RequestUri}, body preview: " +
-                    (body.Length > 3000 ? body[..3000] : body));
+                    $"[diag] Gmail auto-confirm POST for user {userId} — status {postResponse.StatusCode}, " +
+                    $"body preview: " + (postBody.Length > 1500 ? postBody[..1500] : postBody));
             }
             catch (Exception ex)
             {
