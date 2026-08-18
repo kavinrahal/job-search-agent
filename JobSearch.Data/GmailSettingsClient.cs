@@ -88,17 +88,26 @@ public class GmailSettingsClient
     // actually created a new filter (false if one forwarding to this address already existed).
     public async Task<bool> EnsureJobAlertFilterAsync(string refreshToken, string forwardToAddress)
     {
+        // Temporary bracketed diagnostic logging — a NullReferenceException is being thrown
+        // somewhere in this method against a real Gmail account, but a local repro against a
+        // fake client reaches the same call site and throws the expected auth error instead,
+        // so the failure is specific to a real response. Remove once the exact statement is
+        // identified and fixed.
         var service = BuildService(refreshToken);
+        Console.WriteLine("[diag] EnsureJobAlertFilterAsync: service built, calling Filters.List");
         var existing = await service.Users.Settings.Filters.List("me").ExecuteAsync();
+        Console.WriteLine($"[diag] EnsureJobAlertFilterAsync: Filters.List returned, Filter count = {existing.Filter?.Count.ToString() ?? "null"}");
         if (HasFilterForwardingTo(existing.Filter, forwardToAddress))
             return false;
 
+        Console.WriteLine("[diag] EnsureJobAlertFilterAsync: no existing filter, calling Filters.Create");
         var filter = new Filter
         {
             Criteria = new FilterCriteria { Query = FilterQuery },
             Action = new FilterAction { Forward = forwardToAddress },
         };
         await service.Users.Settings.Filters.Create(filter, "me").ExecuteAsync();
+        Console.WriteLine("[diag] EnsureJobAlertFilterAsync: Filters.Create returned");
         return true;
     }
 }
