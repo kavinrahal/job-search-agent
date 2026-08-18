@@ -1,0 +1,79 @@
+using JobSearch.Data;
+
+namespace JobSearch.Api.Tests;
+
+public class GmailForwardingConfirmationTests
+{
+    private const string RealSender = "Gmail Team <forwarding-noreply@google.com>";
+    private const string VerifyLink = "https://mail-settings.google.com/mail/vf-AbC123_xyz-9";
+
+    // TC01 — The actual shape of a real Gmail confirmation email: matching sender, verify
+    // link present somewhere in a longer plain-text body.
+    [Fact]
+    public void TryExtractVerificationLink_RealConfirmationEmail_ExtractsLink()
+    {
+        var body = $"""
+            Hi,
+
+            You recently added abc123@alerts.worksanta.com as a forwarding address.
+
+            To confirm this is correct, click here: {VerifyLink}
+
+            If you didn't request this, ignore this email.
+            """;
+
+        var found = GmailForwardingConfirmation.TryExtractVerificationLink(RealSender, body, out var link);
+
+        Assert.True(found);
+        Assert.Equal(VerifyLink, link);
+    }
+
+    // TC02 — Silent failure this guards against: matching the cancel link ("uf-") instead
+    // of the verify link ("vf-") would undo the very thing this is supposed to confirm.
+    [Fact]
+    public void TryExtractVerificationLink_OnlyCancelLinkPresent_ReturnsFalse()
+    {
+        var body = "To stop this forwarding, click here: https://mail-settings.google.com/mail/uf-AbC123_xyz-9";
+
+        var found = GmailForwardingConfirmation.TryExtractVerificationLink(RealSender, body, out _);
+
+        Assert.False(found);
+    }
+
+    // TC03 — A spoofed From header claiming to be Google doesn't extract anything on its
+    // own — the sender string here isn't Google's actual address, just similar-looking text.
+    [Fact]
+    public void TryExtractVerificationLink_SpoofedSender_ReturnsFalse()
+    {
+        var spoofedFrom = "Gmail Team <attacker@evil.example.com>";
+
+        var found = GmailForwardingConfirmation.TryExtractVerificationLink(spoofedFrom, $"Click here: {VerifyLink}", out _);
+
+        Assert.False(found);
+    }
+
+    // TC04 — Correct sender but a link on a different host doesn't match, even if it
+    // superficially resembles the real one (e.g. a lookalike domain).
+    [Fact]
+    public void TryExtractVerificationLink_LinkOnWrongHost_ReturnsFalse()
+    {
+        var body = "Click here: https://mail-settings.google.com.evil.example.com/mail/vf-AbC123";
+
+        var found = GmailForwardingConfirmation.TryExtractVerificationLink(RealSender, body, out _);
+
+        Assert.False(found);
+    }
+
+    // TC05 — An ordinary forwarded job-alert email (the overwhelmingly common case) never
+    // matches, regardless of what URLs happen to be in it.
+    [Fact]
+    public void TryExtractVerificationLink_UnrelatedEmail_ReturnsFalse()
+    {
+        var found = GmailForwardingConfirmation.TryExtractVerificationLink(
+            "LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>",
+            "New job: https://www.linkedin.com/jobs/view/12345",
+            out _);
+
+        Assert.False(found);
+    }
+}

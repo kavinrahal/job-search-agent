@@ -2000,6 +2000,26 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
             ReceivedAt = DateTime.UtcNow,
         });
         await scopedDb.SaveChangesAsync();
+
+        // Gmail's own "confirm this forwarding address" email — the target address is our
+        // inbound webhook, not a mailbox anyone could actually click the link from, so the
+        // app completes it server-side the moment the email arrives. See
+        // GmailForwardingConfirmation's comment for why this is safe against a spoofed From.
+        if (GmailForwardingConfirmation.TryExtractVerificationLink(from, text, out var verifyLink))
+        {
+            try
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+                var response = await http.GetAsync(verifyLink);
+                Console.WriteLine(response.IsSuccessStatusCode
+                    ? $"Auto-confirmed Gmail forwarding for user {userId}."
+                    : $"Gmail forwarding auto-confirm for user {userId} returned {response.StatusCode}.");
+            }
+            catch (Exception ex)
+            {
+                await Console.Error.WriteLineAsync($"Gmail forwarding auto-confirm failed for user {userId}: {ex}");
+            }
+        }
     });
 
     return Results.Ok();
