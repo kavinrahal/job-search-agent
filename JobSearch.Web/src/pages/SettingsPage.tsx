@@ -19,7 +19,6 @@ export function SettingsPage() {
   // with each other rather than one landing ahead of the other).
   const [newResumeFile, setNewResumeFile] = useState<File | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteResult, setInviteResult] = useState<{ email: string; emailSent: boolean } | null>(null);
 
@@ -48,13 +47,16 @@ export function SettingsPage() {
     const result = await parsePdf.execute(file);
     setCvBase(result.cvBase);
     setNewResumeFile(file);
-    setSaved(false);
   }
 
+  // Full reload rather than re-setting local state — editing the Advanced (raw YAML) box
+  // on either editor only updates the `extra` bucket locally, it doesn't re-derive the
+  // structured fields from whatever was just saved. A reload re-fetches and re-parses the
+  // real saved value, so the page always shows exactly what was persisted.
   async function handleSave() {
     if (!background || !jobCriteria) return;
     const backgroundYaml = background.ok ? serializeBackgroundYaml(background.data) : background.rawText;
-    const [updated] = await Promise.all([
+    await Promise.all([
       save.execute({
         background: backgroundYaml,
         cvBase,
@@ -62,9 +64,7 @@ export function SettingsPage() {
       }),
       newResumeFile ? uploadPdf.execute(newResumeFile) : Promise.resolve(),
     ]);
-    if (newResumeFile) setHasResumePdf(true);
-    setUpdatedAt(updated.updatedAt);
-    setSaved(true);
+    window.location.reload();
   }
 
   async function handleCancelAccount() {
@@ -110,7 +110,7 @@ export function SettingsPage() {
 
       <div>
         <h3 className="mb-2 text-sm font-medium text-gray-700">Background</h3>
-        <BackgroundEditor value={background} onChange={v => { setBackground(v); setSaved(false); }} />
+        <BackgroundEditor value={background} onChange={setBackground} />
       </div>
 
       <div>
@@ -142,7 +142,7 @@ export function SettingsPage() {
 
       <div>
         <h3 className="mb-2 text-sm font-medium text-gray-700">Job criteria</h3>
-        <JobCriteriaEditor value={jobCriteria} onChange={v => { setJobCriteria(v); setSaved(false); }} />
+        <JobCriteriaEditor value={jobCriteria} onChange={setJobCriteria} />
       </div>
 
       <div className="flex items-center gap-3">
@@ -153,7 +153,6 @@ export function SettingsPage() {
         >
           {save.loading ? "Saving…" : "Save changes"}
         </button>
-        {saved && <span className="text-sm text-emerald-600">Saved.</span>}
       </div>
 
       {(save.error ?? parsePdf.error ?? uploadPdf.error) && (

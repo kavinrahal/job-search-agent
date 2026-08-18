@@ -41,12 +41,18 @@ export function ResumeIntakePage() {
 
       {!background && (
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={e => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-gray-600"
-          />
+          <div className="flex items-center gap-3">
+            <label className="inline-block cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
+              Choose file
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={e => setFile(e.target.files?.[0] ?? null)}
+                className="hidden"
+              />
+            </label>
+            {file && <span className="text-sm text-gray-600">{file.name}</span>}
+          </div>
 
           <button
             onClick={handleParse}
