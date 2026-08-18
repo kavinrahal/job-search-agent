@@ -224,7 +224,11 @@ export function parseJobCriteriaYaml(text: string): JobCriteriaData {
   try {
     raw = (loadYaml(text) ?? {}) as Record<string, unknown>;
   } catch {
-    return { ...DEFAULTS, extra: {} };
+    // Text that doesn't even parse as YAML (a hand-authored file with a syntax slip, say) —
+    // keep it verbatim in extra rather than silently discarding it, so a save still shows
+    // it via the Advanced (raw YAML) section instead of quietly overwriting it with blank
+    // defaults the moment the form is saved.
+    return { ...DEFAULTS, extra: { _unparsed_yaml: text } };
   }
 
   const extra: Record<string, unknown> = { ...raw };
