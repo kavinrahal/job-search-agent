@@ -949,10 +949,20 @@ api.MapGet("/gmail-forwarding-status", async (HttpContext ctx, AppDbContext db, 
     bool filterInstalled = false;
     if (status == GmailForwardingStatus.Verified)
     {
-        // Return value is whether a *new* filter was just created — either way (already
-        // existed or just created), the filter now exists.
-        await gmailSettings.EnsureJobAlertFilterAsync(refreshToken, address);
-        filterInstalled = true;
+        try
+        {
+            // Return value is whether a *new* filter was just created — either way (already
+            // existed or just created), the filter now exists.
+            await gmailSettings.EnsureJobAlertFilterAsync(refreshToken, address);
+            filterInstalled = true;
+        }
+        catch (Exception ex)
+        {
+            // Don't let a filter-install failure hide an already-successful verification —
+            // the address status itself is still accurate and worth returning. Logged in
+            // full (not just the message) since this is still being diagnosed.
+            await Console.Error.WriteLineAsync($"EnsureJobAlertFilterAsync failed for user {user.Id}: {ex}");
+        }
     }
 
     return Results.Ok(new { address, status, filterInstalled });
