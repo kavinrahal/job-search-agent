@@ -891,7 +891,7 @@ api.MapGet("/sources", async (HttpContext ctx, AppDbContext db) =>
     var catalog = JobSource.Catalog.Select(c => new { key = c.Key, label = c.Label, automatic = c.Automatic });
     var enabled = user!.EnabledSources?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
     // Existence check only — no need to decrypt the token just to know it's there.
-    var gmailConnected = await db.UserSecrets.AnyAsync(s => s.UserId == user.Id && s.Key == UserSecretKey.GmailRefreshToken);
+    var gmailConnected = await db.UserSecrets.AnyAsync(s => s.UserId == user.Id && s.Key == UserSecretKey.GmailSettingsRefreshToken);
     return Results.Ok(new { catalog, enabled, gmailConnected });
 });
 
@@ -939,7 +939,7 @@ api.MapGet("/gmail-forwarding-status", async (HttpContext ctx, AppDbContext db, 
     if (gmailSettings is null || sendGridInboundDomain is null)
         return Results.Json(new { error = "Gmail forwarding isn't set up yet." }, statusCode: StatusCodes.Status503ServiceUnavailable);
 
-    var refreshToken = await secrets.GetAsync(db, user!.Id, UserSecretKey.GmailRefreshToken);
+    var refreshToken = await secrets.GetAsync(db, user!.Id, UserSecretKey.GmailSettingsRefreshToken);
     if (refreshToken is null)
         return Results.BadRequest(new { error = "Connect Gmail first." });
 
@@ -1025,7 +1025,7 @@ api.MapGet("/gmail-oauth/callback", async (HttpContext ctx, AppDbContext db, Use
     try
     {
         var refreshToken = await gmailOAuth.ExchangeCodeForRefreshTokenAsync(code);
-        await secrets.SetAsync(db, userId, UserSecretKey.GmailRefreshToken, refreshToken);
+        await secrets.SetAsync(db, userId, UserSecretKey.GmailSettingsRefreshToken, refreshToken);
     }
     catch (Exception ex)
     {
