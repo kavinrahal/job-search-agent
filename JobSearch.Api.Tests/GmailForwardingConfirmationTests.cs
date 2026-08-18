@@ -76,4 +76,35 @@ public class GmailForwardingConfirmationTests
 
         Assert.False(found);
     }
+
+    // TC06 — Regression test for the actual bug this shipped with: a real Gmail
+    // confirmation email's token contains percent-encoded brackets ("%5B"/"%5D"), which an
+    // alphanumeric-only character class doesn't match at all, so the very first "%" right
+    // after "vf-" made the whole pattern fail silently. Body below is the real structure
+    // captured from a live confirmation email (token shortened, not the actual value).
+    [Fact]
+    public void TryExtractVerificationLink_RealBodyWithPercentEncodedToken_ExtractsFullLink()
+    {
+        const string realLink =
+            "https://mail-settings.google.com/mail/vf-%5BANGjdJ-7qe9-EB0iP-VcIGZFKzwUrB7DCIY2DQAhJ%5D-oqWoRDa0qM8RBcmgZ9u8YDg3-5U";
+        var body = $"""
+            kavinrahal@gmail.com has requested to automatically forward mail to your email
+            address abc123@alerts.worksanta.com.
+
+            If you do not approve of this request, no further action is required.
+
+            To allow kavinrahal@gmail.com to automatically forward mail to your address,
+            please click the link below to confirm the request:
+
+            {realLink}
+
+            If you click the link and it appears to be broken, please copy and paste it
+            into a new browser window.
+            """;
+
+        var found = GmailForwardingConfirmation.TryExtractVerificationLink(RealSender, body, out var link);
+
+        Assert.True(found);
+        Assert.Equal(realLink, link);
+    }
 }

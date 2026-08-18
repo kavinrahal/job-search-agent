@@ -2020,15 +2020,6 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
                 await Console.Error.WriteLineAsync($"Gmail forwarding auto-confirm failed for user {userId}: {ex}");
             }
         }
-        // Temporary diagnostic — didn't match the expected sender/link shape. Logs metadata
-        // and a short body preview (not the full body) so the actual format of a real Gmail
-        // confirmation email can be seen without a direct database read. Remove once
-        // GmailForwardingConfirmation's pattern is confirmed against a real one.
-        else if (from.Contains("google.com", StringComparison.OrdinalIgnoreCase))
-        {
-            var preview = text.Length > 4000 ? text[..4000] : text;
-            Console.WriteLine($"[diag] Unmatched Google-sender email — From: {from} | Subject: {subject} | Body preview: {preview}");
-        }
     });
 
     return Results.Ok();
