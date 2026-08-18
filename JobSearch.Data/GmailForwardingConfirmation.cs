@@ -14,9 +14,11 @@ public static class GmailForwardingConfirmation
 
     // "vf-" (verify) specifically, not "uf-" (the cancel-forwarding link Gmail sends in the
     // same family of emails) — matching that instead would silently undo the very thing
-    // this is supposed to confirm. Host is hardcoded to Gmail's actual confirmation domain,
-    // not a generic "anything on google.com" pattern, so a spoofed From header alone still
-    // can't point this at an attacker-chosen URL.
+    // this is supposed to confirm. Host is hardcoded to Gmail's two actual confirmation
+    // domains — confirmed against real emails that the initial add and a "resend
+    // confirmation" use different hosts (mail-settings.google.com vs mail.google.com) for
+    // the same kind of link — not a generic "anything on google.com" pattern, so a spoofed
+    // From header alone still can't point this at an attacker-chosen URL.
     //
     // The token itself is percent-encoded (a real one contains literal "%5B"/"%5D" — encoded
     // square brackets) — confirmed against an actual Gmail confirmation email, not guessed —
@@ -25,7 +27,7 @@ public static class GmailForwardingConfirmation
     // embedded in plain-text or HTML mail never legitimately contains, rather than trying to
     // enumerate every character Google's token format might use.
     private static readonly Regex VerifyLinkPattern = new(
-        @"https://mail-settings\.google\.com/mail/vf-[^\s""'<>]+",
+        @"https://(?:mail-settings|mail)\.google\.com/mail/vf-[^\s""'<>]+",
         RegexOptions.Compiled);
 
     public static bool TryExtractVerificationLink(string from, string bodyText, out string link)

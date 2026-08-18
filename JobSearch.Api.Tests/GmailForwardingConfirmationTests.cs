@@ -107,4 +107,21 @@ public class GmailForwardingConfirmationTests
         Assert.True(found);
         Assert.Equal(realLink, link);
     }
+
+    // TC07 — Regression test for a second real-world bug: a "resend confirmation" email
+    // uses a different (but equally real) Gmail host for the same kind of link —
+    // mail.google.com instead of mail-settings.google.com — confirmed against a live resend
+    // (token shape below is synthetic, not the actual captured value).
+    [Fact]
+    public void TryExtractVerificationLink_ResendHostVariant_ExtractsLink()
+    {
+        const string resendLink =
+            "https://mail.google.com/mail/vf-%5BANGjdJ_exampleTokenShapeOnly_NotARealToken%5D-abc123";
+        var body = $"user@example.com has requested to automatically forward mail. Click here: {resendLink}";
+
+        var found = GmailForwardingConfirmation.TryExtractVerificationLink(RealSender, body, out var link);
+
+        Assert.True(found);
+        Assert.Equal(resendLink, link);
+    }
 }
