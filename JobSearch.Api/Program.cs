@@ -485,88 +485,29 @@ api.MapGet("/discoveries", async (HttpContext ctx, AppDbContext db, string? reco
     return Results.Ok(new { items, total, page, pageSize });
 });
 
-// GET /api/v1/summary
-api.MapGet("/summary", (AppDbContext db) =>
+// GET /api/v1/summary — Tier 2 only: application-tracking KPIs. Deliberately excludes any
+// email-content-derived counts (total/classified/job-related/by-category) — those were a
+// window into inbox content, at odds with users who pick filter-only or manual Gmail
+// tracking (see GmailTrackingMode). Applications data is the user's own tracked-application
+// records, not inbox content, so it's fine to summarize.
+api.MapGet("/summary", async (HttpContext ctx, AppDbContext db) =>
 {
-    var categories = db.Classifications
-        .GroupBy(c => c.Category)
-        .Select(g => new { Category = g.Key, Count = g.Count() })
-        .ToList();
+    var (_, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (tierError is not null) return tierError;
 
-    var appsByStatus = db.Applications
+    var appsByStatus = await db.Applications
         .GroupBy(a => a.Status)
         .Select(g => new { Status = g.Key, Count = g.Count() })
-        .ToList();
+        .ToListAsync();
 
     return Results.Ok(new
     {
-        total = db.RawEmails.Count(),
-        classified = db.Classifications.Count(),
-        jobRelated = db.Classifications.Count(c => c.IsJobRelated),
-        byCategory = categories.ToDictionary(x => x.Category, x => x.Count),
         applications = new
         {
-            total = db.Applications.Count(),
+            total = await db.Applications.CountAsync(),
             byStatus = appsByStatus.ToDictionary(x => x.Status, x => x.Count),
         },
     });
-});
-
-// GET /api/v1/emails
-api.MapGet("/emails", (
-    AppDbContext db,
-    int page = 1,
-    int pageSize = 25,
-    string? category = null,
-    bool? jobRelatedOnly = null,
-    string? from = null,
-    string? to = null) =>
-{
-    var validCategories = new HashSet<string>
-        { "application_confirmation", "rejection", "interview_invitation", "recruiter_outreach",
-          "scheduling_request", "offer", "follow_up_needed", "job_alert", "not_relevant" };
-    if (category is not null && !validCategories.Contains(category))
-        return Results.BadRequest(new { error = "Invalid category" });
-
-    var query =
-        from e in db.RawEmails
-        join c in db.Classifications on e.MessageId equals c.MessageId into cls
-        from c in cls.DefaultIfEmpty()
-        select new { Email = e, Classification = c };
-
-    if (from is not null && DateTime.TryParse(from, CultureInfo.InvariantCulture, out var fromDate))
-        query = query.Where(x => x.Email.ReceivedAt >= DateTime.SpecifyKind(fromDate, DateTimeKind.Utc));
-
-    if (to is not null && DateTime.TryParse(to, CultureInfo.InvariantCulture, out var toDate))
-        query = query.Where(x => x.Email.ReceivedAt <= DateTime.SpecifyKind(toDate, DateTimeKind.Utc));
-
-    if (category is not null)
-        query = query.Where(x => x.Classification != null && x.Classification.Category == category);
-
-    if (jobRelatedOnly == true)
-        query = query.Where(x => x.Classification != null && x.Classification.IsJobRelated);
-
-    int total = query.Count();
-
-    var items = query
-        .OrderByDescending(x => x.Email.ReceivedAt)
-        .Skip((page - 1) * pageSize)
-        .Take(pageSize)
-        .Select(x => new
-        {
-            messageId = x.Email.MessageId,
-            from = x.Email.FromAddress,
-            subject = x.Email.Subject,
-            receivedAt = x.Email.ReceivedAt,
-            isJobRelated = x.Classification != null && x.Classification.IsJobRelated,
-            category = x.Classification != null ? x.Classification.Category : (string?)null,
-            company = x.Classification != null ? x.Classification.Company : null,
-            roleTitle = x.Classification != null ? x.Classification.RoleTitle : null,
-            confidence = x.Classification != null ? x.Classification.Confidence : (double?)null,
-        })
-        .ToList();
-
-    return Results.Ok(new { items, total, page, pageSize });
 });
 
 // GET /api/v1/applications — Tier 2 only: application tracking is a Tier 2-exclusive feature.

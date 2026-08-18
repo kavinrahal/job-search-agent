@@ -2,8 +2,6 @@ import { useState } from "react";
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from "react-router-dom";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
-import { ActivityPage } from "./pages/ActivityPage";
-import { HealthPage } from "./pages/HealthPage";
 import { DiscoveriesPage } from "./pages/DiscoveriesPage";
 import { ResumeIntakePage } from "./pages/ResumeIntakePage";
 import { JobCriteriaPage } from "./pages/JobCriteriaPage";
@@ -14,20 +12,20 @@ import { SupportPage } from "./pages/SupportPage";
 import { SourcesPage } from "./pages/SourcesPage";
 import { useMe, useLogout } from "./hooks/useAuth";
 
-// Discover/Applications/Activity are Tier 2-exclusive (discovery and application tracking
-// both are — see the backend's matching RequireTier2Async gate on those three endpoints).
+// Discover/Applications/Sources are Tier 2-exclusive (see the backend's matching
+// RequireTier2Async gate on those endpoints). Activity and Health used to be separate
+// nav items too — both are now sections on the Tier 2 dashboard instead, not standalone
+// pages, so there's nothing left to link to here.
 const NAV_LINKS = [
   { to: "/",             label: "Dashboard"    },
   { to: "/generate",     label: "Generate"     },
   { to: "/discover",     label: "Discover",     tier2Only: true },
   { to: "/applications", label: "Applications", tier2Only: true },
-  { to: "/activity",     label: "Activity",     tier2Only: true },
   { to: "/sources",      label: "Sources",      tier2Only: true },
   { to: "/profile",      label: "Profile"      },
   { to: "/criteria",     label: "Criteria"     },
   { to: "/settings",     label: "Settings"     },
   { to: "/support",      label: "Support"      },
-  { to: "/health",       label: "Health"       },
 ];
 
 // Routes a brand new user (blank Background, per /auth/me's needsOnboarding flag) can visit
@@ -158,13 +156,11 @@ export default function App() {
             <Route path="/generate"     element={<GeneratePage />} />
             <Route path="/discover"     element={<DiscoveriesPage />} />
             <Route path="/applications" element={<ApplicationsPage />} />
-            <Route path="/activity"     element={<ActivityPage />} />
             <Route path="/sources"      element={<SourcesPage />} />
             <Route path="/profile"      element={<ResumeIntakePage />} />
             <Route path="/criteria"     element={<JobCriteriaPage />} />
             <Route path="/settings"     element={<SettingsPage />} />
             <Route path="/support"      element={<SupportPage />} />
-            <Route path="/health"       element={<HealthPage />} />
           </Routes>
         </main>
       </div>

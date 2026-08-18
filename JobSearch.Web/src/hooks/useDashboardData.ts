@@ -1,6 +1,5 @@
 import {
   fetchSummary,
-  fetchEmails,
   fetchApplications,
   fetchApplicationEvents,
   createApplication,
@@ -8,19 +7,11 @@ import {
   fetchActivity,
   fetchHealth,
   fetchDiscoveries,
-  type EmailsParams,
 } from "../api";
 import { useAsyncData, useAsyncAction } from "./useAsync";
 
 export function useSummary() {
   return useAsyncData(fetchSummary, []);
-}
-
-export function useEmails(params: EmailsParams) {
-  return useAsyncData(
-    () => fetchEmails(params),
-    [params.page, params.pageSize, params.category, params.jobRelatedOnly, params.from, params.to],
-  );
 }
 
 export function useApplications(params: { status?: string; page?: number; pageSize?: number }) {

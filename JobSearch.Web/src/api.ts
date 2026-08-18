@@ -1,6 +1,5 @@
 import type {
   Summary,
-  EmailsResponse,
   Application,
   ApplicationsResponse,
   ApplicationWithEvents,
@@ -52,19 +51,6 @@ export async function fetchSummary(): Promise<Summary> {
   return request("/summary");
 }
 
-export interface EmailsParams {
-  page?: number;
-  pageSize?: number;
-  category?: string;
-  jobRelatedOnly?: boolean;
-  from?: string;
-  to?: string;
-}
-
-export async function fetchEmails(params: EmailsParams = {}): Promise<EmailsResponse> {
-  return request(`/emails${qs(params)}`);
-}
-
 export async function fetchApplications(params: {
   status?: string;
   page?: number;
@@ -114,6 +100,7 @@ export async function fetchDiscoveries(params: {
 export async function fetchMe(): Promise<{
   email: string;
   tier: string;
+  creditBalance: number;
   needsOnboarding: boolean;
   needsSourceSelection: boolean;
   isOwner: boolean;
