@@ -29,7 +29,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const errBody = await res.json().catch(() => null);
     throw new Error(errBody?.error ?? `${res.status} ${res.statusText}`);
   }
-  return res.status === 204 ? (undefined as T) : res.json();
+  // Some endpoints reply 200 with an empty body (Results.Ok() with no value) rather than 204
+  // — checking status alone isn't enough, so parse whatever text actually came back instead.
+  const text = await res.text();
+  return text ? JSON.parse(text) : (undefined as T);
 }
 
 function json(body: object): RequestInit {
