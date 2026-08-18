@@ -229,6 +229,11 @@ if (adzunaAppId is not null && adzunaAppKey is not null)
     builder.Services.AddSingleton(new AdzunaFetcher(adzunaAppId, adzunaAppKey));
 if (gmailClientId is not null && gmailClientSecret is not null && gmailOAuthRedirectUri is not null)
     builder.Services.AddSingleton(new GmailOAuthService(gmailClientId, gmailClientSecret, gmailOAuthRedirectUri));
+// Same Gmail OAuth client as above, no redirect URI needed here — this only ever calls the
+// Settings API (filters, forwarding addresses) with an already-stored refresh token, not a
+// fresh consent round-trip.
+if (gmailClientId is not null && gmailClientSecret is not null)
+    builder.Services.AddSingleton(new GmailSettingsClient(gmailClientId, gmailClientSecret));
 if (sendGridApiKey is not null && sendGridFromEmail is not null)
     builder.Services.AddSingleton(new SendGridEmailService(sendGridApiKey, sendGridFromEmail));
 builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
@@ -915,6 +920,42 @@ api.MapGet("/inbound-email", async (HttpContext ctx, AppDbContext db) =>
 
     var address = await InboundEmailService.GetOrCreateAddressAsync(db, user!.Id, sendGridInboundDomain);
     return Results.Ok(new { address });
+});
+
+// GET /api/v1/gmail-forwarding-status — Tier 2 only, Gmail must already be connected.
+// Gmail's forwardingAddresses.create is restricted to domain-wide-delegated service
+// accounts and doesn't work for a personal account (confirmed against Google's own docs),
+// so the user has to add and confirm the forwarding address themselves in Gmail's own
+// settings — this endpoint's job is to read that status back, and once it's verified,
+// install the actual filter (GmailSettingsClient.EnsureJobAlertFilterAsync is idempotent,
+// safe to call on every poll). 400 if Gmail isn't connected yet, 503 if the app's Gmail
+// client isn't configured or the inbound domain isn't set up.
+api.MapGet("/gmail-forwarding-status", async (HttpContext ctx, AppDbContext db, UserSecretService secrets) =>
+{
+    var (user, error) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    if (error is not null) return error;
+
+    var gmailSettings = ctx.RequestServices.GetService<GmailSettingsClient>();
+    if (gmailSettings is null || sendGridInboundDomain is null)
+        return Results.Json(new { error = "Gmail forwarding isn't set up yet." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+
+    var refreshToken = await secrets.GetAsync(db, user!.Id, UserSecretKey.GmailRefreshToken);
+    if (refreshToken is null)
+        return Results.BadRequest(new { error = "Connect Gmail first." });
+
+    var address = await InboundEmailService.GetOrCreateAddressAsync(db, user.Id, sendGridInboundDomain);
+    var status = await gmailSettings.GetForwardingStatusAsync(refreshToken, address);
+
+    bool filterInstalled = false;
+    if (status == GmailForwardingStatus.Verified)
+    {
+        // Return value is whether a *new* filter was just created — either way (already
+        // existed or just created), the filter now exists.
+        await gmailSettings.EnsureJobAlertFilterAsync(refreshToken, address);
+        filterInstalled = true;
+    }
+
+    return Results.Ok(new { address, status, filterInstalled });
 });
 
 // GET /api/v1/gmail-oauth/start — Tier 2 only. Redirects to Google's consent screen for the

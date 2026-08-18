@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { useSources, useUpdateSources } from "../hooks/useSources";
+import { useSources, useUpdateSources, useGmailForwardingStatus } from "../hooks/useSources";
 import { gmailOAuthStartUrl } from "../api";
 
 const LABEL = "mb-2 block text-sm font-medium text-gray-700";
@@ -16,6 +16,68 @@ function SourceToggle({ label, active, onClick }: { label: string; active: boole
     >
       {label}
     </button>
+  );
+}
+
+// Only ever rendered once Gmail is connected — see useGmailForwardingStatus. Gmail won't
+// let a third-party app add a NEW forwarding address for a personal account (a Google
+// restriction, not a gap here), so this is a status check + auto-install, not a one-click
+// setup — the one manual step happens in Gmail's own settings.
+function GmailForwardingSetup() {
+  const { data: status, loading, error, reload } = useGmailForwardingStatus();
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    if (!status) return;
+    await navigator.clipboard.writeText(status.address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (status?.status === "verified") {
+    return (
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+        <p className="text-sm font-medium text-emerald-700">
+          ✓ Forwarding confirmed — the job-alert filter is installed automatically.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <label className={LABEL}>Set up alert forwarding</label>
+      <p className="mb-3 text-sm text-gray-500">
+        Gmail requires you to add this yourself — in Gmail, go to Settings → Forwarding and
+        POP/IMAP → Add a forwarding address, paste the address below, then confirm it via
+        the email Gmail sends you. Once confirmed, the app automatically installs a filter
+        that forwards matching job alerts here — no manual filter setup needed.
+      </p>
+      {status && (
+        <div className="mb-3 flex items-center gap-2">
+          <code className="rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700">{status.address}</code>
+          <button
+            onClick={handleCopy}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50"
+          >
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
+      )}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={reload}
+          disabled={loading}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+        >
+          {loading ? "Checking…" : "Check status"}
+        </button>
+        <span className="text-sm text-gray-500">
+          {status?.status === "pending" ? "Waiting for you to confirm in Gmail" : status?.status === "not_added" ? "Not added yet" : ""}
+        </span>
+      </div>
+      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+    </div>
   );
 }
 
@@ -93,11 +155,7 @@ export function SourcesPage() {
         </div>
       </div>
 
-      {needsGmail && data?.gmailConnected && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
-          <p className="text-sm font-medium text-emerald-700">Gmail connected ✓</p>
-        </div>
-      )}
+      {needsGmail && data?.gmailConnected && <GmailForwardingSetup />}
 
       {needsGmail && !data?.gmailConnected && (
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

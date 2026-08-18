@@ -132,6 +132,19 @@ export function gmailOAuthStartUrl(): string {
   return `${BASE}/gmail-oauth/start`;
 }
 
+export interface GmailForwardingStatusResponse {
+  address: string;
+  status: "not_added" | "pending" | "verified";
+  filterInstalled: boolean;
+}
+
+// Reads the user's own forwarding-address status back from Gmail and, once verified,
+// installs the job-alert filter — see the matching backend endpoint's comment for why
+// this can't just create the forwarding address itself (a Google API restriction).
+export async function fetchGmailForwardingStatus(): Promise<GmailForwardingStatusResponse> {
+  return request("/gmail-forwarding-status");
+}
+
 // Owner only. Adds the email to the beta invite list and emails them if SendGrid Mail Send
 // is configured — see the matching backend endpoint's comment.
 export async function inviteToTier2(email: string): Promise<{ email: string; emailSent: boolean }> {
