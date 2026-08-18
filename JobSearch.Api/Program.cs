@@ -50,6 +50,15 @@ builder.Services.AddSingleton<UserSecretService>();
 var ownerEmail = builder.Configuration["ALLOWED_EMAIL"] ?? "kavinrahal@gmail.com";
 const string UserIdClaimType = "jobfindr:uid";
 
+// Beta access gate — required, not optional-with-fallback, unlike the external-service
+// configs elsewhere in this file: this is a security control and should fail closed (API
+// won't start without it) rather than fail open (silently let anyone sign up if unset).
+var betaAllowlist = (builder.Configuration["BETA_ALLOWLIST_EMAILS"]
+        ?? throw new InvalidOperationException("BETA_ALLOWLIST_EMAILS not set"))
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Select(e => e.ToLowerInvariant())
+    .ToHashSet();
+
 // Where to send the browser after the OAuth round-trip completes — the frontend's own URL,
 // now that it's a separate deployment from the API and there's nothing to redirect to at
 // the API's own root anymore. Only required outside dev, where the SPA runs on Vite's own
@@ -114,6 +123,15 @@ builder.Services.AddAuthentication(o =>
         }
 
         var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+
+        // Checked before GetOrCreateAsync, not after — a rejected email must never get a
+        // Users row created for it in the first place.
+        if (!await BetaAccessService.IsSignupAllowedAsync(db, email, betaAllowlist))
+        {
+            ctx.Fail("Not on the beta allowlist");
+            return;
+        }
+
         var user = await UserProvisioningService.GetOrCreateAsync(db, email);
 
         if (user.DeactivatedAt is not null)
