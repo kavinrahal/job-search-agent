@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useProfile, useUpdateProfile, useParseResumePdf, useUploadResumePdf } from "../hooks/useProfile";
-import { useMe, useCancelAccount, useUpgradeToTier2 } from "../hooks/useAuth";
+import { useMe, useCancelAccount, useUpgradeToTier2, useInviteToTier2 } from "../hooks/useAuth";
 import { resumePdfUrl } from "../api";
 import { BackgroundEditor } from "../components/BackgroundEditor";
 import { JobCriteriaEditor } from "../components/JobCriteriaEditor";
@@ -20,11 +20,14 @@ export function SettingsPage() {
   const [newResumeFile, setNewResumeFile] = useState<File | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteResult, setInviteResult] = useState<{ email: string; emailSent: boolean } | null>(null);
 
   const { data: me } = useMe();
   const save = useUpdateProfile();
   const cancel = useCancelAccount();
   const upgrade = useUpgradeToTier2();
+  const invite = useInviteToTier2();
   const parsePdf = useParseResumePdf();
   const uploadPdf = useUploadResumePdf();
 
@@ -76,6 +79,12 @@ export function SettingsPage() {
   async function handleUpgrade() {
     await upgrade.execute();
     window.location.href = "/sources";
+  }
+
+  async function handleInvite() {
+    const result = await invite.execute(inviteEmail);
+    setInviteResult(result);
+    setInviteEmail("");
   }
 
   if (loadingProfile || !background || !jobCriteria) {
@@ -168,6 +177,40 @@ export function SettingsPage() {
             {upgrade.loading ? "Upgrading…" : "Upgrade to Tier 2"}
           </button>
           {upgrade.error && <p className="mt-2 text-sm text-red-700">{upgrade.error}</p>}
+        </div>
+      )}
+
+      {me?.isOwner && (
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="mb-1 text-sm font-medium text-gray-700">Invite to Tier 2</p>
+          <p className="mb-3 text-sm text-gray-500">
+            Grants an email sign-in access and lands them straight at Tier 2. Sends them an
+            email if SendGrid's configured; otherwise still adds them, just let them know
+            another way.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              placeholder="someone@example.com"
+              className="w-full max-w-xs rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+            <button
+              onClick={handleInvite}
+              disabled={invite.loading || !inviteEmail.trim()}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            >
+              {invite.loading ? "Inviting…" : "Invite"}
+            </button>
+          </div>
+          {inviteResult && (
+            <p className="mt-2 text-sm text-emerald-600">
+              {inviteResult.email} can now sign in.
+              {inviteResult.emailSent ? " Invite email sent." : " (Email not sent — SendGrid not configured yet, let them know another way.)"}
+            </p>
+          )}
+          {invite.error && <p className="mt-2 text-sm text-red-700">{invite.error}</p>}
         </div>
       )}
 

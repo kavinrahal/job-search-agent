@@ -35,6 +35,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<WorkerLock> WorkerLocks { get; set; }
     public DbSet<SupportMessage> SupportMessages { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
+    public DbSet<BetaInvite> BetaInvites { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -84,6 +85,9 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             // yet don't collide with each other.
             e.HasIndex(u => u.InboundEmailToken).IsUnique();
         });
+
+        modelBuilder.Entity<BetaInvite>()
+            .HasIndex(i => i.Email).IsUnique();
 
         modelBuilder.Entity<UserProfile>(e =>
         {

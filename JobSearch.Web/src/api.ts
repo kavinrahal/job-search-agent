@@ -97,6 +97,7 @@ export async function fetchMe(): Promise<{
   tier: string;
   needsOnboarding: boolean;
   needsSourceSelection: boolean;
+  isOwner: boolean;
 }> {
   return request("/auth/me");
 }
@@ -126,6 +127,12 @@ export async function upgradeToTier2(): Promise<void> {
 // direct-URL pattern as resumePdfUrl.
 export function gmailOAuthStartUrl(): string {
   return `${BASE}/gmail-oauth/start`;
+}
+
+// Owner only. Adds the email to the beta invite list and emails them if SendGrid Mail Send
+// is configured — see the matching backend endpoint's comment.
+export async function inviteToTier2(email: string): Promise<{ email: string; emailSent: boolean }> {
+  return request("/admin/invite", { method: "POST", ...json({ email }) });
 }
 
 export async function submitSupportMessage(message: string): Promise<void> {

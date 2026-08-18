@@ -25,3 +25,6 @@ public record SupportMessageRequest(string Message);
 
 // PUT /api/v1/sources
 public record SourcesUpdateRequest(string[] Sources);
+
+// POST /api/v1/admin/invite
+public record InviteRequest(string Email);

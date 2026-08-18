@@ -50,15 +50,6 @@ builder.Services.AddSingleton<UserSecretService>();
 var ownerEmail = builder.Configuration["ALLOWED_EMAIL"] ?? "kavinrahal@gmail.com";
 const string UserIdClaimType = "jobfindr:uid";
 
-// Beta access gate — required, not optional-with-fallback, unlike the external-service
-// configs elsewhere in this file: this is a security control and should fail closed (API
-// won't start without it) rather than fail open (silently let anyone sign up if unset).
-var betaAllowlist = (builder.Configuration["BETA_ALLOWLIST_EMAILS"]
-        ?? throw new InvalidOperationException("BETA_ALLOWLIST_EMAILS not set"))
-    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-    .Select(e => e.ToLowerInvariant())
-    .ToHashSet();
-
 // Where to send the browser after the OAuth round-trip completes — the frontend's own URL,
 // now that it's a separate deployment from the API and there's nothing to redirect to at
 // the API's own root anymore. Only required outside dev, where the SPA runs on Vite's own
@@ -125,14 +116,16 @@ builder.Services.AddAuthentication(o =>
         var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
 
         // Checked before GetOrCreateAsync, not after — a rejected email must never get a
-        // Users row created for it in the first place.
-        if (!await BetaAccessService.IsSignupAllowedAsync(db, email, betaAllowlist))
+        // Users row created for it in the first place. The resolved tier only matters for a
+        // brand-new account; GetOrCreateAsync ignores it for an existing one.
+        var signupTier = await BetaAccessService.ResolveSignupTierAsync(db, email, ownerEmail);
+        if (signupTier is null)
         {
-            ctx.Fail("Not on the beta allowlist");
+            ctx.Fail("Not invited to the beta");
             return;
         }
 
-        var user = await UserProvisioningService.GetOrCreateAsync(db, email);
+        var user = await UserProvisioningService.GetOrCreateAsync(db, email, signupTier);
 
         if (user.DeactivatedAt is not null)
         {
@@ -208,6 +201,13 @@ var gmailClientId = builder.Configuration["GMAIL_CLIENT_ID"];
 var gmailClientSecret = builder.Configuration["GMAIL_CLIENT_SECRET"];
 var gmailOAuthRedirectUri = builder.Configuration["GMAIL_OAUTH_REDIRECT_URI"];
 
+// SendGrid Mail Send — separate key/permission from SENDGRID_INBOUND_SECRET above (that one
+// only receives). Optional, same reasoning as the rest of this block: the admin invite
+// endpoint still adds the BetaInvite row and reports emailSent=false if this isn't
+// configured yet, rather than failing the whole invite.
+var sendGridApiKey = builder.Configuration["SENDGRID_API_KEY"];
+var sendGridFromEmail = builder.Configuration["SENDGRID_FROM_EMAIL"];
+
 builder.Services.AddSingleton(_ => new JobPostingFetcher());
 builder.Services.AddSingleton(sp => new ClaudeUsageLogger(sp.GetRequiredService<DbContextOptions<AppDbContext>>()));
 builder.Services.AddSingleton(sp => new PostingEvaluator(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
@@ -229,6 +229,8 @@ if (adzunaAppId is not null && adzunaAppKey is not null)
     builder.Services.AddSingleton(new AdzunaFetcher(adzunaAppId, adzunaAppKey));
 if (gmailClientId is not null && gmailClientSecret is not null && gmailOAuthRedirectUri is not null)
     builder.Services.AddSingleton(new GmailOAuthService(gmailClientId, gmailClientSecret, gmailOAuthRedirectUri));
+if (sendGridApiKey is not null && sendGridFromEmail is not null)
+    builder.Services.AddSingleton(new SendGridEmailService(sendGridApiKey, sendGridFromEmail));
 builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
 
 // Trust X-Forwarded-Proto from Railway's load balancer regardless of its IP.
@@ -399,8 +401,9 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
     var profile = await db.UserProfiles.FindAsync(userId);
     bool needsOnboarding = string.IsNullOrEmpty(profile?.Background);
     bool needsSourceSelection = user.Tier == UserTier.Tier2 && user.EnabledSources is null;
+    bool isOwner = string.Equals(user.Email, ownerEmail, StringComparison.OrdinalIgnoreCase);
 
-    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsSourceSelection });
+    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsSourceSelection, isOwner });
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>
@@ -994,6 +997,46 @@ api.MapPost("/account/upgrade-to-tier2", async (HttpContext ctx, AppDbContext db
     return upgraded ? Results.Ok() : Results.BadRequest(new { error = "Already Tier 2." });
 });
 
+// POST /api/v1/admin/invite — owner only. Adds the email to BetaInvite (idempotent — a
+// repeat invite is a no-op, not a duplicate row) so it can sign in at all, landing straight
+// at Tier 2. Still adds the invite even if SendGrid Mail Send isn't configured or the send
+// fails — being able to invite people isn't blocked on that, the owner just has to tell them
+// some other way in the meantime (emailSent reports which happened).
+api.MapPost("/admin/invite", async (HttpContext ctx, InviteRequest body, AppDbContext db) =>
+{
+    var (_, error) = await RequireOwnerAsync(db, CurrentUserId(ctx, UserIdClaimType));
+    if (error is not null) return error;
+
+    var email = body.Email.Trim().ToLowerInvariant();
+    if (string.IsNullOrEmpty(email) || !email.Contains('@'))
+        return Results.BadRequest(new { error = "Invalid email." });
+
+    if (!await db.BetaInvites.AnyAsync(i => i.Email == email))
+    {
+        db.BetaInvites.Add(new BetaInvite { Email = email, InvitedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+    }
+
+    var emailSender = ctx.RequestServices.GetService<SendGridEmailService>();
+    bool emailSent = false;
+    if (emailSender is not null)
+    {
+        try
+        {
+            await emailSender.SendAsync(email, "You're invited to Job Search Agent",
+                $"You've been invited to Job Search Agent. Sign in with this Google account at " +
+                $"{frontendUrl ?? "the app"} to get started — you'll have full Tier 2 access right away.");
+            emailSent = true;
+        }
+        catch (Exception ex)
+        {
+            await Console.Error.WriteLineAsync($"Failed to send invite email to {email}: {ex}");
+        }
+    }
+
+    return Results.Ok(new { email, emailSent });
+});
+
 // POST /api/v1/account/cancel — soft-deactivates the account (blocks future login, data is
 // kept) and signs out the current session immediately. Doesn't revoke any other active
 // session for this account elsewhere — there's no server-side session store to revoke
@@ -1143,6 +1186,19 @@ static async Task<(User? User, IResult? Error)> RequireTier2Async(AppDbContext d
     if (user is null) return (null, Results.NotFound());
     if (user.Tier != UserTier.Tier2)
         return (null, Results.Json(new { error = "Tier 2 only" }, statusCode: StatusCodes.Status403Forbidden));
+    return (user, null);
+}
+
+// Not static, unlike RequireTier2Async above — needs to close over ownerEmail (same idiom
+// as the Telegram webhook's SaveThreadAsync/SendAnswerAsync local functions elsewhere in
+// this file), which local functions can do regardless of where they're declared relative to
+// where they're called — they're hoisted through the whole enclosing scope either way.
+async Task<(User? User, IResult? Error)> RequireOwnerAsync(AppDbContext db, int userId)
+{
+    var user = await db.Users.FindAsync(userId);
+    if (user is null) return (null, Results.NotFound());
+    if (!string.Equals(user.Email, ownerEmail, StringComparison.OrdinalIgnoreCase))
+        return (null, Results.Json(new { error = "Owner only" }, statusCode: StatusCodes.Status403Forbidden));
     return (user, null);
 }
 

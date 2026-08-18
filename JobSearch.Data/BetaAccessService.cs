@@ -2,16 +2,22 @@ using Microsoft.EntityFrameworkCore;
 
 namespace JobSearch.Data;
 
-// Gates new signups during the beta to an explicit email allowlist, without locking out
-// anyone who's already signed up if the list changes later — only brand-new accounts are
-// checked against it. Existing users keep working even if removed from a future allowlist
-// (removal is a separate, deliberate account-deactivation action, not implicit).
+// Gates new signups during the beta. Three ways in: the hardcoded owner email (must always
+// work regardless of table state — the bootstrapping account that can fix everything else),
+// an existing account (never re-gated once created), or a row in BetaInvite (the owner
+// personally choosing who gets Tier 2 access, via the admin invite endpoint).
 public static class BetaAccessService
 {
-    public static async Task<bool> IsSignupAllowedAsync(AppDbContext db, string email, IReadOnlySet<string> allowlist)
+    // Null return means signup isn't allowed at all. A non-null return is the tier a
+    // brand-new account should be created with — irrelevant for an existing user, since
+    // UserProvisioningService.GetOrCreateAsync ignores the tier argument for them.
+    public static async Task<string?> ResolveSignupTierAsync(AppDbContext db, string email, string ownerEmail)
     {
         var normalized = email.Trim().ToLowerInvariant();
-        if (allowlist.Contains(normalized)) return true;
-        return await db.Users.AnyAsync(u => u.Email == normalized);
+
+        if (normalized == ownerEmail.Trim().ToLowerInvariant()) return UserTier.Tier2;
+        if (await db.Users.AnyAsync(u => u.Email == normalized)) return UserTier.Tier1;
+        if (await db.BetaInvites.AnyAsync(i => i.Email == normalized)) return UserTier.Tier2;
+        return null;
     }
 }

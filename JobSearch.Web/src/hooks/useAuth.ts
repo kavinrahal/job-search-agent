@@ -1,4 +1,4 @@
-import { fetchMe, logout, cancelAccount, upgradeToTier2 } from "../api";
+import { fetchMe, logout, cancelAccount, upgradeToTier2, inviteToTier2 } from "../api";
 import { useAsyncData, useAsyncAction } from "./useAsync";
 
 export function useMe() {
@@ -22,4 +22,8 @@ export function useCancelAccount() {
 
 export function useUpgradeToTier2() {
   return useAsyncAction(upgradeToTier2);
+}
+
+export function useInviteToTier2() {
+  return useAsyncAction(inviteToTier2);
 }
