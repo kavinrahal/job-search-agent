@@ -2011,9 +2011,16 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
             {
                 using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
                 var response = await http.GetAsync(verifyLink);
-                Console.WriteLine(response.IsSuccessStatusCode
-                    ? $"Auto-confirmed Gmail forwarding for user {userId}."
-                    : $"Gmail forwarding auto-confirm for user {userId} returned {response.StatusCode}.");
+                var body = await response.Content.ReadAsStringAsync();
+                // Temporary diagnostic — the fetch itself returns 200 but Google's
+                // ForwardingAddresses status still comes back "pending" afterward, so
+                // something about this GET isn't actually registering the confirmation
+                // server-side. Logging the final URL (after any redirects) and a body
+                // preview to see what Google is actually serving. Remove once understood.
+                Console.WriteLine(
+                    $"[diag] Gmail auto-confirm GET for user {userId} — status {response.StatusCode}, " +
+                    $"final URL {response.RequestMessage?.RequestUri}, body preview: " +
+                    (body.Length > 3000 ? body[..3000] : body));
             }
             catch (Exception ex)
             {
