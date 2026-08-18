@@ -2026,7 +2026,7 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
         // GmailForwardingConfirmation's pattern is confirmed against a real one.
         else if (from.Contains("google.com", StringComparison.OrdinalIgnoreCase))
         {
-            var preview = text.Length > 500 ? text[..500] : text;
+            var preview = text.Length > 4000 ? text[..4000] : text;
             Console.WriteLine($"[diag] Unmatched Google-sender email — From: {from} | Subject: {subject} | Body preview: {preview}");
         }
     });
