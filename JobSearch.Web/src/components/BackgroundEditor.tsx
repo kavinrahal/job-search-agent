@@ -177,17 +177,21 @@ function SkillsSection({ value, onChange }: { value: Record<string, string[]>; o
       <div className="space-y-3">
         {categories.map(category => (
           <div key={category} className="flex gap-2">
-            <input
-              className={`${INPUT} w-40 shrink-0 font-medium`}
-              defaultValue={category}
-              onBlur={e => renameCategory(category, e.target.value)}
-            />
-            <input
-              className={`${INPUT} flex-1`}
-              placeholder="Comma-separated"
-              defaultValue={value[category].join(", ")}
-              onBlur={e => setItems(category, e.target.value)}
-            />
+            <div className="w-40 shrink-0">
+              <input
+                className={`${INPUT} font-medium`}
+                defaultValue={category}
+                onBlur={e => renameCategory(category, e.target.value)}
+              />
+            </div>
+            <div className="flex-1">
+              <input
+                className={INPUT}
+                placeholder="Comma-separated"
+                defaultValue={value[category].join(", ")}
+                onBlur={e => setItems(category, e.target.value)}
+              />
+            </div>
             <button onClick={() => removeCategory(category)} className="text-xs text-red-500 hover:text-red-700">&#10005;</button>
           </div>
         ))}
