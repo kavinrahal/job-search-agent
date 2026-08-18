@@ -50,14 +50,33 @@ education:
 skills:
   # Only split into multiple categories if the source shows an EXPLICIT structural signal —
   # a labeled line/row ("Languages: ...", "Frameworks: ..."), separate columns, or a clearly
-  # distinct visual block per category. If the source is one continuous run of skills (e.g.
-  # a single comma-separated line or paragraph under one "Skills" heading, even if some
-  # items are technical and others are soft skills), keep it as ONE list under a single
-  # "general" key, in the same order as the source. Do not split it yourself based on what
-  # kind of skill something looks like — inferring a Technical/Soft-Skills split (or any
-  # other category) the source doesn't visually show is exactly the invented content this
-  # skill must avoid. The candidate can recategorize by hand afterward if they want to;
-  # your job here is faithful extraction, not deciding on a better structure.
+  # distinct visual block per category. Do not split based on what kind of skill something
+  # looks like — inferring a Technical/Soft-Skills split (or any other category) the source
+  # doesn't visually show is exactly the invented content this skill must avoid. The
+  # candidate can recategorize by hand afterward if they want to; your job here is faithful
+  # extraction, not deciding on a better structure.
+  #
+  # Every item that appears in the source's skills section MUST appear as a string in one of
+  # these lists — an empty or partial list is a bug, not a valid extraction, even if the
+  # source lists 20+ items on one line. Read the entire section and transcribe every item.
+  #
+  # No structural signal (a single comma-separated line or paragraph, even mixing technical
+  # and soft skills) — one flat list under "general", in source order:
+  #   general:
+  #     - React
+  #     - TypeScript
+  #     - Node.js
+  #     - Clear Communication
+  #     - Leadership
+  #
+  # Explicit structural signal (labeled lines, columns, or visual blocks) — one key per
+  # label, using the source's own label text lowercased with underscores:
+  #   languages:
+  #     - Python
+  #     - Java
+  #   frameworks:
+  #     - Django
+  #     - Spring
 
 projects:
   - name: ...
