@@ -9,8 +9,8 @@ function PersonalSection({ value, onChange }: { value: PersonalInfo; onChange: (
     <TopicCard title="Personal">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Name" value={value.name} onChange={v => set("name", v)} />
-        <Field label="Email" value={value.email} onChange={v => set("email", v)} />
-        <Field label="Phone" value={value.phone ?? ""} onChange={v => set("phone", v)} />
+        <Field label="Email" type="email" value={value.email} onChange={v => set("email", v)} />
+        <Field label="Phone" type="tel" value={value.phone ?? ""} onChange={v => set("phone", v)} />
         <Field label="Location" value={value.location ?? ""} onChange={v => set("location", v)} />
         <Field label="LinkedIn" value={value.linkedin ?? ""} onChange={v => set("linkedin", v)} />
         <Field label="GitHub" value={value.github ?? ""} onChange={v => set("github", v)} />
@@ -35,8 +35,28 @@ function ExperienceSection({ value, onChange }: { value: ExperienceEntry[]; onCh
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Company" value={entry.company} onChange={v => update(i, { company: v })} />
               <Field label="Role" value={entry.role} onChange={v => update(i, { role: v })} />
-              <Field label="Start (YYYY-MM)" value={entry.dates.start} onChange={v => update(i, { dates: { ...entry.dates, start: v } })} />
-              <Field label="End (YYYY-MM or present)" value={entry.dates.end} onChange={v => update(i, { dates: { ...entry.dates, end: v } })} />
+              <Field label="Start" type="month" value={entry.dates.start} onChange={v => update(i, { dates: { ...entry.dates, start: v } })} />
+              <div>
+                <label className={LABEL}>End</label>
+                {entry.dates.end.trim().toLowerCase() === "present" ? (
+                  <input className={INPUT} type="month" value="" disabled placeholder="Present" onChange={() => {}} />
+                ) : (
+                  <input
+                    className={INPUT}
+                    type="month"
+                    value={entry.dates.end}
+                    onChange={e => update(i, { dates: { ...entry.dates, end: e.target.value } })}
+                  />
+                )}
+                <label className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                  <input
+                    type="checkbox"
+                    checked={entry.dates.end.trim().toLowerCase() === "present"}
+                    onChange={e => update(i, { dates: { ...entry.dates, end: e.target.checked ? "present" : "" } })}
+                  />
+                  Current role
+                </label>
+              </div>
               <Field label="Location" value={entry.location} onChange={v => update(i, { location: v })} />
               <div>
                 <label className={LABEL}>Employment type</label>
@@ -94,6 +114,9 @@ function EducationSection({ value, onChange }: { value: EducationEntry[]; onChan
               <Field label="Location" value={entry.location} onChange={v => update(i, { location: v })} />
               <Field
                 label="Graduation year"
+                type="number"
+                min={1950}
+                max={new Date().getFullYear() + 10}
                 value={entry.graduation_year == null ? "" : String(entry.graduation_year)}
                 onChange={v => update(i, { graduation_year: v })}
               />

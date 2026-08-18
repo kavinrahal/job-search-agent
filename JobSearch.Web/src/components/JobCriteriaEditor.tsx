@@ -67,8 +67,8 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
       <TopicCard title="Salary">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Currency" value={value.currency} onChange={v => set("currency", v)} />
-          <Field label="Minimum acceptable" value={value.salaryMin} onChange={v => set("salaryMin", v)} />
-          <Field label="Target (upper end)" value={value.salaryMax} onChange={v => set("salaryMax", v)} />
+          <Field label="Minimum acceptable" type="number" min={0} value={value.salaryMin} onChange={v => set("salaryMin", v)} />
+          <Field label="Target (upper end)" type="number" min={0} value={value.salaryMax} onChange={v => set("salaryMax", v)} />
         </div>
       </TopicCard>
 

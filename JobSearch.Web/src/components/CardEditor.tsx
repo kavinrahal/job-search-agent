@@ -9,8 +9,9 @@ import { load as loadYaml, dump as dumpYaml } from "js-yaml";
 export const LABEL = "mb-1 block text-xs font-medium text-gray-500";
 export const INPUT = "w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300";
 
-export function Field({ label, value, onChange, multiline }: {
+export function Field({ label, value, onChange, multiline, type = "text", min, max }: {
   label: string; value: string; onChange: (v: string) => void; multiline?: boolean;
+  type?: "text" | "email" | "tel" | "number" | "month"; min?: number; max?: number;
 }) {
   return (
     <div>
@@ -18,7 +19,7 @@ export function Field({ label, value, onChange, multiline }: {
       {multiline ? (
         <textarea className={INPUT} rows={3} value={value} onChange={e => onChange(e.target.value)} />
       ) : (
-        <input className={INPUT} value={value} onChange={e => onChange(e.target.value)} />
+        <input className={INPUT} type={type} min={min} max={max} value={value} onChange={e => onChange(e.target.value)} />
       )}
     </div>
   );
