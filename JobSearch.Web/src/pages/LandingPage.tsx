@@ -12,6 +12,10 @@ const FEATURES = [
 // before signing in too, not just after.
 export function LandingPage() {
   const loginUrl = useLoginUrl();
+  // Set by the API's OnRemoteFailure redirect when Google sign-in itself fails (not invited,
+  // account deactivated, etc.) — without this, a denied sign-in silently dumped you back here
+  // with no explanation at all, indistinguishable from just not having signed in yet.
+  const authError = new URLSearchParams(window.location.search).get("authError");
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50 px-6 dark:bg-gray-950">
@@ -43,6 +47,13 @@ export function LandingPage() {
             </li>
           ))}
         </ul>
+
+        {authError && (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
+            That Google account can't sign in yet — it needs an invite first. Ask whoever
+            invited you, or reach out via the Support page once you're in.
+          </p>
+        )}
 
         <a
           href={loginUrl}

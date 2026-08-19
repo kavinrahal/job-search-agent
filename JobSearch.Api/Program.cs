@@ -45,8 +45,10 @@ builder.Services.AddSingleton<UserSecretService>();
 // ---------------------------------------------------------------------------
 // Authentication — Google OAuth + cookie session
 // ---------------------------------------------------------------------------
-// Reused only to seed the owner's own account as User #1 at startup — sign-in itself is
-// now open to any Google account, which creates/looks up a Users row (see OnCreatingTicket).
+// Reused to seed the owner's own account as User #1 at startup, and as the Tier2-owner
+// bypass in BetaAccessService — sign-in itself is gated to existing users and invited
+// emails only (see BetaAccessService.ResolveSignupTierAsync); it is NOT open to any
+// Google account despite what an older version of this comment used to say.
 var ownerEmail = builder.Configuration["ALLOWED_EMAIL"] ?? "kavinrahal@gmail.com";
 const string UserIdClaimType = "jobfindr:uid";
 
@@ -106,9 +108,13 @@ builder.Services.AddAuthentication(o =>
     // ClaimTypes.NameIdentifier with its own "sub" claim, so this can't reuse that type).
     o.Events.OnCreatingTicket = async ctx =>
     {
+        // TEMP diagnostic — investigating a live bug where fresh logins bounce back to the
+        // landing page instead of authenticating. Traces exactly how far this handler gets.
         var email = ctx.Identity?.FindFirst(ClaimTypes.Email)?.Value;
+        await Console.Error.WriteLineAsync($"[AuthDiag] OnCreatingTicket start, email={email}");
         if (string.IsNullOrEmpty(email))
         {
+            await Console.Error.WriteLineAsync("[AuthDiag] OnCreatingTicket: failing, no email");
             ctx.Fail("Google account has no email");
             return;
         }
@@ -119,6 +125,7 @@ builder.Services.AddAuthentication(o =>
         // Users row created for it in the first place. The resolved tier only matters for a
         // brand-new account; GetOrCreateAsync ignores it for an existing one.
         var signupTier = await BetaAccessService.ResolveSignupTierAsync(db, email, ownerEmail);
+        await Console.Error.WriteLineAsync($"[AuthDiag] OnCreatingTicket: signupTier={signupTier ?? "null"}");
         if (signupTier is null)
         {
             ctx.Fail("Not invited to the beta");
@@ -126,6 +133,7 @@ builder.Services.AddAuthentication(o =>
         }
 
         var user = await UserProvisioningService.GetOrCreateAsync(db, email, signupTier);
+        await Console.Error.WriteLineAsync($"[AuthDiag] OnCreatingTicket: user.Id={user.Id}, deactivatedAt={user.DeactivatedAt}");
 
         if (user.DeactivatedAt is not null)
         {
@@ -143,10 +151,17 @@ builder.Services.AddAuthentication(o =>
         await db.SaveChangesAsync();
 
         ctx.Identity!.AddClaim(new Claim(UserIdClaimType, user.Id.ToString(CultureInfo.InvariantCulture)));
+        await Console.Error.WriteLineAsync($"[AuthDiag] OnCreatingTicket: added uid claim, identity claim count={ctx.Identity!.Claims.Count()}");
     };
     o.Events.OnRemoteFailure = ctx =>
     {
-        ctx.Response.Redirect("/api/v1/auth/denied");
+        // Land back on the real (styled) frontend with a query flag instead of the bare API
+        // text page — a failed sign-in used to redirect to api.worksanta.com/api/v1/auth/denied,
+        // which looked so different from a normal browser navigation that a genuinely-denied
+        // user couldn't tell it apart from a random glitch. This way LandingPage can show them
+        // an actual explanation.
+        var redirectBase = (frontendUrl ?? "http://localhost:5173").TrimEnd('/');
+        ctx.Response.Redirect($"{redirectBase}/?authError=denied");
         ctx.HandleResponse();
         return Task.CompletedTask;
     };
@@ -396,7 +411,19 @@ app.MapGet("/api/v1/auth/login", (HttpContext ctx) =>
 
 app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
 {
-    var userId = int.Parse(ctx.User.FindFirstValue(UserIdClaimType)!, CultureInfo.InvariantCulture);
+    var uidClaim = ctx.User.FindFirstValue(UserIdClaimType);
+    // TEMP diagnostic: RequireAuthorization() is passing (we got here) but the app-specific
+    // uid claim is missing — actively investigating a live bug where fresh logins bounce back
+    // to the landing page. Logging every claim actually present tells us whether OnCreatingTicket
+    // ran at all versus ran but didn't persist this one claim. Return 401 cleanly either way
+    // instead of crashing with an unhandled ArgumentNullException.
+    if (uidClaim is null)
+    {
+        var claims = string.Join("; ", ctx.User.Claims.Select(c => $"{c.Type}={c.Value}"));
+        await Console.Error.WriteLineAsync($"[AuthDiag] /auth/me: authenticated={ctx.User.Identity?.IsAuthenticated}, authType={ctx.User.Identity?.AuthenticationType}, claims=[{claims}]");
+        return Results.Unauthorized();
+    }
+    var userId = int.Parse(uidClaim, CultureInfo.InvariantCulture);
     var user = await db.Users.FindAsync(userId);
     if (user is null) return Results.Unauthorized();
 
@@ -424,10 +451,6 @@ app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>
     await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Ok();
 }).RequireAuthorization();
-
-app.MapGet("/api/v1/auth/denied", () =>
-    Results.Text("Access denied. Sign-in failed, please try again.")
-).AllowAnonymous();
 
 // ---------------------------------------------------------------------------
 // Protected data endpoints
@@ -1333,8 +1356,16 @@ static async Task<(string? PostingText, string EvalJson, string? Company, string
     }
 }
 
-static int CurrentUserId(HttpContext ctx, string claimType) =>
-    int.Parse(ctx.User.FindFirstValue(claimType)!, CultureInfo.InvariantCulture);
+static int CurrentUserId(HttpContext ctx, string claimType)
+{
+    var value = ctx.User.FindFirstValue(claimType);
+    if (value is null)
+    {
+        var claims = string.Join("; ", ctx.User.Claims.Select(c => $"{c.Type}={c.Value}"));
+        Console.Error.WriteLine($"[AuthDiag] CurrentUserId: missing '{claimType}' claim on {ctx.Request.Path}, authenticated={ctx.User.Identity?.IsAuthenticated}, claims=[{claims}]");
+    }
+    return int.Parse(value!, CultureInfo.InvariantCulture);
+}
 
 // Shared by every Tier 2-only endpoint (sources, and the Gmail/SendGrid ones still to come).
 static async Task<(User? User, IResult? Error)> RequireTier2Async(AppDbContext db, int userId)

@@ -6,7 +6,9 @@ namespace JobSearch.Data;
 public class CoverLetterAgent
 {
     private readonly AnthropicClient _client;
-    private const string SonnetModel = "claude-sonnet-5";
+    // Reverted from Sonnet alongside CvTailorAgent — see the comment there. This incident's
+    // worst example was a cover letter whose entire generated content was the word "To".
+    private const string SonnetModel = "claude-opus-4-8";
     private readonly string _skillText;
     private readonly ClaudeUsageLogger? _usageLogger;
 

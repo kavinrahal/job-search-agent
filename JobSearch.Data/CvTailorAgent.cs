@@ -7,7 +7,12 @@ namespace JobSearch.Data;
 public class CvTailorAgent
 {
     private readonly AnthropicClient _client;
-    private const string SonnetModel = "claude-sonnet-5";
+    // Reverted from Sonnet: live incident (2026-08-19) — real generations came back
+    // severely truncated (a resume cut off mid-sentence in the Summary, nothing else).
+    // No bug found in our own request/response/storage code, so back on Opus (the
+    // known-good model) rather than leaving this broken while chasing a model-behavior
+    // theory. Revisit the Sonnet switch separately if worth chasing later.
+    private const string SonnetModel = "claude-opus-4-8";
     private readonly string _skillText;
     private readonly ClaudeUsageLogger? _usageLogger;
 
