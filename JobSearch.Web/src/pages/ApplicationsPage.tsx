@@ -146,7 +146,7 @@ function LogApplicationForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-500">Company</label>
           <input
@@ -274,7 +274,7 @@ export function ApplicationsPage() {
           No applications{activeTab !== "All" ? ` with status "${activeTab}"` : ""} yet.
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {apps.map(app => <ApplicationCard key={app.id} app={app} onStatusChanged={reload} />)}
         </div>
       )}
