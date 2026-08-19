@@ -206,6 +206,12 @@ function PageBody({ me }: { me: NonNullable<ReturnType<typeof useMe>["data"]> })
       {me.needsOnboarding && <StepRedirect allowedRoutes={ONBOARDING_ROUTES} to="/onboarding/cv" />}
       {!me.needsOnboarding && me.needsCriteria && <StepRedirect allowedRoutes={CRITERIA_ROUTES} to="/onboarding/criteria" />}
       {!me.needsOnboarding && !me.needsCriteria && me.needsSourceSelection && <StepRedirect allowedRoutes={SOURCES_ROUTES} to="/onboarding/sources" />}
+      {/* The reverse guard: once every step is done, the /onboarding/* routes have no reason
+          to exist anymore — without this, typing one back into the URL bar would still render
+          the wizard for a fully set-up user. */}
+      {!me.needsOnboarding && !me.needsCriteria && !me.needsSourceSelection && location.pathname.startsWith("/onboarding/") && (
+        <Navigate to="/" replace />
+      )}
       <div key={location.pathname} className="animate-fade-in-up">
         <Routes>
           <Route path="/"                   element={<DashboardPage />} />

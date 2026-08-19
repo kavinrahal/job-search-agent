@@ -50,8 +50,8 @@ export function LandingPage() {
 
         {authError && (
           <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
-            That Google account can't sign in yet — it needs an invite first. Ask whoever
-            invited you, or reach out via the Support page once you're in.
+            That Google account needs an invite before it can sign in. Ask whoever invited
+            you, or reach out via the Support page once you're in.
           </p>
         )}
 

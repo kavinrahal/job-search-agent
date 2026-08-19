@@ -1,23 +1,13 @@
 import { allCountries } from "country-region-data";
+import currencyData from "currency-codes/data";
 
-// Currency codes come from the browser's own Intl data (ECMA-402) — always correct, never
-// goes stale, no bundled dataset needed.
-function currencyList(): { code: string; label: string }[] {
-  try {
-    const codes = Intl.supportedValuesOf("currency");
-    const display = new Intl.DisplayNames(["en"], { type: "currency" });
-    return codes
-      .map(code => {
-        const name = display.of(code);
-        return { code, label: name && name !== code ? `${code} (${name})` : code };
-      })
-      .sort((a, b) => a.code.localeCompare(b.code));
-  } catch {
-    return ["AUD", "CAD", "EUR", "GBP", "INR", "NZD", "SGD", "USD"].map(code => ({ code, label: code }));
-  }
-}
-
-export const CURRENCIES = currencyList();
+// currency-codes ships the full, current ISO 4217 list (~180 currencies) as a static dataset —
+// unlike Intl.supportedValuesOf("currency"), which is a fairly recent addition to the spec and
+// silently returns a much shorter list (or throws) on older/less-complete Intl implementations,
+// this is the same everywhere regardless of the user's browser.
+export const CURRENCIES: { code: string; label: string }[] = currencyData
+  .map(c => ({ code: c.code, label: `${c.code} (${c.currency})` }))
+  .sort((a, b) => a.code.localeCompare(b.code));
 
 // Countries and their subdivisions come from country-region-data (ISO 3166-2, MIT licensed) —
 // covers all 249 countries/territories, so there's no hand-maintained list to keep in sync.

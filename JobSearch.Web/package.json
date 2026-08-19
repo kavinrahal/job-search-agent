@@ -25,6 +25,7 @@
     "@tailwindcss/vite": "^4.3.1",
     "@vitejs/plugin-react": "^6.0.2",
     "country-region-data": "^4.1.0",
+    "currency-codes": "^2.2.0",
     "js-yaml": "^5.3.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
