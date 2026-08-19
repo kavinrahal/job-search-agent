@@ -123,4 +123,31 @@ public class CreditServiceTests
         var finalUser = await verifyDb.Users.FindAsync(userId);
         Assert.Equal(0, finalUser!.CreditBalance);
     }
+
+    // TC08 — Refunding gives the credit back. This is the fix for generation now spending
+    // before the Claude call runs instead of after: a failed call must not permanently cost
+    // the user a credit for a request that produced nothing.
+    [Fact]
+    public async Task RefundCreditAsync_IncrementsBalanceByOne()
+    {
+        using var db = FreshDb();
+        var user = await SeedUser(db, creditBalance: 0);
+
+        await CreditService.RefundCreditAsync(db, user.Id);
+
+        var updated = await db.Users.FindAsync(user.Id);
+        Assert.Equal(1, updated!.CreditBalance);
+    }
+
+    // TC09 — Refunding a nonexistent user is a no-op, not an exception (mirrors
+    // SpendCreditAsync_UnknownUser_DoesNotThrow's reasoning).
+    [Fact]
+    public async Task RefundCreditAsync_UnknownUser_DoesNotThrow()
+    {
+        using var db = FreshDb();
+
+        var exception = await Record.ExceptionAsync(() => CreditService.RefundCreditAsync(db, userId: 999));
+
+        Assert.Null(exception);
+    }
 }

@@ -1,10 +1,82 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Text.RegularExpressions;
 
 namespace JobSearch.Data;
 
 public class JobPostingFetcher
 {
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
+    // ConnectCallback is the real enforcement layer, not just the upfront URL check below —
+    // HttpClient follows redirects by default, and a malicious server could otherwise redirect
+    // a validated public URL to an internal address. This runs on every connection attempt,
+    // including each redirect hop, and re-resolves DNS fresh at connect time rather than
+    // trusting an earlier lookup (closing the DNS-rebinding TOCTOU gap a text/URL-only check
+    // would leave open).
+    private static readonly HttpClient _http = new(new SocketsHttpHandler { ConnectCallback = ConnectPublicOnlyAsync })
+    {
+        Timeout = TimeSpan.FromSeconds(20),
+    };
+
+    private static async ValueTask<Stream> ConnectPublicOnlyAsync(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
+    {
+        var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken);
+        var address = addresses.FirstOrDefault(IsPubliclyRoutable)
+            ?? throw new InvalidOperationException($"'{context.DnsEndPoint.Host}' does not resolve to a public address.");
+
+        var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        try
+        {
+            await socket.ConnectAsync(address, context.DnsEndPoint.Port, cancellationToken);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+
+    // Blocks loopback, link-local (including the 169.254.169.254 cloud metadata address),
+    // and the RFC1918 private ranges. Not a public-vs-private allowlist beyond that — this app
+    // legitimately fetches arbitrary public job-board URLs, only internal/infra addresses need
+    // blocking.
+    internal static bool IsPubliclyRoutable(IPAddress ip)
+    {
+        if (IPAddress.IsLoopback(ip)) return false;
+        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+
+        if (ip.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var b = ip.GetAddressBytes();
+            if (b[0] == 0) return false;                              // 0.0.0.0/8
+            if (b[0] == 10) return false;                              // 10.0.0.0/8
+            if (b[0] == 172 && b[1] is >= 16 and <= 31) return false;  // 172.16.0.0/12
+            if (b[0] == 192 && b[1] == 168) return false;              // 192.168.0.0/16
+            if (b[0] == 169 && b[1] == 254) return false;              // 169.254.0.0/16 (incl. cloud metadata)
+            return true;
+        }
+
+        if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+            return !ip.IsIPv6LinkLocal && !ip.IsIPv6SiteLocal && !ip.IsIPv6UniqueLocal;
+
+        return false;
+    }
+
+    private static async Task<bool> IsPubliclyRoutableAsync(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return false;
+
+        try
+        {
+            var addresses = await Dns.GetHostAddressesAsync(uri.Host);
+            return addresses.Length > 0 && addresses.All(IsPubliclyRoutable);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     static JobPostingFetcher()
     {
@@ -70,6 +142,18 @@ public class JobPostingFetcher
     public virtual async Task<FetchDiagnostics> DiagnoseAsync(string url)
     {
         url = StripTrackingParams(url);
+
+        // postingUrl comes straight from an authenticated user's request body — without this,
+        // it's a same-origin-network SSRF: a user could point it at cloud metadata endpoints
+        // (169.254.169.254) or internal Railway service addresses and have this server fetch
+        // it on their behalf. Resolves the host and blocks anything private/loopback/link-local
+        // before ever making the request, rather than only checking the URL's literal text
+        // (which a redirect or DNS trickery could route around a text-only check anyway).
+        if (!await IsPubliclyRoutableAsync(url))
+        {
+            var blocked = new AttemptResult(null, null, false, "URL not allowed");
+            return new FetchDiagnostics(blocked, null, null);
+        }
 
         int? directStatus = null, directLength = null;
         bool directChallenge = false;

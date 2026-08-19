@@ -1,3 +1,4 @@
+using System.Net;
 using JobSearch.Data;
 
 namespace JobSearchAgent.Tests;
@@ -57,5 +58,62 @@ public class JobPostingFetcherTests
         var url = "not a url";
 
         Assert.Equal(url, JobPostingFetcher.StripTrackingParams(url));
+    }
+
+    // TC06 — SSRF guard: every private/loopback/link-local range this app must never let
+    // postingUrl reach, including the cloud metadata address specifically.
+    [Theory]
+    [InlineData("127.0.0.1")]
+    [InlineData("10.0.0.1")]
+    [InlineData("172.16.0.1")]
+    [InlineData("172.31.255.255")]
+    [InlineData("192.168.1.1")]
+    [InlineData("169.254.169.254")] // cloud metadata endpoint
+    [InlineData("0.0.0.0")]
+    [InlineData("::1")]
+    [InlineData("fe80::1")] // IPv6 link-local
+    public void IsPubliclyRoutable_PrivateOrLoopbackOrLinkLocal_ReturnsFalse(string ip)
+    {
+        Assert.False(JobPostingFetcher.IsPubliclyRoutable(IPAddress.Parse(ip)));
+    }
+
+    // TC07 — Real public addresses (and the boundary just outside 172.16.0.0/12) must still
+    // be allowed through — this app's entire job is fetching arbitrary public job postings.
+    [Theory]
+    [InlineData("8.8.8.8")]
+    [InlineData("1.1.1.1")]
+    [InlineData("172.15.255.255")]
+    [InlineData("172.32.0.0")]
+    public void IsPubliclyRoutable_PublicAddress_ReturnsTrue(string ip)
+    {
+        Assert.True(JobPostingFetcher.IsPubliclyRoutable(IPAddress.Parse(ip)));
+    }
+
+    // TC08 — End-to-end SSRF guard, real network: a literal cloud-metadata-range IP must
+    // never reach a socket connect, verified against the actual fetch path (not just the
+    // pure IsPublicRoutable check) since that's what the ConnectCallback wiring itself needs
+    // proving, not just the predicate it calls.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task FetchAsync_CloudMetadataAddress_Throws()
+    {
+        var fetcher = new JobPostingFetcher();
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => fetcher.FetchAsync("http://169.254.169.254/"));
+    }
+
+    // TC09 — Sanity check that the SSRF guard doesn't collaterally break real fetches.
+    // Not example.com — its page is under the fetcher's 3000-char bot-challenge threshold,
+    // an unrelated pre-existing quirk of LooksLikeBotChallenge, not something this test cares
+    // about. Needs a real page large enough to clear that heuristic.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task FetchAsync_RealPublicUrl_Succeeds()
+    {
+        var fetcher = new JobPostingFetcher();
+
+        var text = await fetcher.FetchAsync("https://en.wikipedia.org/wiki/Software_engineering");
+
+        Assert.False(string.IsNullOrWhiteSpace(text));
     }
 }

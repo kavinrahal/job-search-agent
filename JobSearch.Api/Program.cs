@@ -1359,6 +1359,27 @@ async Task<(User? User, IResult? Error)> RequireOwnerAsync(AppDbContext db, int 
 // Shared by /cv and /letter — identical shape (resolve posting → generate → save a Complete
 // thread → spend a credit → return { threadId, text }), differing only in which agent
 // generates and how the initial user turn is built.
+// The real credit gate for every generation/revision endpoint — an atomic decrement
+// immediately before the Claude call it pays for, not just an earlier HasCreditAsync check
+// (see CreditService's class comment for why that alone isn't enough). Returns 402 without
+// calling `action` if the decrement fails; refunds and rethrows if `action` itself throws,
+// so a failed Claude call never permanently costs the user a credit.
+static async Task<IResult> WithCreditAsync(AppDbContext db, int userId, Func<Task<IResult>> action)
+{
+    if (!await CreditService.SpendCreditAsync(db, userId))
+        return Results.Json(new { error = "Insufficient credits" }, statusCode: StatusCodes.Status402PaymentRequired);
+
+    try
+    {
+        return await action();
+    }
+    catch
+    {
+        await CreditService.RefundCreditAsync(db, userId);
+        throw;
+    }
+}
+
 static async Task<IResult> GenerateArtifactAsync(
     AppDbContext db, JobPostingFetcher fetcher, CrossCheckDeps crossCheck, CompanyExtractorAgent companyExtractor,
     int userId, int? discoveryId, string? postingText, string? postingUrl, string? postingTitle, string? postingCompany,
@@ -1375,34 +1396,36 @@ static async Task<IResult> GenerateArtifactAsync(
     // else, a cheap dedicated extraction beats leaving the download filename generic.
     company ??= await companyExtractor.ExtractAsync(userId, resolvedText);
 
-    var text = await generate(resolvedText, evalJson);
-
-    var thread = new AgentThread
+    return await WithCreditAsync(db, userId, async () =>
     {
-        UserId = userId,
-        ArtifactType = artifactType,
-        HistoryJson = JsonSerializer.Serialize(new List<AgentThreadTurn>
+        var text = await generate(resolvedText, evalJson);
+
+        var thread = new AgentThread
         {
-            new("user", buildInitialUserContent(resolvedText, evalJson)),
-            new("assistant", text),
-        }),
-        CurrentContent = text,
-        Company = company,
-        Status = AgentThreadStatus.Complete,
-        CreatedAt = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow,
-    };
-    db.AgentThreads.Add(thread);
-    db.AnalyticsEvents.Add(new AnalyticsEvent
-    {
-        UserId = userId,
-        EventType = artifactType == AgentThreadType.Cv ? AnalyticsEventType.CvGenerated : AnalyticsEventType.LetterGenerated,
-        CreatedAt = DateTime.UtcNow,
-    });
-    await db.SaveChangesAsync();
-    await CreditService.SpendCreditAsync(db, userId);
+            UserId = userId,
+            ArtifactType = artifactType,
+            HistoryJson = JsonSerializer.Serialize(new List<AgentThreadTurn>
+            {
+                new("user", buildInitialUserContent(resolvedText, evalJson)),
+                new("assistant", text),
+            }),
+            CurrentContent = text,
+            Company = company,
+            Status = AgentThreadStatus.Complete,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        db.AgentThreads.Add(thread);
+        db.AnalyticsEvents.Add(new AnalyticsEvent
+        {
+            UserId = userId,
+            EventType = artifactType == AgentThreadType.Cv ? AnalyticsEventType.CvGenerated : AnalyticsEventType.LetterGenerated,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
 
-    return Results.Ok(new { threadId = thread.Id, text });
+        return Results.Ok(new { threadId = thread.Id, text });
+    });
 }
 
 // POST /api/v1/cv — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingTitle?: string, postingCompany?: string }
@@ -1482,25 +1505,27 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
         ?? throw new InvalidOperationException("UserProfile not found for the current user.");
 
     var history = new List<AgentThreadTurn> { new("user", AnswerAgent.BuildInitialUserContent(body.Question, jobContext)) };
-    var (mode, content) = await answerAgent.RespondAsync(profile, history);
-    history.Add(new AgentThreadTurn("assistant", content));
-
-    var thread = new AgentThread
+    return await WithCreditAsync(db, userId, async () =>
     {
-        UserId = userId,
-        ArtifactType = AgentThreadType.Answer,
-        HistoryJson = JsonSerializer.Serialize(history),
-        CurrentContent = mode == "final_answer" ? content : null,
-        Status = mode == "final_answer" ? AgentThreadStatus.Complete : AgentThreadStatus.AwaitingContext,
-        CreatedAt = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow,
-    };
-    db.AgentThreads.Add(thread);
-    db.AnalyticsEvents.Add(new AnalyticsEvent { UserId = userId, EventType = AnalyticsEventType.AnswerGenerated, CreatedAt = DateTime.UtcNow });
-    await db.SaveChangesAsync();
-    await CreditService.SpendCreditAsync(db, userId);
+        var (mode, content) = await answerAgent.RespondAsync(profile, history);
+        history.Add(new AgentThreadTurn("assistant", content));
 
-    return Results.Ok(new { threadId = thread.Id, mode, content });
+        var thread = new AgentThread
+        {
+            UserId = userId,
+            ArtifactType = AgentThreadType.Answer,
+            HistoryJson = JsonSerializer.Serialize(history),
+            CurrentContent = mode == "final_answer" ? content : null,
+            Status = mode == "final_answer" ? AgentThreadStatus.Complete : AgentThreadStatus.AwaitingContext,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        db.AgentThreads.Add(thread);
+        db.AnalyticsEvents.Add(new AnalyticsEvent { UserId = userId, EventType = AnalyticsEventType.AnswerGenerated, CreatedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+
+        return Results.Ok(new { threadId = thread.Id, mode, content });
+    });
 }).RequireRateLimiting("generation");
 
 // POST /api/v1/threads/{id}/edit — body: { message: string }
@@ -1529,42 +1554,46 @@ api.MapPost("/threads/{id:int}/edit", async (
             : body.Message;
         history.Add(new AgentThreadTurn("user", userTurn));
 
-        var (mode, content) = await answerAgent.RespondAsync(profile, history);
-        history.Add(new AgentThreadTurn("assistant", content));
+        return await WithCreditAsync(db, userId, async () =>
+        {
+            var (mode, content) = await answerAgent.RespondAsync(profile, history);
+            history.Add(new AgentThreadTurn("assistant", content));
 
-        thread.HistoryJson = JsonSerializer.Serialize(history);
-        thread.CurrentContent = mode == "final_answer" ? content : null;
-        thread.Status = mode == "final_answer" ? AgentThreadStatus.Complete : AgentThreadStatus.AwaitingContext;
-        thread.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-        await CreditService.SpendCreditAsync(db, userId);
+            thread.HistoryJson = JsonSerializer.Serialize(history);
+            thread.CurrentContent = mode == "final_answer" ? content : null;
+            thread.Status = mode == "final_answer" ? AgentThreadStatus.Complete : AgentThreadStatus.AwaitingContext;
+            thread.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
 
-        return Results.Ok(new { threadId = thread.Id, mode, content });
+            return Results.Ok(new { threadId = thread.Id, mode, content });
+        });
     }
 
     history.Add(new AgentThreadTurn("user",
         $"Please revise the previous draft with this feedback: {body.Message}\n\n" +
         "Keep following all the rules in your instructions unless the feedback specifically asks to change them."));
 
-    string? text = null;
-    string? answerMode = null;
-    string? answerContent = null;
+    return await WithCreditAsync(db, userId, async () =>
+    {
+        string? text = null;
+        string? answerMode = null;
+        string? answerContent = null;
 
-    if (thread.ArtifactType == AgentThreadType.Cv)
-        text = await cvAgent.ReviseAsync(profile, history);
-    else if (thread.ArtifactType == AgentThreadType.CoverLetter)
-        text = await letterAgent.ReviseAsync(profile, history);
-    else
-        (answerMode, answerContent) = await answerAgent.RespondAsync(profile, history);
+        if (thread.ArtifactType == AgentThreadType.Cv)
+            text = await cvAgent.ReviseAsync(profile, history);
+        else if (thread.ArtifactType == AgentThreadType.CoverLetter)
+            text = await letterAgent.ReviseAsync(profile, history);
+        else
+            (answerMode, answerContent) = await answerAgent.RespondAsync(profile, history);
 
-    history.Add(new AgentThreadTurn("assistant", text ?? answerContent ?? ""));
-    thread.HistoryJson = JsonSerializer.Serialize(history);
-    thread.CurrentContent = text ?? answerContent;
-    thread.UpdatedAt = DateTime.UtcNow;
-    await db.SaveChangesAsync();
-    await CreditService.SpendCreditAsync(db, userId);
+        history.Add(new AgentThreadTurn("assistant", text ?? answerContent ?? ""));
+        thread.HistoryJson = JsonSerializer.Serialize(history);
+        thread.CurrentContent = text ?? answerContent;
+        thread.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
 
-    return Results.Ok(new { threadId = thread.Id, text, mode = answerMode, content = answerContent });
+        return Results.Ok(new { threadId = thread.Id, text, mode = answerMode, content = answerContent });
+    });
 }).RequireRateLimiting("generation");
 
 // "{Applicant} - {Company} - {DocType}.{ext}", gracefully dropping any segment that isn't
