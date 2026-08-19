@@ -17,9 +17,10 @@ export function HelpPage() {
 
       <Section title="Getting started">
         <p>
-          Two things drive every CV, cover letter, and answer: your Background (work history,
-          education, skills) and your Criteria (what you're looking for). Fill both in on the
-          Profile and Criteria pages, the more complete they are, the better the results.
+          Your Background (work history, education, skills) drives every CV, cover letter, and
+          answer we generate, keep it complete and up to date on the Profile page. Job Criteria
+          (what you're looking for) matters most on Tier 2, it's what automatic discovery
+          matching is evaluated against.
         </p>
       </Section>
 

@@ -405,10 +405,15 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
     // owner's is always seeded with real content, so this only ever flags a genuine first-timer.
     var profile = await db.UserProfiles.FindAsync(userId);
     bool needsOnboarding = string.IsNullOrEmpty(profile?.Background);
+    // Same "engaged with the step once" semantics as needsSourceSelection below, not "filled
+    // in something meaningful" — saving from JobCriteriaPage always writes a full YAML
+    // skeleton (defaults included), so this only stays true until the user visits and saves
+    // at least once. The dashboard's separate nudge banner checks for actually-empty content.
+    bool needsCriteria = string.IsNullOrEmpty(profile?.JobCriteria);
     bool needsSourceSelection = user.Tier == UserTier.Tier2 && user.EnabledSources is null;
     bool isOwner = string.Equals(user.Email, ownerEmail, StringComparison.OrdinalIgnoreCase);
 
-    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsSourceSelection, isOwner });
+    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsCriteria, needsSourceSelection, isOwner });
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>

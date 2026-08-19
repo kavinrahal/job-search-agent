@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useParseResumePdf, useUpdateProfile, useUploadResumePdf } from "../hooks/useProfile";
 import { BackgroundEditor } from "../components/BackgroundEditor";
 import { ResumePdfViewer } from "../components/ResumePdfViewer";
 import { parseBackgroundYaml, serializeBackgroundYaml, type BackgroundParseResult } from "../lib/backgroundYaml";
 
 export function ResumeIntakePage() {
-  const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [background, setBackground] = useState<BackgroundParseResult | null>(null);
   const [cvBase, setCvBase] = useState("");
@@ -32,7 +30,10 @@ export function ResumeIntakePage() {
       save.execute({ background: backgroundYaml, cvBase }),
       uploadPdf.execute(file),
     ]);
-    navigate("/");
+    // Hard navigation, not client-side — useMe() only fetches /auth/me once on mount, so
+    // needsOnboarding/needsCriteria need a fresh page load to reflect what was just saved.
+    // A client-side navigate("/") would immediately bounce back here via the stale flag.
+    window.location.href = "/";
   }
 
   return (

@@ -102,6 +102,7 @@ export async function fetchMe(): Promise<{
   tier: string;
   creditBalance: number;
   needsOnboarding: boolean;
+  needsCriteria: boolean;
   needsSourceSelection: boolean;
   isOwner: boolean;
 }> {

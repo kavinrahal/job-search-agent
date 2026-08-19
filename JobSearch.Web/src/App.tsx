@@ -35,6 +35,10 @@ const NAV_LINKS = [
 // or settings without a redirect loop, but still funnels them away from the empty Dashboard.
 const ONBOARDING_ROUTES = ["/profile", "/criteria", "/settings"];
 
+// Next step: Background is saved but Job Criteria has never been visited/saved
+// (needsCriteria). Same escape hatch to Settings as every other step below.
+const CRITERIA_ROUTES = ["/criteria", "/settings"];
+
 // Same idea, one step later: a Tier 2 user who hasn't picked sources yet (needsSourceSelection)
 // can still reach Settings to back out, but everything else bounces to /sources first.
 const SOURCES_ROUTES = ["/sources", "/settings"];
@@ -152,7 +156,8 @@ export default function App() {
 
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
           {me.needsOnboarding && <StepRedirect allowedRoutes={ONBOARDING_ROUTES} to="/profile" />}
-          {!me.needsOnboarding && me.needsSourceSelection && <StepRedirect allowedRoutes={SOURCES_ROUTES} to="/sources" />}
+          {!me.needsOnboarding && me.needsCriteria && <StepRedirect allowedRoutes={CRITERIA_ROUTES} to="/criteria" />}
+          {!me.needsOnboarding && !me.needsCriteria && me.needsSourceSelection && <StepRedirect allowedRoutes={SOURCES_ROUTES} to="/sources" />}
           <Routes>
             <Route path="/"             element={<DashboardPage />} />
             <Route path="/generate"     element={<GeneratePage />} />
