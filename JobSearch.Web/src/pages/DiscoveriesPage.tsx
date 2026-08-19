@@ -83,6 +83,21 @@ function matchStyle(value: string | null): string {
   return MATCH_STYLES[value] ?? "text-gray-600 dark:text-gray-400";
 }
 
+// Relative for anything recent enough that "how fresh is this" is the actual question — an
+// absolute date reads the same whether it was found an hour ago or three days ago, and the
+// whole point of showing this is telling a brand-new posting apart from a stale one at a
+// glance. Falls back to an absolute date once relative time stops being the useful framing.
+function discoveredLabel(iso: string): string {
+  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString("en-AU", { day: "2-digit", month: "short" });
+}
+
 // ---------------------------------------------------------------------------
 // Recommendation badge
 // ---------------------------------------------------------------------------
@@ -248,10 +263,8 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
             </button>
           )}
         </div>
-        <span className="text-xs text-gray-400 dark:text-gray-500">
-          {new Date(posting.discoveredAt).toLocaleDateString("en-AU", {
-            day: "2-digit", month: "short",
-          })}
+        <span className="text-xs text-gray-400 dark:text-gray-500" title={new Date(posting.discoveredAt).toLocaleString("en-AU")}>
+          Found {discoveredLabel(posting.discoveredAt)}
         </span>
       </div>
     </div>
@@ -268,7 +281,11 @@ export function DiscoveriesPage() {
     recommendation: activeTab || undefined,
     pageSize: 100,
   });
-  const postings = data?.items.filter(p => p.recommendation !== "discard") ?? [];
+  // The backend already excludes "discard" whenever no specific recommendation is requested
+  // (i.e. the "All" tab) — no client-side filter needed, and no client-side filter wanted:
+  // filtering after the server's Skip/Take would silently drop real matches whenever discards
+  // dominate the most recent page.
+  const postings = data?.items ?? [];
   const total = data?.total ?? 0;
 
   return (
@@ -309,7 +326,9 @@ export function DiscoveriesPage() {
         <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>
       ) : postings.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white py-12 text-center text-sm text-gray-400 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500">
-          {activeTab === "strong_match"
+          {activeTab === ""
+            ? "No postings found yet. The agent will notify you when it finds one."
+            : activeTab === "strong_match"
             ? "No strong matches yet. The agent will notify you when it finds one."
             : `No ${REC_LABELS[activeTab] ?? activeTab.replace("_", " ")} postings found.`}
         </div>

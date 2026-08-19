@@ -469,9 +469,15 @@ api.MapGet("/discoveries", async (HttpContext ctx, AppDbContext db, string? reco
 
     var query = db.DiscoveredPostings.AsQueryable();
 
+    // No explicit recommendation = the "All" tab, which should still never surface discards —
+    // the user should never see something the agent decided didn't meet their criteria. Doing
+    // this exclusion here (before Skip/Take) matters: filtering it out client-side after
+    // pagination instead would silently drop real strong/good/weak matches whenever discards
+    // dominate the most recent page, since they'd get paginated away before the client-side
+    // filter ever saw them.
     query = recommendation is not null
         ? query.Where(d => d.Recommendation == recommendation)
-        : query.Where(d => d.Recommendation != null && d.Recommendation != "error");
+        : query.Where(d => d.Recommendation != null && d.Recommendation != "error" && d.Recommendation != "discard");
 
     int total = await query.CountAsync();
 
