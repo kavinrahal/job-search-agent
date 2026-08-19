@@ -23,7 +23,7 @@ public class SendGridEmailServiceTests
     public async Task SendAsync_ValidCall_SendsExpectedPayload()
     {
         var handler = new StubHandler();
-        var service = new SendGridEmailService("test-key", "invites@example.com", new HttpClient(handler));
+        var service = new SendGridEmailService("test-key", "invites@example.com", "Work Santa", new HttpClient(handler));
 
         await service.SendAsync("someone@example.com", "You're invited", "Welcome to the beta.");
 
@@ -33,6 +33,7 @@ public class SendGridEmailServiceTests
         Assert.Equal("someone@example.com",
             root.GetProperty("personalizations")[0].GetProperty("to")[0].GetProperty("email").GetString());
         Assert.Equal("invites@example.com", root.GetProperty("from").GetProperty("email").GetString());
+        Assert.Equal("Work Santa", root.GetProperty("from").GetProperty("name").GetString());
         Assert.Equal("You're invited", root.GetProperty("subject").GetString());
         Assert.Equal("Welcome to the beta.", root.GetProperty("content")[0].GetProperty("value").GetString());
     }
@@ -42,7 +43,7 @@ public class SendGridEmailServiceTests
     public async Task SendAsync_ValidCall_SendsApiKeyAsBearerToken()
     {
         var handler = new StubHandler();
-        var service = new SendGridEmailService("my-secret-key", "invites@example.com", new HttpClient(handler));
+        var service = new SendGridEmailService("my-secret-key", "invites@example.com", "Work Santa", new HttpClient(handler));
 
         await service.SendAsync("someone@example.com", "Subject", "Body");
 
@@ -56,7 +57,7 @@ public class SendGridEmailServiceTests
     public async Task SendAsync_ErrorResponse_Throws()
     {
         var handler = new StubHandler(HttpStatusCode.Unauthorized);
-        var service = new SendGridEmailService("bad-key", "invites@example.com", new HttpClient(handler));
+        var service = new SendGridEmailService("bad-key", "invites@example.com", "Work Santa", new HttpClient(handler));
 
         await Assert.ThrowsAsync<HttpRequestException>(() => service.SendAsync("someone@example.com", "Subject", "Body"));
     }

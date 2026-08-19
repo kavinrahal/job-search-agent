@@ -16,14 +16,19 @@ public class SendGridEmailService
     private readonly HttpClient _http;
     private readonly string _apiKey;
     private readonly string _fromEmail;
+    private readonly string _fromName;
 
-    public SendGridEmailService(string apiKey, string fromEmail)
-        : this(apiKey, fromEmail, new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
+    // A bare "invites@worksanta.com" with no display name is itself a small spam/trust
+    // signal on top of domain authentication — a named sender reads as a real product to
+    // both filters and humans.
+    public SendGridEmailService(string apiKey, string fromEmail, string fromName = "Work Santa")
+        : this(apiKey, fromEmail, fromName, new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
 
-    public SendGridEmailService(string apiKey, string fromEmail, HttpClient http)
+    public SendGridEmailService(string apiKey, string fromEmail, string fromName, HttpClient http)
     {
         _apiKey = apiKey;
         _fromEmail = fromEmail;
+        _fromName = fromName;
         _http = http;
     }
 
@@ -32,7 +37,7 @@ public class SendGridEmailService
         var payload = new
         {
             personalizations = new[] { new { to = new[] { new { email = toEmail } } } },
-            from = new { email = _fromEmail },
+            from = new { email = _fromEmail, name = _fromName },
             subject,
             content = new[] { new { type = "text/plain", value = bodyText } },
         };
