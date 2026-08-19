@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useMe } from "../hooks/useAuth";
 import { GeneratePage } from "../pages/GeneratePage";
+import { InfoTooltip } from "./InfoTooltip";
 
 // Generate is Tier1's main feature, so it's embedded here directly (the real component,
 // not a link to it) as the primary content — /generate still exists as its own route too,
@@ -12,8 +13,9 @@ export function Tier1Dashboard() {
     <div className="space-y-6">
       {me && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-5 py-3 shadow-sm">
-          <p className="text-sm text-gray-500">
-            <span className="font-semibold text-gray-800">{me.creditBalance}</span> credits remaining
+          <p className="flex items-center text-sm text-gray-500">
+            <span className="font-semibold text-gray-800">{me.creditBalance}</span>&nbsp;credits remaining
+            <InfoTooltip text="Each CV, cover letter, or answer you generate or revise uses one credit." />
           </p>
           <div className="flex items-center gap-4 text-sm">
             <Link to="/profile" className="text-gray-500 hover:text-gray-700">Profile</Link>

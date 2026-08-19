@@ -7,6 +7,7 @@ import {
   useUpdateApplicationStatus,
 } from "../hooks/useDashboardData";
 import { APPLICATION_STATUSES, type Application, type ApplicationWithEvents } from "../types";
+import { InfoTooltip } from "../components/InfoTooltip";
 
 const STATUS_COLORS: Record<string, string> = {
   Applied:      "bg-blue-100 text-blue-700",
@@ -228,7 +229,10 @@ export function ApplicationsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-700">Applications</h2>
+        <h2 className="flex items-center text-lg font-semibold text-gray-700">
+          Applications
+          <InfoTooltip text="Statuses update automatically when we detect a status-changing email, in order: Applied, Acknowledged, Screening, Interviewing, FinalRound, then Offer or Rejected. Ghosted/Withdrawn are set manually. You can always change a status yourself, out of order if needed." />
+        </h2>
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-400">{total} total</span>
           {!showLogForm && (

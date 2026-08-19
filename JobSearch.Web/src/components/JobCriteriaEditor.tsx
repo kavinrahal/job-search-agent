@@ -1,6 +1,7 @@
 import type { JobCriteriaData, SkillDimension, Disqualifier } from "../lib/jobCriteriaYaml";
 import { LABEL, INPUT, Field, TopicCard, EntryCard, AddButton, AdvancedSection } from "./CardEditor";
 import { COUNTRIES, CURRENCIES, STATES_BY_COUNTRY } from "../lib/regionData";
+import { InfoTooltip } from "./InfoTooltip";
 
 const EMPLOYMENT_TYPES = ["full_time", "part_time", "contract", "casual"];
 const SENIORITY_LEVELS = ["junior", "mid", "senior", "lead"];
@@ -20,11 +21,17 @@ function selectedValues(e: React.ChangeEvent<HTMLSelectElement>): string {
 function TieredMatchFields({ value, onChange }: { value: SkillDimension; onChange: (v: SkillDimension) => void }) {
   const set = <K extends keyof SkillDimension>(key: K, v: SkillDimension[K]) => onChange({ ...value, [key]: v });
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <Field label="Strong match (comma-separated)" value={value.strongMatch} onChange={v => set("strongMatch", v)} />
-      <Field label="Good match (comma-separated)" value={value.goodMatch} onChange={v => set("goodMatch", v)} />
-      <Field label="Acceptable (comma-separated)" value={value.acceptable} onChange={v => set("acceptable", v)} />
-      <Field label="Excluded (comma-separated)" value={value.excluded} onChange={v => set("excluded", v)} />
+    <div>
+      <div className="mb-2 flex items-center text-xs text-gray-400">
+        List the specific skills/tools that fall in each tier below.
+        <InfoTooltip text="These four tiers control how closely a posting's requirements need to match. Strong/good match boost a posting's ranking; acceptable is neutral; excluded rules it out. Leave any tier blank if it doesn't apply." />
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Strong match (comma-separated)" value={value.strongMatch} onChange={v => set("strongMatch", v)} />
+        <Field label="Good match (comma-separated)" value={value.goodMatch} onChange={v => set("goodMatch", v)} />
+        <Field label="Acceptable (comma-separated)" value={value.acceptable} onChange={v => set("acceptable", v)} />
+        <Field label="Excluded (comma-separated)" value={value.excluded} onChange={v => set("excluded", v)} />
+      </div>
     </div>
   );
 }
@@ -49,7 +56,14 @@ function SkillDimensionsSection({ value, onChange }: { value: SkillDimension[]; 
           <EntryCard key={i} summary={dim.name} onRemove={() => remove(i)}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Name" value={dim.name} onChange={v => update(i, { name: v })} />
-              <Field label="Priority (1 = most important)" type="number" min={1} value={dim.priority} onChange={v => update(i, { priority: v })} />
+              <Field
+                label="Priority (1 = most important)"
+                type="number"
+                min={1}
+                value={dim.priority}
+                onChange={v => update(i, { priority: v })}
+                tooltip="Lower numbers matter more when ranking a posting. If two dimensions matter equally, give them the same number."
+              />
             </div>
             <TieredMatchFields value={dim} onChange={v => update(i, v)} />
             <Field label="Notes" value={dim.notes} onChange={v => update(i, { notes: v })} multiline />
@@ -72,6 +86,7 @@ function DisqualifiersSection({ value, onChange }: { value: Disqualifier[]; onCh
       <p className="text-xs text-gray-400">
         Anything that should end evaluation immediately. Signals are the exact phrases to
         watch for in a posting (one per line). Optional, a description alone is enough.
+        <InfoTooltip text="Disqualifiers rule a posting out entirely. Orange flags and FYI context (below) don't rule anything out, they just add a note to the evaluation." />
       </p>
       <div className="space-y-3">
         {value.map((dq, i) => (
@@ -281,6 +296,7 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
         <p className="text-xs text-gray-400">
           Things worth surfacing alongside a recommendation, without disqualifying it. One
           per line.
+          <InfoTooltip text="A negative-leaning note (e.g. a possible downside), unlike FYI context below which is neutral." />
         </p>
         <Field label="Orange flags (one per line)" value={value.orangeFlags} onChange={v => set("orangeFlags", v)} multiline />
       </TopicCard>
@@ -288,6 +304,7 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
       <TopicCard title="FYI context" defaultOpen={false}>
         <p className="text-xs text-gray-400">
           Worth mentioning but not a flag or a disqualifier. One per line.
+          <InfoTooltip text="A neutral note worth knowing, not a downside. Use Orange flags above for anything negative-leaning." />
         </p>
         <Field label="FYI context (one per line)" value={value.fyiContext} onChange={v => set("fyiContext", v)} multiline />
       </TopicCard>

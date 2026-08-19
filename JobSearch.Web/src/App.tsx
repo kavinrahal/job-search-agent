@@ -9,6 +9,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { LandingPage } from "./pages/LandingPage";
 import { GeneratePage } from "./pages/GeneratePage";
 import { SupportPage } from "./pages/SupportPage";
+import { HelpPage } from "./pages/HelpPage";
 import { SourcesPage } from "./pages/SourcesPage";
 import { useMe, useLogout } from "./hooks/useAuth";
 
@@ -25,6 +26,7 @@ const NAV_LINKS = [
   { to: "/profile",      label: "Profile"      },
   { to: "/criteria",     label: "Criteria"     },
   { to: "/settings",     label: "Settings"     },
+  { to: "/help",         label: "Help"         },
   { to: "/support",      label: "Support"      },
 ];
 
@@ -160,6 +162,7 @@ export default function App() {
             <Route path="/profile"      element={<ResumeIntakePage />} />
             <Route path="/criteria"     element={<JobCriteriaPage />} />
             <Route path="/settings"     element={<SettingsPage />} />
+            <Route path="/help"         element={<HelpPage />} />
             <Route path="/support"      element={<SupportPage />} />
           </Routes>
         </main>

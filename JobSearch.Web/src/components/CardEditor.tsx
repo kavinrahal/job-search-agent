@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { load as loadYaml, dump as dumpYaml } from "js-yaml";
+import { InfoTooltip } from "./InfoTooltip";
 
 // Shared building blocks for the topic-card editing pattern used by BackgroundEditor and
 // JobCriteriaEditor — a page-level topic (Personal, Experience, Location, Salary, ...) each
@@ -9,13 +10,16 @@ import { load as loadYaml, dump as dumpYaml } from "js-yaml";
 export const LABEL = "mb-1 block text-xs font-medium text-gray-500";
 export const INPUT = "w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300";
 
-export function Field({ label, value, onChange, multiline, type = "text", min, max }: {
+export function Field({ label, value, onChange, multiline, type = "text", min, max, tooltip }: {
   label: string; value: string; onChange: (v: string) => void; multiline?: boolean;
-  type?: "text" | "email" | "tel" | "number" | "month"; min?: number; max?: number;
+  type?: "text" | "email" | "tel" | "number" | "month"; min?: number; max?: number; tooltip?: string;
 }) {
   return (
     <div>
-      <label className={LABEL}>{label}</label>
+      <label className={LABEL}>
+        {label}
+        {tooltip && <InfoTooltip text={tooltip} />}
+      </label>
       {multiline ? (
         <textarea className={INPUT} rows={3} value={value} onChange={e => onChange(e.target.value)} />
       ) : (

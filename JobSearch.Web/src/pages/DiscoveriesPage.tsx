@@ -1,6 +1,7 @@
 import { useState, Fragment } from "react";
 import { useDiscoveries } from "../hooks/useDashboardData";
 import type { DiscoveredPosting } from "../types";
+import { InfoTooltip } from "../components/InfoTooltip";
 
 // ---------------------------------------------------------------------------
 // Recommendation config
@@ -272,7 +273,10 @@ export function DiscoveriesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-700">Discoveries</h2>
+        <h2 className="flex items-center text-lg font-semibold text-gray-700">
+          Discoveries
+          <InfoTooltip text="Postings found automatically from your sources, ranked against your job criteria. Strong/Good match are worth a look; Weak match is a stretch; Discard didn't meet your criteria and is hidden by default." />
+        </h2>
         <span className="text-sm text-gray-400">{total} total</span>
       </div>
 

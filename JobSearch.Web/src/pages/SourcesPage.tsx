@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { useSources, useUpdateSources, useUpdateGmailTrackingMode, useGmailForwardingStatus } from "../hooks/useSources";
 import { gmailOAuthStartUrl } from "../api";
 import type { SourcesResponse } from "../types";
+import { InfoTooltip } from "../components/InfoTooltip";
 
 const LABEL = "mb-2 block text-sm font-medium text-gray-700";
 
@@ -121,7 +122,10 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <label className={LABEL}>Application status tracking</label>
+      <label className={LABEL}>
+        Application status tracking
+        <InfoTooltip text="This choice only affects how status changes (like a rejection or an interview invite) get detected automatically. You can always update statuses yourself either way." />
+      </label>
       <p className="mb-3 text-sm text-gray-500">
         How should we track the status of jobs you've applied to? Pick whichever you're
         comfortable with.
@@ -233,7 +237,10 @@ export function SourcesPage() {
       )}
 
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <label className={LABEL}>Automatic</label>
+        <label className={LABEL}>
+          Automatic
+          <InfoTooltip text="Runs on its own, nothing to set up. We search these directly for postings matching your criteria." />
+        </label>
         <div className="flex flex-wrap gap-2">
           {automatic.map(s => (
             <SourceToggle key={s.key} label={s.label} active={selected.includes(s.key)} onClick={() => toggle(s.key)} />
@@ -242,7 +249,10 @@ export function SourcesPage() {
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <label className={LABEL}>Alert-based, needs setup</label>
+        <label className={LABEL}>
+          Alert-based, needs setup
+          <InfoTooltip text="You need a saved job alert already set up on that platform. Forward its emails to us via Gmail (next step) and we'll extract the postings from it." />
+        </label>
         <div className="flex flex-wrap gap-2">
           {alertBased.map(s => (
             <SourceToggle key={s.key} label={s.label} active={selected.includes(s.key)} onClick={() => toggle(s.key)} />
