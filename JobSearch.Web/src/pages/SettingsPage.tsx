@@ -105,7 +105,7 @@ export function SettingsPage() {
       </div>
       <p className="text-sm text-gray-500">
         Edit your background and job criteria directly. Changes apply to the next CV, cover
-        letter, answer, or posting evaluation you request — nothing here needs a separate re-run.
+        letter, answer, or posting evaluation you request. Nothing here needs a separate re-run.
       </p>
 
       <div>
@@ -121,7 +121,7 @@ export function SettingsPage() {
           <ResumePdfViewer source={resumePdfUrl()} />
         ) : (
           <p className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
-            No PDF on file — your base CV comes from pasted text.
+            No PDF on file. Your base CV comes from pasted text.
           </p>
         )}
         <label className="mt-2 inline-block cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-700">
@@ -166,7 +166,7 @@ export function SettingsPage() {
           <p className="mb-1 text-sm font-medium text-blue-700">Tier 2 (Beta)</p>
           <p className="mb-3 text-sm text-gray-600">
             Unlock automatic job discovery, application tracking, and inbox alert forwarding.
-            Free while the beta is running — no payment required yet.
+            Free while the beta is running, no payment required yet.
           </p>
           <button
             onClick={handleUpgrade}
@@ -206,7 +206,7 @@ export function SettingsPage() {
           {inviteResult && (
             <p className="mt-2 text-sm text-emerald-600">
               {inviteResult.email} can now sign in.
-              {inviteResult.emailSent ? " Invite email sent." : " (Email not sent — SendGrid not configured yet, let them know another way.)"}
+              {inviteResult.emailSent ? " Invite email sent." : " (Email not sent, SendGrid not configured yet, let them know another way.)"}
             </p>
           )}
           {invite.error && <p className="mt-2 text-sm text-red-700">{invite.error}</p>}
@@ -217,7 +217,7 @@ export function SettingsPage() {
         <p className="mb-1 text-sm font-medium text-red-700">Danger zone</p>
         <p className="mb-3 text-sm text-gray-500">
           Cancels your account and signs you out. Your data is kept, not deleted, in case you
-          come back — you just won't be able to sign in again unless it's reactivated.
+          come back. You just won't be able to sign in again unless it's reactivated.
         </p>
         <button
           onClick={handleCancelAccount}

@@ -85,14 +85,14 @@ export function AdvancedSection({ value, onChange }: { value: Record<string, unk
       onChange((loadYaml(text) ?? {}) as Record<string, unknown>);
       setError(null);
     } catch {
-      setError("Invalid YAML — changes not applied. Fix the syntax and click away again.");
+      setError("Invalid YAML. Changes not applied, fix the syntax and click away again.");
     }
   }
 
   return (
     <TopicCard title="Advanced (raw YAML)" defaultOpen={false}>
       <p className="text-xs text-gray-400">
-        Sections here aren't yet supported by the structured editor above — edit as YAML directly.
+        Sections here aren't yet supported by the structured editor above. Edit as YAML directly.
       </p>
       <textarea
         className={`${INPUT} font-mono`}

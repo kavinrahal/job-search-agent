@@ -16,7 +16,7 @@ public static class EvalFormatter
         };
 
         var sb = new StringBuilder();
-        sb.AppendLine($"<b>{ev.Company} — {ev.RoleTitle}</b>");
+        sb.AppendLine($"<b>{ev.Company} - {ev.RoleTitle}</b>");
         sb.AppendLine(via is not null
             ? $"<b>{rec}</b> ({via})"
             : $"<b>Recommendation: {rec}</b>");

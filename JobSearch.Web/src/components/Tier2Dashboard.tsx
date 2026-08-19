@@ -56,7 +56,7 @@ function KpiStrip({ summary, onStatusClick }: { summary: Summary; onStatusClick:
               onClick={() => onStatusClick(status)}
               className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${STATUS_COLORS[status] ?? "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
             >
-              {status} — {count}
+              {status}: {count}
             </button>
           ))}
       </div>
@@ -108,7 +108,7 @@ function RecentApplications() {
             <li key={app.id} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-gray-800">{app.company}</p>
-                <p className="truncate text-xs text-gray-400">{app.roleTitle || "—"}</p>
+                <p className="truncate text-xs text-gray-400">{app.roleTitle || "-"}</p>
               </div>
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[app.status] ?? "bg-gray-100 text-gray-600"}`}>
                 {app.status}
@@ -191,7 +191,7 @@ function ActivityFeed() {
                 <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
                   <p className="min-w-0 truncate font-medium text-gray-800">
                     {item.company}
-                    {item.roleTitle && <span className="ml-1 font-normal text-gray-400">— {item.roleTitle}</span>}
+                    {item.roleTitle && <span className="ml-1 font-normal text-gray-400">- {item.roleTitle}</span>}
                   </p>
                   <span className="shrink-0 text-xs text-gray-400">
                     {new Date(item.occurredAt).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" })}

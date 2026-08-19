@@ -9,7 +9,7 @@ function currencyList(): { code: string; label: string }[] {
     return codes
       .map(code => {
         const name = display.of(code);
-        return { code, label: name && name !== code ? `${code} — ${name}` : code };
+        return { code, label: name && name !== code ? `${code} (${name})` : code };
       })
       .sort((a, b) => a.code.localeCompare(b.code));
   } catch {

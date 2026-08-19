@@ -40,7 +40,7 @@ function SkillDimensionsSection({ value, onChange }: { value: SkillDimension[]; 
   return (
     <TopicCard title="Skill dimensions" defaultOpen={false}>
       <p className="text-xs text-gray-400">
-        Any skill, tool, certification, or knowledge area worth ranking candidates on — one
+        Any skill, tool, certification, or knowledge area worth ranking candidates on. One
         entry per dimension, in priority order. Works for any profession: "Cloud platform"
         for an engineer, "EHR system experience" for a nurse, "Knife skills" for a chef.
       </p>
@@ -71,7 +71,7 @@ function DisqualifiersSection({ value, onChange }: { value: Disqualifier[]; onCh
     <TopicCard title="Disqualifiers">
       <p className="text-xs text-gray-400">
         Anything that should end evaluation immediately. Signals are the exact phrases to
-        watch for in a posting (one per line) — optional, a description alone is enough.
+        watch for in a posting (one per line). Optional, a description alone is enough.
       </p>
       <div className="space-y-3">
         {value.map((dq, i) => (
@@ -151,7 +151,7 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
             ) : (
               <input
                 className={INPUT}
-                placeholder="No declared states for the selected country — type freely"
+                placeholder="No declared states for the selected country, type freely"
                 value={value.states}
                 onChange={e => set("states", e.target.value)}
               />
@@ -279,7 +279,7 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
 
       <TopicCard title="Orange flags" defaultOpen={false}>
         <p className="text-xs text-gray-400">
-          Things worth surfacing alongside a recommendation, without disqualifying it — one
+          Things worth surfacing alongside a recommendation, without disqualifying it. One
           per line.
         </p>
         <Field label="Orange flags (one per line)" value={value.orangeFlags} onChange={v => set("orangeFlags", v)} multiline />
@@ -287,7 +287,7 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
 
       <TopicCard title="FYI context" defaultOpen={false}>
         <p className="text-xs text-gray-400">
-          Worth mentioning but not a flag or a disqualifier — one per line.
+          Worth mentioning but not a flag or a disqualifier. One per line.
         </p>
         <Field label="FYI context (one per line)" value={value.fyiContext} onChange={v => set("fyiContext", v)} multiline />
       </TopicCard>

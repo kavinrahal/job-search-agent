@@ -67,7 +67,7 @@ export function ResumeIntakePage() {
       {background && (
         <div className="space-y-4">
           <div>
-            <p className="mb-2 text-sm font-medium text-gray-700">Background — review and edit before saving</p>
+            <p className="mb-2 text-sm font-medium text-gray-700">Background: review and edit before saving</p>
             <BackgroundEditor value={background} onChange={setBackground} />
           </div>
 

@@ -28,7 +28,7 @@ export function Tier1Dashboard() {
         <p className="mb-1 text-sm font-medium text-blue-700">Tier 2 (Beta)</p>
         <p className="mb-3 text-sm text-gray-600">
           Unlock automatic job discovery, application tracking, and inbox alert forwarding.
-          Free while the beta is running — no payment required yet.
+          Free while the beta is running, no payment required yet.
         </p>
         <Link
           to="/settings"

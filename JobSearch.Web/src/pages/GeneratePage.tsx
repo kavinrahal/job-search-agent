@@ -156,7 +156,7 @@ export function GeneratePage() {
             />
             {showHintFields && (
               <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                <p className="text-xs text-gray-500">Couldn't fetch that link directly — search for it instead.</p>
+                <p className="text-xs text-gray-500">Couldn't fetch that link directly. Search for it instead.</p>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     value={postingTitle}

@@ -169,7 +169,7 @@ public static class ApplicationTracker
             FromStatus = null,
             ToStatus = ApplicationStatus.Applied,
             MessageId = email.MessageId,
-            Summary = $"Application tracked: {company}{(role.Length > 0 ? $" — {role}" : "")}",
+            Summary = $"Application tracked: {company}{(role.Length > 0 ? $" - {role}" : "")}",
             OccurredAt = email.ReceivedAt.UtcDateTime,
         });
 
@@ -180,7 +180,7 @@ public static class ApplicationTracker
         string current, EmailClassification clf)
     {
         string co = clf.Company;
-        string ro = clf.RoleTitle.Length > 0 ? $" — {clf.RoleTitle}" : "";
+        string ro = clf.RoleTitle.Length > 0 ? $" - {clf.RoleTitle}" : "";
 
         return clf.Category switch
         {
@@ -211,7 +211,7 @@ public static class ApplicationTracker
 
     private static string BuildMessage(EmailClassification clf, RawEmail email)
     {
-        string ro = clf.RoleTitle.Length > 0 ? $" — {clf.RoleTitle}" : "";
+        string ro = clf.RoleTitle.Length > 0 ? $" - {clf.RoleTitle}" : "";
         string subj = email.Subject.Length > 100 ? email.Subject[..100] : email.Subject;
         return clf.Category switch
         {

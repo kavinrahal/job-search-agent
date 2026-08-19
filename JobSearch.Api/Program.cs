@@ -418,7 +418,7 @@ app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>
 }).RequireAuthorization();
 
 app.MapGet("/api/v1/auth/denied", () =>
-    Results.Text("Access denied. Sign-in failed — please try again.")
+    Results.Text("Access denied. Sign-in failed, please try again.")
 ).AllowAnonymous();
 
 // ---------------------------------------------------------------------------
@@ -624,7 +624,7 @@ api.MapPost("/applications", async (HttpContext ctx, AppDbContext db, UserSecret
         EventType = ApplicationEventType.ManualUpdate,
         FromStatus = null,
         ToStatus = ApplicationStatus.Applied,
-        Summary = $"Manually logged: {application.Company} — {application.RoleTitle}",
+        Summary = $"Manually logged: {application.Company} - {application.RoleTitle}",
         OccurredAt = now,
     });
     await db.SaveChangesAsync();
@@ -1174,7 +1174,7 @@ api.MapPost("/admin/invite", async (HttpContext ctx, InviteRequest body, AppDbCo
         {
             await emailSender.SendAsync(email, "You're invited to Work Santa",
                 $"You've been invited to Work Santa. Sign in with this Google account at " +
-                $"{frontendUrl ?? "the app"} to get started — you'll have full Tier 2 access right away.");
+                $"{frontendUrl ?? "the app"} to get started. You'll have full Tier 2 access right away.");
             emailSent = true;
         }
         catch (Exception ex)
@@ -1296,7 +1296,7 @@ static async Task<(string? PostingText, string EvalJson, string? Company, string
                 return (null, "{}", null, $"Couldn't fetch that URL, and no confident match for \"{postingTitle}\" on Jora or Adzuna either. Paste the posting text instead.");
             }
 
-            return (null, "{}", null, "Could not fetch that URL — this happens with Seek/Jora/LinkedIn links specifically. Add the job title (and company, if known) and we'll try finding it, or paste the posting text instead.");
+            return (null, "{}", null, "Could not fetch that URL. This happens with Seek/Jora/LinkedIn links specifically. Add the job title (and company, if known) and we'll try finding it, or paste the posting text instead.");
         }
     }
 
@@ -1941,7 +1941,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
                     storedTitle.Contains("Senior", StringComparison.OrdinalIgnoreCase))
                 {
                     await telegram.SendMessageAsync(
-                        $"Skipped — this posting is Senior-level ({storedTitle}). " +
+                        $"Skipped. This posting is Senior-level ({storedTitle}). " +
                         "No CV or cover letter generated.", parseMode: null);
                     return;
                 }
@@ -1979,7 +1979,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
                     if (postingText is null)
                     {
                         await telegram.SendMessageAsync(
-                            "Couldn't fetch that posting — it may have expired or been taken down, " +
+                            "Couldn't fetch that posting. It may have expired or been taken down, " +
                             "and I don't have a cached copy of it either. Reply to this message with " +
                             "the job description text and I'll generate it from that instead.\n\n" +
                             $"{command} {resolvedUrl}", parseMode: null);
@@ -2020,8 +2020,8 @@ app.MapPost("/api/v1/telegram/webhook", async (
                 await telegram.SendMessageAsync(
                     "Commands:\n" +
                     "• Send a job URL to evaluate a posting\n" +
-                    "• <code>/cv &lt;url&gt;</code> — tailored CV\n" +
-                    "• <code>/letter &lt;url&gt;</code> — cover letter\n" +
+                    "• <code>/cv &lt;url&gt;</code>: tailored CV\n" +
+                    "• <code>/letter &lt;url&gt;</code>: cover letter\n" +
                     "Or reply to a job notification with <code>/cv</code> or <code>/letter</code>.");
                 return;
             }

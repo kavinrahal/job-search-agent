@@ -34,7 +34,7 @@ export function SupportPage() {
           >
             {loading ? "Sending…" : "Send"}
           </button>
-          {sent && <span className="text-sm text-emerald-600">Sent — we'll get back to you.</span>}
+          {sent && <span className="text-sm text-emerald-600">Sent. We'll get back to you.</span>}
         </div>
       </div>
 

@@ -94,7 +94,7 @@ function ApplicationCard({ app, onStatusChanged }: { app: Application; onStatusC
       >
         <div className="min-w-0">
           <p className="font-semibold text-gray-800">{app.company}</p>
-          <p className="mt-0.5 truncate text-sm text-gray-500">{app.roleTitle || "—"}</p>
+          <p className="mt-0.5 truncate text-sm text-gray-500">{app.roleTitle || "-"}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <StatusSelect status={app.status} onChange={handleStatusChange} />
@@ -187,8 +187,8 @@ function LogApplicationForm({ onDone }: { onDone: () => void }) {
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
           />
           <p className="mt-1 text-xs text-gray-400">
-            Only used if you're on filter-only tracking — installs a Gmail filter forwarding
-            mail from this domain. A rough guess, not verified — check it's right.
+            Only used if you're on filter-only tracking. Installs a Gmail filter forwarding
+            mail from this domain. A rough guess, not verified, check it's right.
           </p>
         </div>
       </div>

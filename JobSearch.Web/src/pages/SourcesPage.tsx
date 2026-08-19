@@ -39,7 +39,7 @@ function GmailForwardingSetup() {
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
         <p className="text-sm font-medium text-emerald-700">
-          ✓ Forwarding confirmed — the job-alert filter is installed automatically.
+          ✓ Forwarding confirmed. The job-alert filter is installed automatically.
         </p>
       </div>
     );
@@ -49,10 +49,10 @@ function GmailForwardingSetup() {
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <label className={LABEL}>Set up alert forwarding</label>
       <p className="mb-3 text-sm text-gray-500">
-        Gmail requires you to add this yourself — in Gmail, go to Settings → Forwarding and
+        Gmail requires you to add this yourself. In Gmail, go to Settings → Forwarding and
         POP/IMAP → Add a forwarding address, paste the address below, then confirm it via
         the email Gmail sends you. Once confirmed, the app automatically installs a filter
-        that forwards matching job alerts here — no manual filter setup needed.
+        that forwards matching job alerts here, no manual filter setup needed.
       </p>
       {status && (
         <div className="mb-3 flex items-center gap-2">
@@ -88,7 +88,7 @@ const TRACKING_MODES: { value: "full" | "filter" | "manual"; label: string; desc
     label: "Full inbox access",
     description:
       "We read your inbox to catch application status changes automatically, regardless of " +
-      "which company emails you — the most complete option. This is the best experience if " +
+      "which company emails you. This is the most complete option, and the best experience if " +
       "you're comfortable granting it.",
   },
   {
@@ -96,14 +96,14 @@ const TRACKING_MODES: { value: "full" | "filter" | "manual"; label: string; desc
     label: "Filter only (no inbox access)",
     description:
       "We never read your inbox. When you log an application, we install a Gmail filter that " +
-      "simply forwards mail from that company's domain to your in-app address — the same " +
+      "simply forwards mail from that company's domain to your in-app address, the same " +
       "mechanism your job alerts already use. Less automatic: misses anything from a " +
       "different domain, and can't tell a rejection from an interview invite by content alone.",
   },
   {
     value: "manual",
     label: "Manual only",
-    description: "No automatic tracking at all — you log applications and update their status yourself.",
+    description: "No automatic tracking at all. You log applications and update their status yourself.",
   },
 ];
 
@@ -170,7 +170,7 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
         </div>
       )}
       {mode === "full" && sources.gmailReadonlyConnected && (
-        <p className="mt-3 text-sm text-emerald-600">✓ Connected — tracking automatically.</p>
+        <p className="mt-3 text-sm text-emerald-600">✓ Connected, tracking automatically.</p>
       )}
     </div>
   );
@@ -218,7 +218,7 @@ export function SourcesPage() {
       <p className="text-sm text-gray-500">
         Pick where job postings should come from. Automatic sources need nothing from you.
         Alert-based sources need a job alert set up on that platform, forwarded in once you
-        connect Gmail — that's the next step.
+        connect Gmail. That's the next step.
       </p>
 
       {gmailStatus === "connected" && (
@@ -228,7 +228,7 @@ export function SourcesPage() {
       )}
       {gmailStatus === "error" && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          Couldn't connect Gmail — please try again.
+          Couldn't connect Gmail. Please try again.
         </div>
       )}
 
@@ -242,7 +242,7 @@ export function SourcesPage() {
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <label className={LABEL}>Alert-based — needs setup</label>
+        <label className={LABEL}>Alert-based, needs setup</label>
         <div className="flex flex-wrap gap-2">
           {alertBased.map(s => (
             <SourceToggle key={s.key} label={s.label} active={selected.includes(s.key)} onClick={() => toggle(s.key)} />
@@ -256,7 +256,7 @@ export function SourcesPage() {
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <label className={LABEL}>Connect Gmail</label>
           <p className="mb-3 text-sm text-gray-500">
-            Lets the app manage a filter that forwards matching job alerts to us — it can only
+            Lets the app manage a filter that forwards matching job alerts to us. It can only
             manage filters and settings, never read your mail.
           </p>
           <a

@@ -31,7 +31,7 @@ function ExperienceSection({ value, onChange }: { value: ExperienceEntry[]; onCh
     <TopicCard title="Experience">
       <div className="space-y-3">
         {value.map((entry, i) => (
-          <EntryCard key={i} summary={[entry.role, entry.company].filter(Boolean).join(" — ")} onRemove={() => remove(i)}>
+          <EntryCard key={i} summary={[entry.role, entry.company].filter(Boolean).join(" at ")} onRemove={() => remove(i)}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Company" value={entry.company} onChange={v => update(i, { company: v })} />
               <Field label="Role" value={entry.role} onChange={v => update(i, { role: v })} />
@@ -107,7 +107,7 @@ function EducationSection({ value, onChange }: { value: EducationEntry[]; onChan
     <TopicCard title="Education">
       <div className="space-y-3">
         {value.map((entry, i) => (
-          <EntryCard key={i} summary={[entry.degree, entry.institution].filter(Boolean).join(" — ")} onRemove={() => remove(i)}>
+          <EntryCard key={i} summary={[entry.degree, entry.institution].filter(Boolean).join(" at ")} onRemove={() => remove(i)}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Institution" value={entry.institution} onChange={v => update(i, { institution: v })} />
               <Field label="Degree" value={entry.degree} onChange={v => update(i, { degree: v })} />
@@ -222,8 +222,8 @@ export function BackgroundEditor({ value, onChange }: { value: BackgroundParseRe
     return (
       <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <p className="text-xs text-amber-600">
-          This background doesn't parse as structured YAML, so it's shown as raw text instead —
-          nothing has been lost, edit it directly below.
+          This background doesn't parse as structured YAML, so it's shown as raw text instead.
+          Nothing has been lost, edit it directly below.
         </p>
         <textarea
           className={`${INPUT} font-mono`}
