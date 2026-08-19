@@ -29,7 +29,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-pdf": "^10.4.1",
-    "react-router-dom": "^7.17.0",
+    "react-router-dom": "^7.18.2",
     "tailwindcss": "^4.3.1"
   }
 }
