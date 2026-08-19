@@ -48,7 +48,7 @@ function ExperienceSection({ value, onChange }: { value: ExperienceEntry[]; onCh
                     onChange={e => update(i, { dates: { ...entry.dates, end: e.target.value } })}
                   />
                 )}
-                <label className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                <label className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                   <input
                     type="checkbox"
                     checked={entry.dates.end.trim().toLowerCase() === "present"}
@@ -80,7 +80,7 @@ function ExperienceSection({ value, onChange }: { value: ExperienceEntry[]; onCh
                     />
                     <button
                       onClick={() => update(i, { achievements: entry.achievements.filter((_, idx) => idx !== ai) })}
-                      className="text-xs text-red-500 hover:text-red-700"
+                      className="text-xs text-red-500 transition-colors hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                     >
                       &#10005;
                     </button>
@@ -192,7 +192,7 @@ function SkillsSection({ value, onChange }: { value: Record<string, string[]>; o
                 onBlur={e => setItems(category, e.target.value)}
               />
             </div>
-            <button onClick={() => removeCategory(category)} className="text-xs text-red-500 hover:text-red-700">&#10005;</button>
+            <button onClick={() => removeCategory(category)} className="text-xs text-red-500 transition-colors hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">&#10005;</button>
           </div>
         ))}
         <AddButton onClick={addCategory}>+ Add category</AddButton>
@@ -220,8 +220,8 @@ function StructuredBackgroundEditor({ value, onChange }: { value: BackgroundData
 export function BackgroundEditor({ value, onChange }: { value: BackgroundParseResult; onChange: (v: BackgroundParseResult) => void }) {
   if (!value.ok) {
     return (
-      <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p className="text-xs text-amber-600">
+      <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <p className="text-xs text-amber-600 dark:text-amber-400">
           This background doesn't parse as structured YAML, so it's shown as raw text instead.
           Nothing has been lost, edit it directly below.
         </p>

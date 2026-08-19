@@ -5,16 +5,21 @@ import { gmailOAuthStartUrl } from "../api";
 import type { SourcesResponse } from "../types";
 import { InfoTooltip } from "../components/InfoTooltip";
 import { PageTagline } from "../components/PageTagline";
+import { CARD, PRIMARY_BUTTON as PRIMARY_BUTTON_BASE } from "../lib/styles";
 
-const LABEL = "mb-2 block text-sm font-medium text-gray-700";
+const LABEL = "mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200";
+// Some usages below are <a> tags rather than <button>, hence the inline-block.
+const PRIMARY_BUTTON = `inline-block ${PRIMARY_BUTTON_BASE}`;
 
 function SourceToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-        active ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
+        active
+          ? "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+          : "bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
       }`}
     >
       {label}
@@ -39,8 +44,8 @@ function GmailForwardingSetup() {
 
   if (status?.status === "verified") {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
-        <p className="text-sm font-medium text-emerald-700">
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-500/10">
+        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
           ✓ Forwarding confirmed. The job-alert filter is installed automatically.
         </p>
       </div>
@@ -48,9 +53,9 @@ function GmailForwardingSetup() {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className={CARD}>
       <label className={LABEL}>Set up alert forwarding</label>
-      <p className="mb-3 text-sm text-gray-500">
+      <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
         Gmail requires you to add this yourself. In Gmail, go to Settings → Forwarding and
         POP/IMAP → Add a forwarding address, paste the address below, then confirm it via
         the email Gmail sends you. Once confirmed, the app automatically installs a filter
@@ -58,28 +63,24 @@ function GmailForwardingSetup() {
       </p>
       {status && (
         <div className="mb-3 flex items-center gap-2">
-          <code className="rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700">{status.address}</code>
+          <code className="rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200">{status.address}</code>
           <button
             onClick={handleCopy}
-            className="rounded-lg px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-violet-600 transition-colors hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-500/10"
           >
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
       )}
       <div className="flex items-center gap-3">
-        <button
-          onClick={reload}
-          disabled={loading}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-        >
+        <button onClick={reload} disabled={loading} className={PRIMARY_BUTTON}>
           {loading ? "Checking…" : "Check status"}
         </button>
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-gray-500 dark:text-gray-400">
           {status?.status === "pending" ? "Waiting for you to confirm in Gmail" : status?.status === "not_added" ? "Not added yet" : ""}
         </span>
       </div>
-      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-2 text-sm text-red-700 dark:text-red-400">{error}</p>}
     </div>
   );
 }
@@ -122,12 +123,12 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className={CARD}>
       <label className={LABEL}>
         Application status tracking
         <InfoTooltip text="This choice only affects how status changes (like a rejection or an interview invite) get detected automatically. You can always update statuses yourself either way." />
       </label>
-      <p className="mb-3 text-sm text-gray-500">
+      <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
         How should we track the status of jobs you've applied to? Pick whichever you're
         comfortable with.
       </p>
@@ -138,44 +139,38 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
             type="button"
             disabled={loading}
             onClick={() => select(m.value)}
-            className={`block w-full rounded-lg border p-3 text-left transition-colors ${
+            className={`block w-full rounded-lg border p-3 text-left transition-colors duration-150 ${
               mode === m.value
-                ? "border-blue-300 bg-blue-50"
-                : "border-gray-200 bg-white hover:bg-gray-50"
+                ? "border-violet-300 bg-violet-50 dark:border-violet-700 dark:bg-violet-500/10"
+                : "border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
             }`}
           >
-            <p className={`text-sm font-medium ${mode === m.value ? "text-blue-700" : "text-gray-700"}`}>
+            <p className={`text-sm font-medium ${mode === m.value ? "text-violet-700 dark:text-violet-300" : "text-gray-700 dark:text-gray-200"}`}>
               {m.label}
             </p>
-            <p className="mt-0.5 text-xs text-gray-500">{m.description}</p>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{m.description}</p>
           </button>
         ))}
       </div>
 
       {mode === "filter" && !sources.gmailConnected && (
         <div className="mt-3 flex items-center gap-3">
-          <a
-            href={gmailOAuthStartUrl()}
-            className="inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-          >
+          <a href={gmailOAuthStartUrl()} className={PRIMARY_BUTTON}>
             Connect Gmail
           </a>
-          <span className="text-sm text-gray-500">Needed to install per-company filters.</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">Needed to install per-company filters.</span>
         </div>
       )}
       {mode === "full" && !sources.gmailReadonlyConnected && (
         <div className="mt-3 flex items-center gap-3">
-          <a
-            href={gmailOAuthStartUrl("full")}
-            className="inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-          >
+          <a href={gmailOAuthStartUrl("full")} className={PRIMARY_BUTTON}>
             Grant full inbox access
           </a>
-          <span className="text-sm text-gray-500">Redirects to Google's consent screen.</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">Redirects to Google's consent screen.</span>
         </div>
       )}
       {mode === "full" && sources.gmailReadonlyConnected && (
-        <p className="mt-3 text-sm text-emerald-600">✓ Connected, tracking automatically.</p>
+        <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">✓ Connected, tracking automatically.</p>
       )}
     </div>
   );
@@ -209,7 +204,7 @@ export function SourcesPage() {
     if (!result.enabled.some(k => alertKeys.has(k))) navigate("/");
   }
 
-  if (loadingSources) return <div className="py-12 text-center text-sm text-gray-400">Loading…</div>;
+  if (loadingSources) return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
 
   const automatic = data?.catalog.filter(c => c.automatic) ?? [];
   const alertBased = data?.catalog.filter(c => !c.automatic) ?? [];
@@ -219,26 +214,26 @@ export function SourcesPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-700">Choose your sources</h2>
+      <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Choose your sources</h2>
       <PageTagline>Tell us where to look, and how you want applications tracked.</PageTagline>
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Pick where job postings should come from. Automatic sources need nothing from you.
         Alert-based sources need a job alert set up on that platform, forwarded in once you
         connect Gmail. That's the next step.
       </p>
 
       {gmailStatus === "connected" && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-500/10 dark:text-emerald-300">
           Gmail connected.
         </div>
       )}
       {gmailStatus === "error" && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
           Couldn't connect Gmail. Please try again.
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className={CARD}>
         <label className={LABEL}>
           Automatic
           <InfoTooltip text="Runs on its own, nothing to set up. We search these directly for postings matching your criteria." />
@@ -250,7 +245,7 @@ export function SourcesPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className={CARD}>
         <label className={LABEL}>
           Alert-based, needs setup
           <InfoTooltip text="You need a saved job alert already set up on that platform. Forward its emails to us via Gmail (next step) and we'll extract the postings from it." />
@@ -265,16 +260,13 @@ export function SourcesPage() {
       {needsGmail && data?.gmailConnected && <GmailForwardingSetup />}
 
       {needsGmail && !data?.gmailConnected && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className={CARD}>
           <label className={LABEL}>Connect Gmail</label>
-          <p className="mb-3 text-sm text-gray-500">
+          <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
             Lets the app manage a filter that forwards matching job alerts to us. It can only
             manage filters and settings, never read your mail.
           </p>
-          <a
-            href={gmailOAuthStartUrl()}
-            className="inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-          >
+          <a href={gmailOAuthStartUrl()} className={PRIMARY_BUTTON}>
             Connect Gmail
           </a>
         </div>
@@ -283,17 +275,13 @@ export function SourcesPage() {
       {data && <GmailTrackingModeSection sources={data} />}
 
       <div className="flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-        >
+        <button onClick={handleSave} disabled={saving} className={PRIMARY_BUTTON}>
           {saving ? "Saving…" : "Save sources"}
         </button>
-        {saved && <span className="text-sm text-emerald-600">Saved.</span>}
+        {saved && <span className="text-sm text-emerald-600 dark:text-emerald-400">Saved.</span>}
       </div>
 
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">{error}</div>}
     </div>
   );
 }

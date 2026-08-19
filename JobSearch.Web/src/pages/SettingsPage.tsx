@@ -8,6 +8,7 @@ import { ResumePdfViewer } from "../components/ResumePdfViewer";
 import { parseBackgroundYaml, serializeBackgroundYaml, type BackgroundParseResult } from "../lib/backgroundYaml";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
 import { PageTagline } from "../components/PageTagline";
+import { CARD, PRIMARY_BUTTON } from "../lib/styles";
 
 export function SettingsPage() {
   const { data: profile, loading: loadingProfile } = useProfile();
@@ -89,7 +90,7 @@ export function SettingsPage() {
   }
 
   if (loadingProfile || !background || !jobCriteria) {
-    return <div className="py-12 text-center text-sm text-gray-400">Loading…</div>;
+    return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
   }
 
   const savingResume = parsePdf.loading || uploadPdf.loading;
@@ -97,36 +98,36 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-700">Settings</h2>
+        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Settings</h2>
         {updatedAt && (
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-400 dark:text-gray-500">
             Last updated {new Date(updatedAt).toLocaleString("en-AU")}
           </span>
         )}
       </div>
       <PageTagline>Everything about you, and everything about your account, in one place.</PageTagline>
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Edit your background and job criteria directly. Changes apply to the next CV, cover
         letter, answer, or posting evaluation you request. Nothing here needs a separate re-run.
       </p>
 
       <div>
-        <h3 className="mb-2 text-sm font-medium text-gray-700">Background</h3>
+        <h3 className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">Background</h3>
         <BackgroundEditor value={background} onChange={setBackground} />
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-medium text-gray-700">Base CV</h3>
+        <h3 className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">Base CV</h3>
         {newResumeFile ? (
           <ResumePdfViewer source={newResumeFile} />
         ) : hasResumePdf ? (
           <ResumePdfViewer source={resumePdfUrl()} />
         ) : (
-          <p className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+          <p className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
             No PDF on file. Your base CV comes from pasted text.
           </p>
         )}
-        <label className="mt-2 inline-block cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-700">
+        <label className="mt-2 inline-block cursor-pointer text-sm font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
           {parsePdf.loading ? "Reading PDF…" : "Replace resume PDF"}
           <input
             type="file"
@@ -143,48 +144,40 @@ export function SettingsPage() {
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-medium text-gray-700">Job criteria</h3>
+        <h3 className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">Job criteria</h3>
         <JobCriteriaEditor value={jobCriteria} onChange={setJobCriteria} />
       </div>
 
       <div className="flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          disabled={save.loading || savingResume}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-        >
+        <button onClick={handleSave} disabled={save.loading || savingResume} className={PRIMARY_BUTTON}>
           {save.loading ? "Saving…" : "Save changes"}
         </button>
       </div>
 
       {(save.error ?? parsePdf.error ?? uploadPdf.error) && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
           {save.error ?? parsePdf.error ?? uploadPdf.error}
         </div>
       )}
 
       {me?.tier === "Tier1" && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
-          <p className="mb-1 text-sm font-medium text-blue-700">Tier 2 (Beta)</p>
-          <p className="mb-3 text-sm text-gray-600">
+        <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-fuchsia-50 p-5 shadow-sm dark:border-violet-900/50 dark:from-violet-950/40 dark:to-fuchsia-950/40">
+          <p className="mb-1 text-sm font-medium text-violet-700 dark:text-violet-300">Tier 2 (Beta)</p>
+          <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">
             Unlock automatic job discovery, application tracking, and inbox alert forwarding.
             Free while the beta is running, no payment required yet.
           </p>
-          <button
-            onClick={handleUpgrade}
-            disabled={upgrade.loading}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-          >
+          <button onClick={handleUpgrade} disabled={upgrade.loading} className={PRIMARY_BUTTON}>
             {upgrade.loading ? "Upgrading…" : "Upgrade to Tier 2"}
           </button>
-          {upgrade.error && <p className="mt-2 text-sm text-red-700">{upgrade.error}</p>}
+          {upgrade.error && <p className="mt-2 text-sm text-red-700 dark:text-red-400">{upgrade.error}</p>}
         </div>
       )}
 
       {me?.isOwner && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <p className="mb-1 text-sm font-medium text-gray-700">Invite to Tier 2</p>
-          <p className="mb-3 text-sm text-gray-500">
+        <div className={CARD}>
+          <p className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">Invite to Tier 2</p>
+          <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
             Grants an email sign-in access and lands them straight at Tier 2. Sends them an
             email if SendGrid's configured; otherwise still adds them, just let them know
             another way.
@@ -195,39 +188,35 @@ export function SettingsPage() {
               value={inviteEmail}
               onChange={e => setInviteEmail(e.target.value)}
               placeholder="someone@example.com"
-              className="w-full max-w-xs rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              className="w-full max-w-xs rounded-lg border border-gray-200 bg-white p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-violet-500"
             />
-            <button
-              onClick={handleInvite}
-              disabled={invite.loading || !inviteEmail.trim()}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-            >
+            <button onClick={handleInvite} disabled={invite.loading || !inviteEmail.trim()} className={PRIMARY_BUTTON}>
               {invite.loading ? "Inviting…" : "Invite"}
             </button>
           </div>
           {inviteResult && (
-            <p className="mt-2 text-sm text-emerald-600">
+            <p className="mt-2 text-sm text-emerald-600 dark:text-emerald-400">
               {inviteResult.email} can now sign in.
               {inviteResult.emailSent ? " Invite email sent." : " (Email not sent, SendGrid not configured yet, let them know another way.)"}
             </p>
           )}
-          {invite.error && <p className="mt-2 text-sm text-red-700">{invite.error}</p>}
+          {invite.error && <p className="mt-2 text-sm text-red-700 dark:text-red-400">{invite.error}</p>}
         </div>
       )}
 
-      <div className="rounded-xl border border-red-200 bg-white p-5 shadow-sm">
-        <p className="mb-1 text-sm font-medium text-red-700">Danger zone</p>
-        <p className="mb-3 text-sm text-gray-500">
+      <div className="rounded-xl border border-red-200 bg-white p-5 shadow-sm dark:border-red-900/50 dark:bg-gray-900">
+        <p className="mb-1 text-sm font-medium text-red-700 dark:text-red-400">Danger zone</p>
+        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Cancels your account and signs you out. Your data is kept, not deleted, in case you
           come back. You just won't be able to sign in again unless it's reactivated.
         </p>
         <button
           onClick={handleCancelAccount}
-          className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50"
+          className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 transition-colors duration-150 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
         >
           Cancel my account
         </button>
-        {cancel.error && <p className="mt-2 text-sm text-red-700">{cancel.error}</p>}
+        {cancel.error && <p className="mt-2 text-sm text-red-700 dark:text-red-400">{cancel.error}</p>}
       </div>
     </div>
   );

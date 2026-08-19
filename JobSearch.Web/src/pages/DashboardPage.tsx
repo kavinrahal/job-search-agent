@@ -15,14 +15,14 @@ function CriteriaNudge() {
   if (!profile || parseJobCriteriaYaml(profile.jobCriteria).skillDimensions.length > 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-500/10 dark:text-amber-300">
       <p>
         Your job criteria isn't set yet. It's what makes Tier 2's automatic matching accurate,
         worth filling in now even before you upgrade.
       </p>
       <Link
         to="/criteria"
-        className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+        className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors duration-150 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-500"
       >
         Set criteria
       </Link>
@@ -33,7 +33,7 @@ function CriteriaNudge() {
 export function DashboardPage() {
   const { data: me, loading } = useMe();
 
-  if (loading || !me) return <div className="py-12 text-center text-sm text-gray-400">Loading…</div>;
+  if (loading || !me) return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
 
   return (
     <div className="space-y-6">

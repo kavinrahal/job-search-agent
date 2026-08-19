@@ -2,12 +2,12 @@ import { PageTagline } from "../components/PageTagline";
 
 function Section({ title, tier2, children }: { title: string; tier2?: boolean; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-2 text-sm font-semibold text-gray-700">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
         {title}
-        {tier2 && <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">Tier 2</span>}
+        {tier2 && <span className="ml-2 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">Tier 2</span>}
       </h3>
-      <div className="space-y-2 text-sm text-gray-600">{children}</div>
+      <div className="space-y-2 text-sm text-gray-600 dark:text-gray-300">{children}</div>
     </div>
   );
 }
@@ -15,7 +15,7 @@ function Section({ title, tier2, children }: { title: string; tier2?: boolean; c
 export function HelpPage() {
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-700">Help</h2>
+      <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Help</h2>
       <PageTagline>How everything fits together, in plain language.</PageTagline>
 
       <Section title="Getting started">

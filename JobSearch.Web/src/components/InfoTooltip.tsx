@@ -15,12 +15,12 @@ export function InfoTooltip({ text }: { text: string }) {
         onClick={() => setOpen(o => !o)}
         onBlur={() => setOpen(false)}
         aria-label="More info"
-        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-200 text-[10px] font-bold text-gray-500 hover:bg-gray-300"
+        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-200 text-[10px] font-bold text-gray-500 transition-colors hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
       >
         ?
       </button>
       {open && (
-        <span className="absolute left-0 top-full z-20 mt-1 w-64 max-w-[calc(100vw-2.5rem)] rounded-lg border border-gray-200 bg-white p-2 text-xs text-gray-600 shadow-lg">
+        <span className="animate-fade-in absolute left-0 top-full z-20 mt-1 w-64 max-w-[calc(100vw-2.5rem)] rounded-lg border border-gray-200 bg-white p-2 text-xs text-gray-600 shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
           {text}
         </span>
       )}

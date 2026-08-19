@@ -27,7 +27,7 @@ export function ResumePdfViewer({ source }: { source: string | File }) {
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-gray-50 p-4">
+    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
       <Document
         file={source}
         options={typeof source === "string" ? DOCUMENT_OPTIONS : undefined}
@@ -39,17 +39,19 @@ export function ResumePdfViewer({ source }: { source: string | File }) {
         // the same failure.
         error=""
         onLoadError={err => setError(`Couldn't load the PDF (${err.message || err.name}).`)}
-        loading={<p className="py-8 text-center text-sm text-gray-400">Loading PDF…</p>}
+        loading={<p className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">Loading PDF…</p>}
       >
         <div className="flex gap-4">
           {Array.from({ length: numPages }, (_, i) => (
-            <div key={i} className="shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+            // The PDF canvas itself always stays white (it's the real document content, not
+            // themeable chrome) — only the border around it follows dark mode.
+            <div key={i} className="shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700">
               <Page pageNumber={i + 1} width={420} />
             </div>
           ))}
         </div>
       </Document>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );
 }

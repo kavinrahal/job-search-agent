@@ -22,7 +22,7 @@ function TieredMatchFields({ value, onChange }: { value: SkillDimension; onChang
   const set = <K extends keyof SkillDimension>(key: K, v: SkillDimension[K]) => onChange({ ...value, [key]: v });
   return (
     <div>
-      <div className="mb-2 flex items-center text-xs text-gray-400">
+      <div className="mb-2 flex items-center text-xs text-gray-400 dark:text-gray-500">
         List the specific skills/tools that fall in each tier below.
         <InfoTooltip text="These four tiers control how closely a posting's requirements need to match. Strong/good match boost a posting's ranking; acceptable is neutral; excluded rules it out. Leave any tier blank if it doesn't apply." />
       </div>
@@ -46,7 +46,7 @@ function SkillDimensionsSection({ value, onChange }: { value: SkillDimension[]; 
 
   return (
     <TopicCard title="Skill dimensions" defaultOpen={false}>
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-gray-400 dark:text-gray-500">
         Any skill, tool, certification, or knowledge area worth ranking candidates on. One
         entry per dimension, in priority order. Works for any profession: "Cloud platform"
         for an engineer, "EHR system experience" for a nurse, "Knife skills" for a chef.
@@ -83,7 +83,7 @@ function DisqualifiersSection({ value, onChange }: { value: Disqualifier[]; onCh
 
   return (
     <TopicCard title="Disqualifiers">
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-gray-400 dark:text-gray-500">
         Anything that should end evaluation immediately. Signals are the exact phrases to
         watch for in a posting (one per line). Optional, a description alone is enough.
         <InfoTooltip text="Disqualifiers rule a posting out entirely. Orange flags and FYI context (below) don't rule anything out, they just add a note to the evaluation." />
@@ -127,10 +127,10 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
               key={type}
               type="button"
               onClick={() => toggleEmploymentType(type)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
                 value.employmentTypes.includes(type)
-                  ? "bg-blue-50 text-blue-700"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  ? "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+                  : "bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
               }`}
             >
               {type.replace("_", " ")}
@@ -176,21 +176,21 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
         <Field label="Notes (e.g. city preference, or lack thereof)" value={value.locationNotes} onChange={v => set("locationNotes", v)} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
-            <label className="flex items-center gap-2 text-sm text-gray-600">
+            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <input type="checkbox" checked={value.remoteAccepted} onChange={e => set("remoteAccepted", e.target.checked)} />
               Remote
             </label>
             <Field label="Condition" value={value.remoteCondition} onChange={v => set("remoteCondition", v)} />
           </div>
           <div>
-            <label className="flex items-center gap-2 text-sm text-gray-600">
+            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <input type="checkbox" checked={value.hybridAccepted} onChange={e => set("hybridAccepted", e.target.checked)} />
               Hybrid
             </label>
             <Field label="Notes" value={value.hybridNotes} onChange={v => set("hybridNotes", v)} />
           </div>
           <div>
-            <label className="flex items-center gap-2 text-sm text-gray-600">
+            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <input type="checkbox" checked={value.onsiteAccepted} onChange={e => set("onsiteAccepted", e.target.checked)} />
               On-site
             </label>
@@ -200,7 +200,7 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
       </TopicCard>
 
       <TopicCard title="Sponsorship" defaultOpen={false}>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-gray-400 dark:text-gray-500">
           If you need visa/work-authorization sponsorship, use this to describe when a
           posting should be disqualified for excluding sponsorship-needing candidates.
           Leave blank if this doesn't apply to you.
@@ -284,7 +284,7 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
 
       <TopicCard title="Team" defaultOpen={false}>
         <Field label="Minimum team size" type="number" min={0} value={value.minimumTeamSize} onChange={v => set("minimumTeamSize", v)} />
-        <label className="flex items-center gap-2 text-sm text-gray-600">
+        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
           <input type="checkbox" checked={value.onCallAccepted} onChange={e => set("onCallAccepted", e.target.checked)} />
           On-call is acceptable
         </label>
@@ -293,7 +293,7 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
       </TopicCard>
 
       <TopicCard title="Orange flags" defaultOpen={false}>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-gray-400 dark:text-gray-500">
           Things worth surfacing alongside a recommendation, without disqualifying it. One
           per line.
           <InfoTooltip text="A negative-leaning note (e.g. a possible downside), unlike FYI context below which is neutral." />
@@ -302,7 +302,7 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
       </TopicCard>
 
       <TopicCard title="FYI context" defaultOpen={false}>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-gray-400 dark:text-gray-500">
           Worth mentioning but not a flag or a disqualifier. One per line.
           <InfoTooltip text="A neutral note worth knowing, not a downside. Use Orange flags above for anything negative-leaning." />
         </p>

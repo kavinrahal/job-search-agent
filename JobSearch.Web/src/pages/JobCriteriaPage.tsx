@@ -3,6 +3,7 @@ import { useProfile, useUpdateProfile } from "../hooks/useProfile";
 import { JobCriteriaEditor } from "../components/JobCriteriaEditor";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
 import { PageTagline } from "../components/PageTagline";
+import { PRIMARY_BUTTON } from "../lib/styles";
 
 const EMPTY: JobCriteriaData = parseJobCriteriaYaml("");
 
@@ -26,11 +27,11 @@ export function JobCriteriaPage() {
     window.location.reload();
   }
 
-  if (loadingProfile) return <div className="py-12 text-center text-sm text-gray-400">Loading…</div>;
+  if (loadingProfile) return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-700">Job criteria</h2>
+      <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Job criteria</h2>
       <PageTagline>What you're actually looking for, precise enough to tell a good match from a bad one.</PageTagline>
 
       <JobCriteriaEditor value={criteria} onChange={setCriteria} />
@@ -39,14 +40,14 @@ export function JobCriteriaPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          className={PRIMARY_BUTTON}
         >
           {saving ? "Saving…" : "Save criteria"}
         </button>
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">{error}</div>
       )}
     </div>
   );

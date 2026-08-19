@@ -3,12 +3,16 @@ import { threadPdfUrl, threadDocxUrl } from "../api";
 import { useGenerateCv, useGenerateLetter, useAskQuestion, useEditThread, useSearchPostingCandidates } from "../hooks/useGeneration";
 import type { GenerationResult, PostingCandidate } from "../types";
 import { PageTagline } from "../components/PageTagline";
+import { CARD, PRIMARY_BUTTON } from "../lib/styles";
 
 type Mode = "url" | "text";
 
+const INPUT = "w-full rounded-lg border border-gray-200 bg-white p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:ring-violet-500";
+const SECONDARY_BUTTON = "rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors duration-150 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700";
+
 function PasteInsteadLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="text-xs font-medium text-blue-600 hover:text-blue-700">
+    <button onClick={onClick} className="text-xs font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
       {label}
     </button>
   );
@@ -18,8 +22,10 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-        active ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"
+      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
+        active
+          ? "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+          : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
       }`}
     >
       {children}
@@ -48,17 +54,13 @@ function RevisionBox({ threadId, placeholder, onRevised }: {
           value={message}
           onChange={e => setMessage(e.target.value)}
           placeholder={placeholder}
-          className="flex-1 rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+          className={INPUT}
         />
-        <button
-          onClick={handleSubmit}
-          disabled={message.trim().length === 0 || loading}
-          className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <button onClick={handleSubmit} disabled={message.trim().length === 0 || loading} className={SECONDARY_BUTTON}>
           {loading ? "Sending…" : "Send"}
         </button>
       </div>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );
 }
@@ -139,10 +141,10 @@ export function GeneratePage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-700">Generate</h2>
+      <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Generate</h2>
       <PageTagline>Paste a posting, get a tailored CV, cover letter, or answer back in seconds.</PageTagline>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className={CARD}>
         <div className="mb-4 flex gap-1">
           <TabButton active={mode === "url"} onClick={() => setMode("url")}>Paste URL</TabButton>
           <TabButton active={mode === "text"} onClick={() => setMode("text")}>Paste description</TabButton>
@@ -154,28 +156,28 @@ export function GeneratePage() {
               value={postingUrl}
               onChange={e => setPostingUrl(e.target.value)}
               placeholder="https://…"
-              className="w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              className={INPUT}
             />
             {showHintFields && (
-              <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                <p className="text-xs text-gray-500">Couldn't fetch that link directly. Search for it instead.</p>
+              <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/50">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Couldn't fetch that link directly. Search for it instead.</p>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     value={postingTitle}
                     onChange={e => { setPostingTitle(e.target.value); setCandidates(null); }}
                     placeholder="Job title (required)"
-                    className="flex-1 rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    className={`flex-1 ${INPUT}`}
                   />
                   <input
                     value={postingCompany}
                     onChange={e => { setPostingCompany(e.target.value); setCandidates(null); }}
                     placeholder="Company (optional)"
-                    className="flex-1 rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    className={`flex-1 ${INPUT}`}
                   />
                   <button
                     onClick={handleSearchCandidates}
                     disabled={postingTitle.trim().length === 0 || searchCandidates.loading}
-                    className="shrink-0 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    className={`shrink-0 ${SECONDARY_BUTTON}`}
                   >
                     {searchCandidates.loading ? "Searching…" : "Search Jora/Adzuna"}
                   </button>
@@ -186,23 +188,23 @@ export function GeneratePage() {
             {candidates && (
               candidates.length === 0 ? (
                 <div className="space-y-1.5">
-                  <p className="text-xs text-gray-400">No results for that search.</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">No results for that search.</p>
                   <PasteInsteadLink label="Paste the job description instead →" onClick={() => setMode("text")} />
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <p className="text-xs text-gray-400">Pick the one you meant.</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Pick the one you meant.</p>
                   {candidates.map(c => (
                     <button
                       key={c.url}
                       onClick={() => handlePickCandidate(c)}
-                      className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-left text-sm hover:border-blue-300 hover:bg-blue-50"
+                      className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-left text-sm transition-colors duration-150 hover:border-violet-300 hover:bg-violet-50 dark:border-gray-700 dark:hover:border-violet-700 dark:hover:bg-violet-500/10"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate font-medium text-gray-800">{c.title}</span>
-                        <span className="block truncate text-xs text-gray-500">{c.company} · {c.location}</span>
+                        <span className="block truncate font-medium text-gray-800 dark:text-gray-100">{c.title}</span>
+                        <span className="block truncate text-xs text-gray-500 dark:text-gray-400">{c.company} · {c.location}</span>
                       </span>
-                      <span className="ml-2 shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">{c.source}</span>
+                      <span className="ml-2 shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">{c.source}</span>
                     </button>
                   ))}
                   <PasteInsteadLink label="None of these? Paste the job description instead →" onClick={() => setMode("text")} />
@@ -216,35 +218,24 @@ export function GeneratePage() {
             onChange={e => setPostingText(e.target.value)}
             placeholder="Paste the job description here…"
             rows={8}
-            className="w-full rounded-lg border border-gray-200 p-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            className={`${INPUT} p-3`}
           />
         )}
 
         <div className="mt-4 flex flex-wrap gap-3">
-          <button
-            onClick={handleGenerateCv}
-            disabled={!canSubmitPosting || generateCv.loading}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-          >
+          <button onClick={handleGenerateCv} disabled={!canSubmitPosting || generateCv.loading} className={PRIMARY_BUTTON}>
             {generateCv.loading ? "Generating…" : "Generate CV"}
           </button>
-          <button
-            onClick={handleGenerateLetter}
-            disabled={!canSubmitPosting || generateLetter.loading}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-          >
+          <button onClick={handleGenerateLetter} disabled={!canSubmitPosting || generateLetter.loading} className={PRIMARY_BUTTON}>
             {generateLetter.loading ? "Generating…" : "Generate cover letter"}
           </button>
         </div>
       </div>
 
       {cvResult && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <p className="mb-2 text-sm font-medium text-gray-700">CV ready</p>
-          <a
-            href={threadPdfUrl(cvResult.threadId)}
-            className="inline-block rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
-          >
+        <div className={`${CARD} animate-fade-in-up`}>
+          <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">CV ready</p>
+          <a href={threadPdfUrl(cvResult.threadId)} className={`inline-block ${SECONDARY_BUTTON}`}>
             Download PDF
           </a>
           <RevisionBox
@@ -256,25 +247,19 @@ export function GeneratePage() {
       )}
 
       {letterResult && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className={`${CARD} animate-fade-in-up`}>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-700">Cover letter</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Cover letter</p>
             {letterCopied && (
-              <span className="text-xs text-emerald-600">Copied to clipboard.</span>
+              <span className="text-xs text-emerald-600 dark:text-emerald-400">Copied to clipboard.</span>
             )}
           </div>
-          <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700">{letterResult.text}</pre>
+          <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 dark:text-gray-300">{letterResult.text}</pre>
           <div className="mt-3 flex gap-2">
-            <a
-              href={threadPdfUrl(letterResult.threadId)}
-              className="inline-block rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
-            >
+            <a href={threadPdfUrl(letterResult.threadId)} className={`inline-block ${SECONDARY_BUTTON}`}>
               Download PDF
             </a>
-            <a
-              href={threadDocxUrl(letterResult.threadId)}
-              className="inline-block rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
-            >
+            <a href={threadDocxUrl(letterResult.threadId)} className={`inline-block ${SECONDARY_BUTTON}`}>
               Download Word
             </a>
           </div>
@@ -286,27 +271,23 @@ export function GeneratePage() {
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <label className="mb-2 block text-sm font-medium text-gray-700">Ask a question about this application</label>
+      <div className={CARD}>
+        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Ask a question about this application</label>
         <div className="flex gap-3">
           <input
             value={question}
             onChange={e => setQuestion(e.target.value)}
             placeholder="Why do you want to work here?"
-            className="flex-1 rounded-lg border border-gray-200 p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            className={`flex-1 ${INPUT}`}
           />
-          <button
-            onClick={handleAskQuestion}
-            disabled={question.trim().length === 0 || askQuestion.loading}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-          >
+          <button onClick={handleAskQuestion} disabled={question.trim().length === 0 || askQuestion.loading} className={PRIMARY_BUTTON}>
             {askQuestion.loading ? "Asking…" : "Ask"}
           </button>
         </div>
         {answerResult && (
-          <div className="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+          <div className="mt-4 animate-fade-in-up rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
             {answerResult.mode === "ask_followup" && (
-              <p className="mb-1 text-xs font-medium text-amber-600">Needs more context:</p>
+              <p className="mb-1 text-xs font-medium text-amber-600 dark:text-amber-400">Needs more context:</p>
             )}
             <p className="whitespace-pre-wrap">{answerResult.content}</p>
             <RevisionBox
@@ -319,7 +300,7 @@ export function GeneratePage() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">{error}</div>
       )}
     </div>
   );
