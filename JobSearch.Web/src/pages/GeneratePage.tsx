@@ -3,6 +3,7 @@ import { threadPdfUrl, threadDocxUrl } from "../api";
 import { useGenerateCv, useGenerateLetter, useAskQuestion, useEditThread, useSearchPostingCandidates } from "../hooks/useGeneration";
 import type { GenerationResult, PostingCandidate } from "../types";
 import { PageTagline } from "../components/PageTagline";
+import { GeneratingIndicator } from "../components/GeneratingIndicator";
 import { CARD, PRIMARY_BUTTON } from "../lib/styles";
 
 type Mode = "url" | "text";
@@ -232,6 +233,7 @@ export function GeneratePage() {
         </div>
       </div>
 
+      {generateCv.loading && <GeneratingIndicator kind="cv" />}
       {cvResult && (
         <div className={`${CARD} animate-fade-in-up`}>
           <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">CV ready</p>
@@ -246,6 +248,7 @@ export function GeneratePage() {
         </div>
       )}
 
+      {generateLetter.loading && <GeneratingIndicator kind="letter" />}
       {letterResult && (
         <div className={`${CARD} animate-fade-in-up`}>
           <div className="mb-2 flex items-center justify-between">
