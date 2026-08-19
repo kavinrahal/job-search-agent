@@ -273,7 +273,6 @@ export function DiscoveriesPage() {
 
   return (
     <div className="space-y-6">
-      <PageTagline>Postings we've already found and ranked, so you don't have to go looking.</PageTagline>
       <div className="flex items-center justify-between">
         <h2 className="flex items-center text-lg font-semibold text-gray-700">
           Discoveries
@@ -281,6 +280,7 @@ export function DiscoveriesPage() {
         </h2>
         <span className="text-sm text-gray-400">{total} total</span>
       </div>
+      <PageTagline>Postings we've already found and ranked, so you don't have to go looking.</PageTagline>
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2">

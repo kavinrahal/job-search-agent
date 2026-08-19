@@ -39,8 +39,8 @@ export function ResumeIntakePage() {
 
   return (
     <div className="space-y-6">
-      <PageTagline>The foundation everything else gets tailored from. Worth getting right.</PageTagline>
       <h2 className="text-lg font-semibold text-gray-700">Resume &amp; background</h2>
+      <PageTagline>The foundation everything else gets tailored from. Worth getting right.</PageTagline>
 
       {!background && (
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

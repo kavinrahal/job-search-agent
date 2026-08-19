@@ -30,8 +30,8 @@ export function JobCriteriaPage() {
 
   return (
     <div className="space-y-6">
-      <PageTagline>What you're actually looking for, precise enough to tell a good match from a bad one.</PageTagline>
       <h2 className="text-lg font-semibold text-gray-700">Job criteria</h2>
+      <PageTagline>What you're actually looking for, precise enough to tell a good match from a bad one.</PageTagline>
 
       <JobCriteriaEditor value={criteria} onChange={setCriteria} />
 

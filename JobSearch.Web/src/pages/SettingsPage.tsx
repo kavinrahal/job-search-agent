@@ -96,7 +96,6 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageTagline>Everything about you, and everything about your account, in one place.</PageTagline>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-700">Settings</h2>
         {updatedAt && (
@@ -105,6 +104,7 @@ export function SettingsPage() {
           </span>
         )}
       </div>
+      <PageTagline>Everything about you, and everything about your account, in one place.</PageTagline>
       <p className="text-sm text-gray-500">
         Edit your background and job criteria directly. Changes apply to the next CV, cover
         letter, answer, or posting evaluation you request. Nothing here needs a separate re-run.

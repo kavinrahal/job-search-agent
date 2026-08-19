@@ -15,8 +15,8 @@ export function SupportPage() {
 
   return (
     <div className="space-y-6">
-      <PageTagline>Something broken, confusing, or just want to say hi? We're listening.</PageTagline>
       <h2 className="text-lg font-semibold text-gray-700">Support</h2>
+      <PageTagline>Something broken, confusing, or just want to say hi? We're listening.</PageTagline>
 
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <label className="mb-2 block text-sm font-medium text-gray-700">

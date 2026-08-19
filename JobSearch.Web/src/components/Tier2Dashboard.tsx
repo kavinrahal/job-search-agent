@@ -213,8 +213,6 @@ export function Tier2Dashboard() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-700">Dashboard</h2>
-
       <HealthStrip />
       {summary && <KpiStrip summary={summary} onStatusClick={status => navigate(`/applications?status=${status}`)} />}
 

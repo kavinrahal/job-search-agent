@@ -139,8 +139,8 @@ export function GeneratePage() {
 
   return (
     <div className="space-y-6">
-      <PageTagline>Paste a posting, get a tailored CV, cover letter, or answer back in seconds.</PageTagline>
       <h2 className="text-lg font-semibold text-gray-700">Generate</h2>
+      <PageTagline>Paste a posting, get a tailored CV, cover letter, or answer back in seconds.</PageTagline>
 
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex gap-1">

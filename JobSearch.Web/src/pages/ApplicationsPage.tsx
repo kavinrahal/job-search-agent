@@ -229,7 +229,6 @@ export function ApplicationsPage() {
 
   return (
     <div className="space-y-6">
-      <PageTagline>Every application you've made, and where it stands.</PageTagline>
       <div className="flex items-center justify-between">
         <h2 className="flex items-center text-lg font-semibold text-gray-700">
           Applications
@@ -247,6 +246,7 @@ export function ApplicationsPage() {
           )}
         </div>
       </div>
+      <PageTagline>Every application you've made, and where it stands.</PageTagline>
 
       {showLogForm && (
         <LogApplicationForm onDone={() => { setShowLogForm(false); reload(); }} />

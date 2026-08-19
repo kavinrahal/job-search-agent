@@ -15,8 +15,8 @@ function Section({ title, tier2, children }: { title: string; tier2?: boolean; c
 export function HelpPage() {
   return (
     <div className="space-y-6">
-      <PageTagline>How everything fits together, in plain language.</PageTagline>
       <h2 className="text-lg font-semibold text-gray-700">Help</h2>
+      <PageTagline>How everything fits together, in plain language.</PageTagline>
 
       <Section title="Getting started">
         <p>
