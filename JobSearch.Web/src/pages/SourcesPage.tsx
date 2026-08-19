@@ -176,7 +176,7 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
   );
 }
 
-export function SourcesPage() {
+export function SourcesPage({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const { data, loading: loadingSources } = useSources();
   const [selected, setSelected] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
@@ -214,8 +214,12 @@ export function SourcesPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Choose your sources</h2>
-      <PageTagline>Tell us where to look, and how you want applications tracked.</PageTagline>
+      {!hideHeader && (
+        <>
+          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Choose your sources</h2>
+          <PageTagline>Tell us where to look, and how you want applications tracked.</PageTagline>
+        </>
+      )}
       <p className="text-sm text-gray-500 dark:text-gray-400">
         Pick where job postings should come from. Automatic sources need nothing from you.
         Alert-based sources need a job alert set up on that platform, forwarded in once you

@@ -133,15 +133,3 @@ export interface SourcesResponse {
   gmailTrackingMode: "full" | "filter" | "manual" | null;
 }
 
-export interface HealthStatus {
-  status: "ok" | "stale" | "unknown";
-  lastRunAt: string | null;
-  lastRunAgeMinutes: number | null;
-  emailsFetched: number | null;
-  emailsClassified: number | null;
-  newApplications: number | null;
-  durationMs: number | null;
-  lastError: string | null;
-  totalApplications: number;
-  pendingNotifications: number;
-}

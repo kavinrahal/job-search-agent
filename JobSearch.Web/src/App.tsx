@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, NavLink, Navigate, useLocation } from "react-router-dom";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
 import { DiscoveriesPage } from "./pages/DiscoveriesPage";
@@ -11,6 +11,9 @@ import { GeneratePage } from "./pages/GeneratePage";
 import { SupportPage } from "./pages/SupportPage";
 import { HelpPage } from "./pages/HelpPage";
 import { SourcesPage } from "./pages/SourcesPage";
+import { OnboardingCvPage } from "./pages/onboarding/OnboardingCvPage";
+import { OnboardingCriteriaPage } from "./pages/onboarding/OnboardingCriteriaPage";
+import { OnboardingSourcesPage } from "./pages/onboarding/OnboardingSourcesPage";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { useMe, useLogout } from "./hooks/useAuth";
 
@@ -32,17 +35,17 @@ const NAV_LINKS = [
 ];
 
 // Routes a brand new user (blank Background, per /auth/me's needsOnboarding flag) can visit
-// without being bounced back to the resume intake step — lets them move on to job criteria
-// or settings without a redirect loop, but still funnels them away from the empty Dashboard.
-const ONBOARDING_ROUTES = ["/profile", "/criteria", "/settings"];
+// without being bounced back to the resume intake step — the dedicated onboarding step, plus
+// Settings as an escape hatch so they're never fully trapped on one page.
+const ONBOARDING_ROUTES = ["/onboarding/cv", "/settings"];
 
 // Next step: Background is saved but Job Criteria has never been visited/saved
 // (needsCriteria). Same escape hatch to Settings as every other step below.
-const CRITERIA_ROUTES = ["/criteria", "/settings"];
+const CRITERIA_ROUTES = ["/onboarding/criteria", "/settings"];
 
 // Same idea, one step later: a Tier 2 user who hasn't picked sources yet (needsSourceSelection)
 // can still reach Settings to back out, but everything else bounces to /sources first.
-const SOURCES_ROUTES = ["/sources", "/settings"];
+const SOURCES_ROUTES = ["/onboarding/sources", "/settings"];
 
 function StepRedirect({ allowedRoutes, to }: { allowedRoutes: string[]; to: string }) {
   const location = useLocation();
@@ -89,14 +92,14 @@ function AccountMenu({ email, onLogout, className }: { email: string; onLogout: 
 // color on afterward.
 function Logo() {
   return (
-    <div className="flex items-center gap-2">
+    <Link to="/" className="flex items-center gap-2">
       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-500 text-white shadow-sm shadow-violet-600/30">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} className="h-4.5 w-4.5">
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" />
         </svg>
       </div>
       <h1 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Work Santa</h1>
-    </div>
+    </Link>
   );
 }
 
@@ -128,55 +131,63 @@ export default function App() {
   if (!me) return <LandingPage />;
 
   const navLinks = NAV_LINKS.filter(l => !l.tier2Only || me.tier === "Tier2");
+  // Hidden for the full forced-step onboarding flow (CV -> Criteria -> Sources), not just the
+  // very first page — a nav bar full of links to pages the user hasn't set up yet (and can't
+  // usefully visit, since StepRedirect just bounces them back) is noise during a guided,
+  // linear first-run experience. It reappears on its own once every step is done, since these
+  // flags come from a fresh /auth/me read after each step's save.
+  const isOnboarding = me.needsOnboarding || me.needsCriteria || me.needsSourceSelection;
 
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-        <header className="sticky top-0 z-20 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-gray-800/80 dark:bg-gray-950/80">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-            <Logo />
+        {!isOnboarding && (
+          <header className="sticky top-0 z-20 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-gray-800/80 dark:bg-gray-950/80">
+            <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+              <Logo />
 
-            <nav className="hidden items-center gap-1 md:flex">
-              <NavLinks links={navLinks} className={NAV_LINK_CLASS} />
-              <ThemeToggle className="ml-2" />
-              <AccountMenu
-                email={me.email}
-                onLogout={handleLogout}
-                className="ml-2 flex items-center gap-3 border-l border-gray-200 pl-4 dark:border-gray-800"
-              />
-            </nav>
+              <nav className="hidden items-center gap-1 md:flex">
+                <NavLinks links={navLinks} className={NAV_LINK_CLASS} />
+                <ThemeToggle className="ml-2" />
+                <AccountMenu
+                  email={me.email}
+                  onLogout={handleLogout}
+                  className="ml-2 flex items-center gap-3 border-l border-gray-200 pl-4 dark:border-gray-800"
+                />
+              </nav>
 
-            <div className="flex items-center gap-1 md:hidden">
-              <ThemeToggle />
-              <button
-                onClick={() => setMenuOpen(o => !o)}
-                aria-label={menuOpen ? "Close menu" : "Open menu"}
-                className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-              >
-                {menuOpen ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
-                )}
-              </button>
+              <div className="flex items-center gap-1 md:hidden">
+                <ThemeToggle />
+                <button
+                  onClick={() => setMenuOpen(o => !o)}
+                  aria-label={menuOpen ? "Close menu" : "Open menu"}
+                  className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+                >
+                  {menuOpen ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
 
-          {menuOpen && (
-            <nav className="flex flex-col gap-1 border-t border-gray-100 px-4 py-3 dark:border-gray-800 md:hidden">
-              <NavLinks links={navLinks} onNavigate={() => setMenuOpen(false)} className={MOBILE_NAV_LINK_CLASS} />
-              <AccountMenu
-                email={me.email}
-                onLogout={handleLogout}
-                className="mt-2 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-800"
-              />
-            </nav>
-          )}
-        </header>
+            {menuOpen && (
+              <nav className="flex flex-col gap-1 border-t border-gray-100 px-4 py-3 dark:border-gray-800 md:hidden">
+                <NavLinks links={navLinks} onNavigate={() => setMenuOpen(false)} className={MOBILE_NAV_LINK_CLASS} />
+                <AccountMenu
+                  email={me.email}
+                  onLogout={handleLogout}
+                  className="mt-2 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-800"
+                />
+              </nav>
+            )}
+          </header>
+        )}
 
         <PageBody me={me} />
       </div>
@@ -192,21 +203,24 @@ function PageBody({ me }: { me: NonNullable<ReturnType<typeof useMe>["data"]> })
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      {me.needsOnboarding && <StepRedirect allowedRoutes={ONBOARDING_ROUTES} to="/profile" />}
-      {!me.needsOnboarding && me.needsCriteria && <StepRedirect allowedRoutes={CRITERIA_ROUTES} to="/criteria" />}
-      {!me.needsOnboarding && !me.needsCriteria && me.needsSourceSelection && <StepRedirect allowedRoutes={SOURCES_ROUTES} to="/sources" />}
+      {me.needsOnboarding && <StepRedirect allowedRoutes={ONBOARDING_ROUTES} to="/onboarding/cv" />}
+      {!me.needsOnboarding && me.needsCriteria && <StepRedirect allowedRoutes={CRITERIA_ROUTES} to="/onboarding/criteria" />}
+      {!me.needsOnboarding && !me.needsCriteria && me.needsSourceSelection && <StepRedirect allowedRoutes={SOURCES_ROUTES} to="/onboarding/sources" />}
       <div key={location.pathname} className="animate-fade-in-up">
         <Routes>
-          <Route path="/"             element={<DashboardPage />} />
-          <Route path="/generate"     element={<GeneratePage />} />
-          <Route path="/discover"     element={<DiscoveriesPage />} />
-          <Route path="/applications" element={<ApplicationsPage />} />
-          <Route path="/sources"      element={<SourcesPage />} />
-          <Route path="/profile"      element={<ResumeIntakePage />} />
-          <Route path="/criteria"     element={<JobCriteriaPage />} />
-          <Route path="/settings"     element={<SettingsPage />} />
-          <Route path="/help"         element={<HelpPage />} />
-          <Route path="/support"      element={<SupportPage />} />
+          <Route path="/"                   element={<DashboardPage />} />
+          <Route path="/generate"           element={<GeneratePage />} />
+          <Route path="/discover"           element={<DiscoveriesPage />} />
+          <Route path="/applications"       element={<ApplicationsPage />} />
+          <Route path="/sources"            element={<SourcesPage />} />
+          <Route path="/profile"            element={<ResumeIntakePage />} />
+          <Route path="/criteria"           element={<JobCriteriaPage />} />
+          <Route path="/settings"           element={<SettingsPage />} />
+          <Route path="/help"               element={<HelpPage />} />
+          <Route path="/support"            element={<SupportPage />} />
+          <Route path="/onboarding/cv"       element={<OnboardingCvPage tier={me.tier} />} />
+          <Route path="/onboarding/criteria" element={<OnboardingCriteriaPage tier={me.tier} />} />
+          <Route path="/onboarding/sources"  element={<OnboardingSourcesPage tier={me.tier} />} />
         </Routes>
       </div>
     </main>

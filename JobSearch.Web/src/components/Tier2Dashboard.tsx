@@ -5,7 +5,6 @@ import {
   useApplications,
   useDiscoveries,
   useActivity,
-  useHealth,
 } from "../hooks/useDashboardData";
 import type { Summary } from "../types";
 import { GeneratePage } from "../pages/GeneratePage";
@@ -60,32 +59,6 @@ function KpiStrip({ summary, onStatusClick }: { summary: Summary; onStatusClick:
             </button>
           ))}
       </div>
-    </div>
-  );
-}
-
-function HealthStrip() {
-  const { data: health } = useHealth();
-  if (!health) return null;
-
-  const cfg = {
-    ok:      { bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-900/50", text: "text-emerald-700 dark:text-emerald-300", dot: "bg-emerald-500", label: "Healthy" },
-    stale:   { bg: "bg-amber-50 dark:bg-amber-500/10",     border: "border-amber-200 dark:border-amber-900/50",     text: "text-amber-700 dark:text-amber-300",   dot: "bg-amber-500",   label: "Stale" },
-    unknown: { bg: "bg-gray-50 dark:bg-gray-900",          border: "border-gray-200 dark:border-gray-800",         text: "text-gray-600 dark:text-gray-400",     dot: "bg-gray-400",    label: "Unknown" },
-  }[health.status];
-
-  return (
-    <div className={`flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border ${cfg.border} ${cfg.bg} px-5 py-3`}>
-      <div className="flex items-center gap-2">
-        <span className={`h-2.5 w-2.5 rounded-full ${cfg.dot}`} />
-        <span className={`text-sm font-medium ${cfg.text}`}>{cfg.label}</span>
-      </div>
-      {health.lastRunAt && (
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          Last run {health.lastRunAgeMinutes != null ? `${Math.round(health.lastRunAgeMinutes)} min ago` : "unknown"}
-        </span>
-      )}
-      {health.lastError && <span className="min-w-0 break-words text-xs text-red-600 dark:text-red-400">{health.lastError}</span>}
     </div>
   );
 }
@@ -213,7 +186,6 @@ export function Tier2Dashboard() {
 
   return (
     <div className="space-y-6">
-      <HealthStrip />
       {summary && <KpiStrip summary={summary} onStatusClick={status => navigate(`/applications?status=${status}`)} />}
 
       <GeneratePage />

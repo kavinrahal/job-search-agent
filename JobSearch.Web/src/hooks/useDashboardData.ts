@@ -5,7 +5,6 @@ import {
   createApplication,
   updateApplicationStatus,
   fetchActivity,
-  fetchHealth,
   fetchDiscoveries,
 } from "../api";
 import { useAsyncData, useAsyncAction } from "./useAsync";
@@ -34,10 +33,6 @@ export function useUpdateApplicationStatus() {
 
 export function useActivity(limit = 30) {
   return useAsyncData(() => fetchActivity(limit), [limit]);
-}
-
-export function useHealth() {
-  return useAsyncData(fetchHealth, []);
 }
 
 export function useDiscoveries(params: { recommendation?: string; page?: number; pageSize?: number }) {

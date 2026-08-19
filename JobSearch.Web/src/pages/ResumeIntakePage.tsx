@@ -6,7 +6,7 @@ import { parseBackgroundYaml, serializeBackgroundYaml, type BackgroundParseResul
 import { PageTagline } from "../components/PageTagline";
 import { PRIMARY_BUTTON } from "../lib/styles";
 
-export function ResumeIntakePage() {
+export function ResumeIntakePage({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [background, setBackground] = useState<BackgroundParseResult | null>(null);
   const [cvBase, setCvBase] = useState("");
@@ -40,8 +40,12 @@ export function ResumeIntakePage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Resume &amp; background</h2>
-      <PageTagline>The foundation everything else gets tailored from. Worth getting right.</PageTagline>
+      {!hideHeader && (
+        <>
+          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Resume &amp; background</h2>
+          <PageTagline>The foundation everything else gets tailored from. Worth getting right.</PageTagline>
+        </>
+      )}
 
       {!background && (
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">

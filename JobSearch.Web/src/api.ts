@@ -5,7 +5,6 @@ import type {
   ApplicationWithEvents,
   ActivityItem,
   DiscoveriesResponse,
-  HealthStatus,
   ParsedResume,
   Profile,
   GenerationResult,
@@ -80,13 +79,6 @@ export async function updateApplicationStatus(id: number, status: string): Promi
 
 export async function fetchActivity(limit = 30): Promise<ActivityItem[]> {
   return request(`/activity?limit=${limit}`);
-}
-
-export async function fetchHealth(): Promise<HealthStatus> {
-  const res = await fetch(`${BASE}/health`, { credentials: "include" });
-  // 503 means stale — still parse the body
-  if (!res.ok && res.status !== 503) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
 }
 
 export async function fetchDiscoveries(params: {

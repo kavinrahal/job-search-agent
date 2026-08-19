@@ -4,6 +4,7 @@ import { useGenerateCv, useGenerateLetter, useAskQuestion, useEditThread, useSea
 import type { GenerationResult, PostingCandidate } from "../types";
 import { PageTagline } from "../components/PageTagline";
 import { GeneratingIndicator } from "../components/GeneratingIndicator";
+import { ResumePdfViewer } from "../components/ResumePdfViewer";
 import { CARD, PRIMARY_BUTTON } from "../lib/styles";
 
 type Mode = "url" | "text";
@@ -74,6 +75,10 @@ export function GeneratePage() {
   const [postingCompany, setPostingCompany] = useState("");
   const [question, setQuestion] = useState("");
   const [cvResult, setCvResult] = useState<GenerationResult | null>(null);
+  // Revising a CV keeps the same threadId, so the PDF URL doesn't change on its own — this
+  // cache-busts it after every revision so the preview reflects the new content instead of
+  // whatever react-pdf (or the browser) cached under that same URL.
+  const [cvRevision, setCvRevision] = useState(0);
   const [letterResult, setLetterResult] = useState<GenerationResult | null>(null);
   const [letterCopied, setLetterCopied] = useState(false);
   const [answerResult, setAnswerResult] = useState<GenerationResult | null>(null);
@@ -110,6 +115,12 @@ export function GeneratePage() {
 
   async function handleGenerateCv() {
     setCvResult(await generateCv.execute(postingInput));
+    setCvRevision(0);
+  }
+
+  function handleCvRevised(result: GenerationResult) {
+    setCvResult(result);
+    setCvRevision(r => r + 1);
   }
 
   async function handleGenerateLetter() {
@@ -237,13 +248,14 @@ export function GeneratePage() {
       {cvResult && (
         <div className={`${CARD} animate-fade-in-up`}>
           <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">CV ready</p>
-          <a href={threadPdfUrl(cvResult.threadId)} className={`inline-block ${SECONDARY_BUTTON}`}>
+          <ResumePdfViewer source={`${threadPdfUrl(cvResult.threadId)}?r=${cvRevision}`} />
+          <a href={threadPdfUrl(cvResult.threadId)} className={`mt-3 inline-block ${SECONDARY_BUTTON}`}>
             Download PDF
           </a>
           <RevisionBox
             threadId={cvResult.threadId}
             placeholder="Request changes (e.g. mention Docker experience)"
-            onRevised={setCvResult}
+            onRevised={handleCvRevised}
           />
         </div>
       )}
