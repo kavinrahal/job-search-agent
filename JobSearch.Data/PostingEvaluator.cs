@@ -7,7 +7,7 @@ namespace JobSearch.Data;
 public class PostingEvaluator
 {
     private readonly AnthropicClient _client;
-    private const string OpusModel = "claude-opus-4-8";
+    private const string SonnetModel = "claude-sonnet-5";
 
     private readonly string _skillText;
     private readonly Tool _tool;
@@ -82,7 +82,7 @@ public class PostingEvaluator
 
         var response = await _client.Messages.Create(new MessageCreateParams
         {
-            Model = OpusModel,
+            Model = SonnetModel,
             MaxTokens = 1024,
             System = new List<TextBlockParam>
             {
@@ -98,7 +98,7 @@ public class PostingEvaluator
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.PostingEvaluator, OpusModel, response.Usage);
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.PostingEvaluator, SonnetModel, response.Usage);
 
         foreach (var block in response.Content)
         {
