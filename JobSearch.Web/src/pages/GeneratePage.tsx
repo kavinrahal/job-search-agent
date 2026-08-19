@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { threadPdfUrl, threadDocxUrl } from "../api";
 import { useGenerateCv, useGenerateLetter, useAskQuestion, useEditThread, useSearchPostingCandidates } from "../hooks/useGeneration";
 import type { GenerationResult, PostingCandidate } from "../types";
+import { PageTagline } from "../components/PageTagline";
 
 type Mode = "url" | "text";
 
@@ -138,6 +139,7 @@ export function GeneratePage() {
 
   return (
     <div className="space-y-6">
+      <PageTagline>Paste a posting, get a tailored CV, cover letter, or answer back in seconds.</PageTagline>
       <h2 className="text-lg font-semibold text-gray-700">Generate</h2>
 
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

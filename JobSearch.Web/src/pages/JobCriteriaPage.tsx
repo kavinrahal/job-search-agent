@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useProfile, useUpdateProfile } from "../hooks/useProfile";
 import { JobCriteriaEditor } from "../components/JobCriteriaEditor";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
+import { PageTagline } from "../components/PageTagline";
 
 const EMPTY: JobCriteriaData = parseJobCriteriaYaml("");
 
@@ -29,6 +30,7 @@ export function JobCriteriaPage() {
 
   return (
     <div className="space-y-6">
+      <PageTagline>What you're actually looking for, precise enough to tell a good match from a bad one.</PageTagline>
       <h2 className="text-lg font-semibold text-gray-700">Job criteria</h2>
 
       <JobCriteriaEditor value={criteria} onChange={setCriteria} />

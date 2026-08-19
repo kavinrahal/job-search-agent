@@ -4,6 +4,7 @@ import { useProfile } from "../hooks/useProfile";
 import { parseJobCriteriaYaml } from "../lib/jobCriteriaYaml";
 import { Tier1Dashboard } from "../components/Tier1Dashboard";
 import { Tier2Dashboard } from "../components/Tier2Dashboard";
+import { DashboardGreeting } from "../components/DashboardGreeting";
 
 // Separate from the /auth/me needsCriteria gate (App.tsx), which only checks that the user
 // has visited and saved the Criteria page once — saving always writes a full YAML skeleton
@@ -36,6 +37,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <DashboardGreeting name={me.firstName} />
       <CriteriaNudge />
       {me.tier === "Tier2" ? <Tier2Dashboard /> : <Tier1Dashboard />}
     </div>

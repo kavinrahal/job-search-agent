@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSupportMessage } from "../hooks/useSupport";
+import { PageTagline } from "../components/PageTagline";
 
 export function SupportPage() {
   const [message, setMessage] = useState("");
@@ -14,6 +15,7 @@ export function SupportPage() {
 
   return (
     <div className="space-y-6">
+      <PageTagline>Something broken, confusing, or just want to say hi? We're listening.</PageTagline>
       <h2 className="text-lg font-semibold text-gray-700">Support</h2>
 
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

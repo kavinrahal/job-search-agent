@@ -412,8 +412,11 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
     bool needsCriteria = string.IsNullOrEmpty(profile?.JobCriteria);
     bool needsSourceSelection = user.Tier == UserTier.Tier2 && user.EnabledSources is null;
     bool isOwner = string.Equals(user.Email, ownerEmail, StringComparison.OrdinalIgnoreCase);
+    // First name only, for a casual dashboard greeting — null until CvBase exists (a brand
+    // new user mid-onboarding), same source as BuildDownloadFilename's applicant name below.
+    string? firstName = ExtractApplicantName(profile?.CvBase)?.Split(' ', 2)[0];
 
-    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsCriteria, needsSourceSelection, isOwner });
+    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsCriteria, needsSourceSelection, isOwner, firstName });
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>

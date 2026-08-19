@@ -2,6 +2,7 @@ import { useState, Fragment } from "react";
 import { useDiscoveries } from "../hooks/useDashboardData";
 import type { DiscoveredPosting } from "../types";
 import { InfoTooltip } from "../components/InfoTooltip";
+import { PageTagline } from "../components/PageTagline";
 
 // ---------------------------------------------------------------------------
 // Recommendation config
@@ -272,6 +273,7 @@ export function DiscoveriesPage() {
 
   return (
     <div className="space-y-6">
+      <PageTagline>Postings we've already found and ranked, so you don't have to go looking.</PageTagline>
       <div className="flex items-center justify-between">
         <h2 className="flex items-center text-lg font-semibold text-gray-700">
           Discoveries

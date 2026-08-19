@@ -7,6 +7,7 @@ import { JobCriteriaEditor } from "../components/JobCriteriaEditor";
 import { ResumePdfViewer } from "../components/ResumePdfViewer";
 import { parseBackgroundYaml, serializeBackgroundYaml, type BackgroundParseResult } from "../lib/backgroundYaml";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
+import { PageTagline } from "../components/PageTagline";
 
 export function SettingsPage() {
   const { data: profile, loading: loadingProfile } = useProfile();
@@ -95,6 +96,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
+      <PageTagline>Everything about you, and everything about your account, in one place.</PageTagline>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-700">Settings</h2>
         {updatedAt && (

@@ -3,6 +3,7 @@ import { useParseResumePdf, useUpdateProfile, useUploadResumePdf } from "../hook
 import { BackgroundEditor } from "../components/BackgroundEditor";
 import { ResumePdfViewer } from "../components/ResumePdfViewer";
 import { parseBackgroundYaml, serializeBackgroundYaml, type BackgroundParseResult } from "../lib/backgroundYaml";
+import { PageTagline } from "../components/PageTagline";
 
 export function ResumeIntakePage() {
   const [file, setFile] = useState<File | null>(null);
@@ -38,6 +39,7 @@ export function ResumeIntakePage() {
 
   return (
     <div className="space-y-6">
+      <PageTagline>The foundation everything else gets tailored from. Worth getting right.</PageTagline>
       <h2 className="text-lg font-semibold text-gray-700">Resume &amp; background</h2>
 
       {!background && (

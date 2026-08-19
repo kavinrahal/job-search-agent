@@ -4,6 +4,7 @@ import { useSources, useUpdateSources, useUpdateGmailTrackingMode, useGmailForwa
 import { gmailOAuthStartUrl } from "../api";
 import type { SourcesResponse } from "../types";
 import { InfoTooltip } from "../components/InfoTooltip";
+import { PageTagline } from "../components/PageTagline";
 
 const LABEL = "mb-2 block text-sm font-medium text-gray-700";
 
@@ -218,6 +219,7 @@ export function SourcesPage() {
 
   return (
     <div className="space-y-6">
+      <PageTagline>Tell us where to look, and how you want applications tracked.</PageTagline>
       <h2 className="text-lg font-semibold text-gray-700">Choose your sources</h2>
       <p className="text-sm text-gray-500">
         Pick where job postings should come from. Automatic sources need nothing from you.

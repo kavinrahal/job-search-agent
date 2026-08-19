@@ -105,6 +105,7 @@ export async function fetchMe(): Promise<{
   needsCriteria: boolean;
   needsSourceSelection: boolean;
   isOwner: boolean;
+  firstName: string | null;
 }> {
   return request("/auth/me");
 }

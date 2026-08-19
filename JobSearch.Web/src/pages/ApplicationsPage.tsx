@@ -8,6 +8,7 @@ import {
 } from "../hooks/useDashboardData";
 import { APPLICATION_STATUSES, type Application, type ApplicationWithEvents } from "../types";
 import { InfoTooltip } from "../components/InfoTooltip";
+import { PageTagline } from "../components/PageTagline";
 
 const STATUS_COLORS: Record<string, string> = {
   Applied:      "bg-blue-100 text-blue-700",
@@ -228,6 +229,7 @@ export function ApplicationsPage() {
 
   return (
     <div className="space-y-6">
+      <PageTagline>Every application you've made, and where it stands.</PageTagline>
       <div className="flex items-center justify-between">
         <h2 className="flex items-center text-lg font-semibold text-gray-700">
           Applications
