@@ -866,6 +866,24 @@ api.MapGet("/admin/analytics", async (HttpContext ctx, AppDbContext db) =>
     return Results.Ok(await AnalyticsService.GetSummaryAsync(db, DateTime.UtcNow));
 });
 
+// GET /api/v1/admin/crash-pipeline-smoke-test — TEMPORARY. Owner-only, and deliberately
+// throws, to prove the automated crash pipeline works end to end (Sentry capture → signed
+// webhook → triage → repository_dispatch → crash-fix workflow) without waiting for a real
+// production crash to expose a misconfiguration.
+//
+// This endpoint is itself the defect: it exists only for that one verification and should be
+// deleted once the pipeline has been confirmed.
+api.MapGet("/admin/crash-pipeline-smoke-test", (HttpContext ctx) =>
+{
+    if (CurrentUserId(ctx, UserIdClaimType) != ownerUserId)
+        return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+
+    throw new InvalidOperationException(
+        "Crash pipeline smoke test: deliberate exception from a temporary owner-only endpoint " +
+        "in JobSearch.Api/Program.cs. This is not a product defect. The correct fix is to " +
+        "delete the /admin/crash-pipeline-smoke-test endpoint entirely.");
+});
+
 // POST /api/v1/support — body: { message: string }. Email/UserId are taken from the
 // authenticated session, not the request body, so the form itself only needs a message.
 api.MapPost("/support", async (HttpContext ctx, SupportMessageRequest body, AppDbContext db) =>
