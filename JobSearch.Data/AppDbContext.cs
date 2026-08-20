@@ -107,17 +107,19 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(s => new { s.UserId, s.Key })
             .IsUnique();
 
+        // Gmail message IDs are only unique within a single mailbox, not globally — two
+        // different users' inboxes can and do produce colliding MessageIds. The unique
+        // constraint has to include UserId or a collision between two users hard-crashes
+        // whichever one gets processed second.
         modelBuilder.Entity<RawEmailRecord>(e =>
         {
-            e.HasIndex(r => r.MessageId).IsUnique();
-            e.HasIndex(r => r.UserId);
+            e.HasIndex(r => new { r.UserId, r.MessageId }).IsUnique();
             e.HasQueryFilter(r => r.UserId == CurrentUserId);
         });
 
         modelBuilder.Entity<ClassificationRecord>(e =>
         {
-            e.HasIndex(c => c.MessageId).IsUnique();
-            e.HasIndex(c => c.UserId);
+            e.HasIndex(c => new { c.UserId, c.MessageId }).IsUnique();
             e.HasQueryFilter(c => c.UserId == CurrentUserId);
         });
 
