@@ -103,6 +103,16 @@ builder.Services.AddAuthentication(o =>
     o.ClientSecret = builder.Configuration["GOOGLE_CLIENT_SECRET"]
         ?? throw new InvalidOperationException("GOOGLE_CLIENT_SECRET not set");
     o.CallbackPath = "/api/v1/auth/callback/google";
+    // Same reasoning as the session cookie above (SameSite=None, Secure=Always in prod) —
+    // this cookie (ASP.NET Core's own CSRF/round-trip check for the OAuth redirect to Google
+    // and back) had no explicit config, so it fell back to the framework default, which is
+    // stricter than what this flow actually needs. Confirmed via live logs: real invited
+    // users were hitting "'.AspNetCore.Correlation.<token>' cookie not found" warnings and
+    // silently landing back on the login page with no visible error — a mobile browser,
+    // email-app in-app browser, or stricter cookie policy is more likely to drop a Lax
+    // cookie across a redirect through accounts.google.com and back than a None one.
+    o.CorrelationCookie.SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.None;
+    o.CorrelationCookie.SecurePolicy = isDev ? CookieSecurePolicy.None : CookieSecurePolicy.Always;
     // Any Google account may sign in — creates or looks up a Users row, then stamps the
     // user's own id onto the session as a distinct claim type (Google already populates
     // ClaimTypes.NameIdentifier with its own "sub" claim, so this can't reuse that type).
