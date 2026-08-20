@@ -27,6 +27,24 @@ builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 8_000_000);
 
 var isDev = builder.Environment.IsDevelopment();
 
+// Crash reporting. Absent DSN = disabled, which is the normal state locally and in CI —
+// only the deployed service sets SENTRY_DSN. See SentryConfig for why the scrubbing is an
+// allowlist: this process handles resumes and raw Gmail bodies, none of which may reach a
+// third-party dashboard.
+var sentryDsn = builder.Configuration["SENTRY_DSN"];
+if (SentryConfig.IsEnabled(sentryDsn))
+{
+    builder.WebHost.UseSentry(o =>
+    {
+        o.Dsn = sentryDsn!;
+        o.Environment = isDev ? "development" : "production";
+        // Request bodies are never read for error reports — the Kestrel limit above allows
+        // 8MB uploads, and a resume PDF is exactly what must not be captured.
+        o.MaxRequestBodySize = Sentry.Extensibility.RequestSize.None;
+        SentryConfig.Harden(o);
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Database
 // ---------------------------------------------------------------------------

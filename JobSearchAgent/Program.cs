@@ -40,6 +40,20 @@ string apiKey = config["ANTHROPIC_API_KEY"]
 
 var runStart = DateTime.UtcNow;
 
+// Crash reporting. Absent DSN = disabled (normal locally and in CI); only the deployed cron
+// service sets SENTRY_DSN. Initialized before the database work below so a migration or
+// connection failure — which would otherwise only ever surface in Railway logs that don't
+// survive the next container boot — still produces a durable, alertable event.
+var sentryDsn = config["SENTRY_DSN"];
+using var sentry = SentryConfig.IsEnabled(sentryDsn)
+    ? SentrySdk.Init(o =>
+    {
+        o.Dsn = sentryDsn!;
+        o.Environment = "production";
+        SentryConfig.Harden(o);
+    })
+    : null;
+
 // Init database — connection string from user-secrets / DATABASE_URL env var / local default.
 // Smaller pool than the API's: users are processed sequentially, so this rarely needs more
 // than one or two connections open at once even accounting for async overlap.
@@ -216,7 +230,12 @@ foreach (var user in activeUsers)
     }
     catch (Exception ex)
     {
-        // One user's Gmail hiccup or API failure must not stall everyone else.
+        // One user's Gmail hiccup or API failure must not stall everyone else. Swallowing it
+        // here is deliberate, but it also meant real bugs (e.g. the RawEmails duplicate-key
+        // crash) only ever appeared in Railway logs that don't survive the next container
+        // boot — so it's reported before being swallowed. Scoped to the user id, never the
+        // email address, per SentryConfig's scrubbing rules.
+        SentrySdk.CaptureException(ex, scope => scope.User = new SentryUser { Id = user.Id.ToString() });
         await Console.Error.WriteLineAsync($"[{user.Email}] Unhandled error: {ex}");
     }
 }
