@@ -102,7 +102,7 @@ function DisqualifiersSection({ value, onChange }: { value: Disqualifier[]; onCh
   );
 }
 
-export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData; onChange: (v: JobCriteriaData) => void }) {
+export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteriaData; onChange: (v: JobCriteriaData) => void; tier: string }) {
   const set = <K extends keyof JobCriteriaData>(key: K, v: JobCriteriaData[K]) => onChange({ ...value, [key]: v });
 
   function toggleEmploymentType(type: string) {
@@ -120,24 +120,31 @@ export function JobCriteriaEditor({ value, onChange }: { value: JobCriteriaData;
 
   return (
     <div className="space-y-4">
-      <TopicCard title="Target job titles">
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          The exact job titles to search for automatically — e.g. "Software Engineer, Backend
-          Developer" or "Sous Chef, Line Cook". This is what actually gets searched; everything
-          else below only affects how a found posting gets ranked.
-          <InfoTooltip text="Required for automatic discovery to run. Without at least one title here, there's nothing to search for, so automatic discovery is skipped entirely until this is filled in." />
-        </p>
-        <Field
-          label="Job titles (comma-separated) *"
-          value={value.targetJobTitles}
-          onChange={v => set("targetJobTitles", v)}
-        />
-        {!value.targetJobTitles.trim() && (
-          <p className="text-xs text-amber-600 dark:text-amber-400">
-            Required — automatic discovery won't run until at least one title is added here.
+      {/* Tier2-only, since this specifically drives Tier2's automatic discovery — showing a
+          "required" field for something that doesn't apply to Tier1 at all would just be
+          confusing. Tier2's needsCriteria check (backend) knows about this field separately,
+          so upgrading to Tier2 without ever filling it in correctly routes back through this
+          page rather than silently leaving discovery broken. */}
+      {tier === "Tier2" && (
+        <TopicCard title="Target job titles">
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            The exact job titles to search for automatically — e.g. "Software Engineer, Backend
+            Developer" or "Sous Chef, Line Cook". This is what actually gets searched; everything
+            else below only affects how a found posting gets ranked.
+            <InfoTooltip text="Required for automatic discovery to run. Without at least one title here, there's nothing to search for, so automatic discovery is skipped entirely until this is filled in." />
           </p>
-        )}
-      </TopicCard>
+          <Field
+            label="Job titles (comma-separated) *"
+            value={value.targetJobTitles}
+            onChange={v => set("targetJobTitles", v)}
+          />
+          {!value.targetJobTitles.trim() && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Required — automatic discovery won't run until at least one title is added here.
+            </p>
+          )}
+        </TopicCard>
+      )}
 
       <TopicCard title="Employment type">
         <div className="flex flex-wrap gap-2">

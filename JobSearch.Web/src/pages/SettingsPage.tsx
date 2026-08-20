@@ -145,7 +145,7 @@ export function SettingsPage() {
 
       <div>
         <h3 className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">Job criteria</h3>
-        <JobCriteriaEditor value={jobCriteria} onChange={setJobCriteria} />
+        <JobCriteriaEditor value={jobCriteria} onChange={setJobCriteria} tier={me?.tier ?? "Tier1"} />
       </div>
 
       <div className="flex items-center gap-3">

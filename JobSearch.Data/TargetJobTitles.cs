@@ -1,12 +1,14 @@
 using System.Text.RegularExpressions;
 
-namespace JobSearchAgent.Workers;
+namespace JobSearch.Data;
 
 // Extracts the user-provided target_job_titles field from their raw JobCriteria YAML text.
 // Deterministic, not AI-derived — the whole point of this field is that the user states
 // exactly what to search for instead of having it inferred from looser criteria (see
 // JobCriteriaEditor.tsx, the only writer of this key, for the field itself). A plain regex
 // against a known single-line scalar, not a full YAML parser — nothing else here needs one.
+// Lives in JobSearch.Data (not JobSearchAgent) since both the worker (discovery eligibility)
+// and the API (needsCriteria, for Tier2 users specifically) need it.
 public static class TargetJobTitles
 {
     private static readonly Regex Pattern = new(@"^target_job_titles:\s*(.*)$", RegexOptions.Multiline);

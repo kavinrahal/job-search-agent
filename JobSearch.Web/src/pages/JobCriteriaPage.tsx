@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useProfile, useUpdateProfile } from "../hooks/useProfile";
+import { useMe } from "../hooks/useAuth";
 import { JobCriteriaEditor } from "../components/JobCriteriaEditor";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
 import { PageTagline } from "../components/PageTagline";
@@ -9,6 +10,7 @@ const EMPTY: JobCriteriaData = parseJobCriteriaYaml("");
 
 export function JobCriteriaPage({ hideHeader = false, onSaved }: { hideHeader?: boolean; onSaved?: () => void } = {}) {
   const { data: profile, loading: loadingProfile } = useProfile();
+  const { data: me } = useMe();
   const [criteria, setCriteria] = useState<JobCriteriaData>(EMPTY);
   const { execute, loading: saving, error } = useUpdateProfile();
 
@@ -39,7 +41,7 @@ export function JobCriteriaPage({ hideHeader = false, onSaved }: { hideHeader?: 
         </>
       )}
 
-      <JobCriteriaEditor value={criteria} onChange={setCriteria} />
+      <JobCriteriaEditor value={criteria} onChange={setCriteria} tier={me?.tier ?? "Tier1"} />
 
       <div className="flex items-center gap-3">
         <button

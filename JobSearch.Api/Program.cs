@@ -436,7 +436,14 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
     // in something meaningful" — saving from JobCriteriaPage always writes a full YAML
     // skeleton (defaults included), so this only stays true until the user visits and saves
     // at least once. The dashboard's separate nudge banner checks for actually-empty content.
-    bool needsCriteria = string.IsNullOrEmpty(profile?.JobCriteria);
+    //
+    // Tier 2 additionally requires target_job_titles specifically — it's hidden from Tier 1
+    // (see JobCriteriaEditor.tsx), since it only drives Tier2's automatic discovery. This is
+    // what makes upgrading to Tier 2 correctly route someone back through the criteria step
+    // (JobCriteriaPage now shows the field) if they upgraded without ever filling it in —
+    // the same redirect machinery that already exists for the initial onboarding flow.
+    bool needsCriteria = string.IsNullOrEmpty(profile?.JobCriteria)
+        || (user.Tier == UserTier.Tier2 && TargetJobTitles.Parse(profile?.JobCriteria).Length == 0);
     bool needsSourceSelection = user.Tier == UserTier.Tier2 && user.EnabledSources is null;
     bool isOwner = string.Equals(user.Email, ownerEmail, StringComparison.OrdinalIgnoreCase);
     // First name only, for a casual dashboard greeting — null until CvBase exists (a brand
