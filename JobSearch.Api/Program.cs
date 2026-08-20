@@ -242,6 +242,7 @@ builder.Services.AddSingleton(sp => new AnswerAgent(anthropicApiKey, sp.GetRequi
 builder.Services.AddSingleton(sp => new ResumeIntakeAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new PostingMatcherAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new CompanyExtractorAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(sp => new AccuracyVerifierAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(_ => new JoraFetcher());
 // Left unregistered when unset. Deliberately NOT an endpoint parameter (AdzunaFetcher?) —
 // minimal API infers an unregistered type's parameter source at startup from the DI
@@ -1439,6 +1440,7 @@ static async Task<IResult> WithCreditAsync(AppDbContext db, int userId, Func<Tas
 
 static async Task<IResult> GenerateArtifactAsync(
     AppDbContext db, JobPostingFetcher fetcher, CrossCheckDeps crossCheck, CompanyExtractorAgent companyExtractor,
+    AccuracyVerifierAgent verifier, string sourceMaterial,
     int userId, int? discoveryId, string? postingText, string? postingUrl, string? postingTitle, string? postingCompany,
     string artifactType,
     Func<string, string, Task<string>> generate,
@@ -1456,6 +1458,9 @@ static async Task<IResult> GenerateArtifactAsync(
     return await WithCreditAsync(db, userId, async () =>
     {
         var text = await generate(resolvedText, evalJson);
+        // Non-blocking: a flagged claim doesn't stop the credit spend or hide the result, it
+        // just gets surfaced for the user to review — see AccuracyVerifierAgent's own comment.
+        var warnings = await verifier.VerifyAsync(userId, sourceMaterial, text);
 
         var thread = new AgentThread
         {
@@ -1467,6 +1472,7 @@ static async Task<IResult> GenerateArtifactAsync(
                 new("assistant", text),
             }),
             CurrentContent = text,
+            AccuracyWarningsJson = JsonSerializer.Serialize(warnings),
             Company = company,
             Status = AgentThreadStatus.Complete,
             CreatedAt = DateTime.UtcNow,
@@ -1481,13 +1487,14 @@ static async Task<IResult> GenerateArtifactAsync(
         });
         await db.SaveChangesAsync();
 
-        return Results.Ok(new { threadId = thread.Id, text });
+        return Results.Ok(new { threadId = thread.Id, text, accuracyWarnings = warnings });
     });
 }
 
 // POST /api/v1/cv — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingTitle?: string, postingCompany?: string }
 api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher,
-    JoraFetcher joraFetcher, PostingMatcherAgent matcher, CompanyExtractorAgent companyExtractor, CvTailorAgent cvAgent) =>
+    JoraFetcher joraFetcher, PostingMatcherAgent matcher, CompanyExtractorAgent companyExtractor,
+    AccuracyVerifierAgent verifier, CvTailorAgent cvAgent) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     if (!await CreditService.HasCreditAsync(db, userId))
@@ -1497,7 +1504,10 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
         ?? throw new InvalidOperationException("UserProfile not found for the current user.");
 
     var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
-    return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, userId,
+    // Matches CvTailorAgent.BuildSystemPrompt's own context exactly — verifying against
+    // anything less (or more) would misrepresent what the generator actually had to work with.
+    var sourceMaterial = $"{profile.Background}\n\n--- BASE CV ---\n{profile.CvBase}";
+    return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, verifier, sourceMaterial, userId,
         body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingTitle, body.PostingCompany,
         AgentThreadType.Cv,
         (text, evalJson) => cvAgent.GenerateAsync(profile, text, evalJson),
@@ -1506,7 +1516,8 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
 
 // POST /api/v1/letter — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingTitle?: string, postingCompany?: string }
 api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContext db, JobPostingFetcher fetcher,
-    JoraFetcher joraFetcher, PostingMatcherAgent matcher, CompanyExtractorAgent companyExtractor, CoverLetterAgent letterAgent) =>
+    JoraFetcher joraFetcher, PostingMatcherAgent matcher, CompanyExtractorAgent companyExtractor,
+    AccuracyVerifierAgent verifier, CoverLetterAgent letterAgent) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     if (!await CreditService.HasCreditAsync(db, userId))
@@ -1516,7 +1527,8 @@ api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContex
         ?? throw new InvalidOperationException("UserProfile not found for the current user.");
 
     var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
-    return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, userId,
+    // CoverLetterAgent.BuildSystemPrompt only includes Background, not CvBase — same here.
+    return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, verifier, profile.Background, userId,
         body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingTitle, body.PostingCompany,
         AgentThreadType.CoverLetter,
         (text, evalJson) => letterAgent.GenerateAsync(profile, text, evalJson),
@@ -1525,7 +1537,7 @@ api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContex
 
 // POST /api/v1/answer — body: { question: string, discoveryId?: int, postingUrl?: string, postingTitle?: string, postingCompany?: string }
 api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext db, JobPostingFetcher fetcher,
-    JoraFetcher joraFetcher, PostingMatcherAgent matcher, AnswerAgent answerAgent) =>
+    JoraFetcher joraFetcher, PostingMatcherAgent matcher, AnswerAgent answerAgent, AccuracyVerifierAgent verifier) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     if (!await CreditService.HasCreditAsync(db, userId))
@@ -1567,12 +1579,19 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
         var (mode, content) = await answerAgent.RespondAsync(profile, history);
         history.Add(new AgentThreadTurn("assistant", content));
 
+        // A follow-up question isn't a factual claim about the candidate — nothing to verify
+        // until there's an actual final_answer.
+        var warnings = mode == "final_answer"
+            ? await verifier.VerifyAsync(userId, profile.Background, content)
+            : [];
+
         var thread = new AgentThread
         {
             UserId = userId,
             ArtifactType = AgentThreadType.Answer,
             HistoryJson = JsonSerializer.Serialize(history),
             CurrentContent = mode == "final_answer" ? content : null,
+            AccuracyWarningsJson = JsonSerializer.Serialize(warnings),
             Status = mode == "final_answer" ? AgentThreadStatus.Complete : AgentThreadStatus.AwaitingContext,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -1581,7 +1600,7 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
         db.AnalyticsEvents.Add(new AnalyticsEvent { UserId = userId, EventType = AnalyticsEventType.AnswerGenerated, CreatedAt = DateTime.UtcNow });
         await db.SaveChangesAsync();
 
-        return Results.Ok(new { threadId = thread.Id, mode, content });
+        return Results.Ok(new { threadId = thread.Id, mode, content, accuracyWarnings = warnings });
     });
 }).RequireRateLimiting("generation");
 
@@ -1590,7 +1609,7 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
 // continues the Q&A; on a Complete thread it's a revision request.
 api.MapPost("/threads/{id:int}/edit", async (
     int id, HttpContext ctx, EditRequest body, AppDbContext db,
-    CvTailorAgent cvAgent, CoverLetterAgent letterAgent, AnswerAgent answerAgent) =>
+    CvTailorAgent cvAgent, CoverLetterAgent letterAgent, AnswerAgent answerAgent, AccuracyVerifierAgent verifier) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     var thread = await db.AgentThreads.FindAsync(id);
@@ -1616,13 +1635,18 @@ api.MapPost("/threads/{id:int}/edit", async (
             var (mode, content) = await answerAgent.RespondAsync(profile, history);
             history.Add(new AgentThreadTurn("assistant", content));
 
+            var warnings = mode == "final_answer"
+                ? await verifier.VerifyAsync(userId, profile.Background, content)
+                : [];
+
             thread.HistoryJson = JsonSerializer.Serialize(history);
             thread.CurrentContent = mode == "final_answer" ? content : null;
+            thread.AccuracyWarningsJson = JsonSerializer.Serialize(warnings);
             thread.Status = mode == "final_answer" ? AgentThreadStatus.Complete : AgentThreadStatus.AwaitingContext;
             thread.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
 
-            return Results.Ok(new { threadId = thread.Id, mode, content });
+            return Results.Ok(new { threadId = thread.Id, mode, content, accuracyWarnings = warnings });
         });
     }
 
@@ -1643,13 +1667,33 @@ api.MapPost("/threads/{id:int}/edit", async (
         else
             (answerMode, answerContent) = await answerAgent.RespondAsync(profile, history);
 
-        history.Add(new AgentThreadTurn("assistant", text ?? answerContent ?? ""));
+        var finalText = text ?? answerContent ?? "";
+        history.Add(new AgentThreadTurn("assistant", finalText));
+
+        // "Make it sound more impressive" is exactly the kind of revision request that could
+        // introduce embellishment a first draft wouldn't have had — re-verify every revision,
+        // not just the original generation. Skipped only for an Answer thread still awaiting
+        // another follow-up round (answerMode set but not "final_answer" — nothing final to check).
+        string[] warnings;
+        if (answerMode is not null && answerMode != "final_answer")
+        {
+            warnings = [];
+        }
+        else
+        {
+            var sourceMaterial = thread.ArtifactType == AgentThreadType.Cv
+                ? $"{profile.Background}\n\n--- BASE CV ---\n{profile.CvBase}"
+                : profile.Background;
+            warnings = await verifier.VerifyAsync(userId, sourceMaterial, finalText);
+        }
+
         thread.HistoryJson = JsonSerializer.Serialize(history);
         thread.CurrentContent = text ?? answerContent;
+        thread.AccuracyWarningsJson = JsonSerializer.Serialize(warnings);
         thread.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        return Results.Ok(new { threadId = thread.Id, text, mode = answerMode, content = answerContent });
+        return Results.Ok(new { threadId = thread.Id, text, mode = answerMode, content = answerContent, accuracyWarnings = warnings });
     });
 }).RequireRateLimiting("generation");
 

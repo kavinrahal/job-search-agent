@@ -15,6 +15,11 @@ public class AgentThread
     public string ArtifactType { get; set; } = "";   // AgentThreadType
     public string HistoryJson { get; set; } = "[]";  // List<AgentThreadTurn>, System.Text.Json
     public string? CurrentContent { get; set; }       // latest assistant turn's content; null while AwaitingContext
+    // Claims AccuracyVerifierAgent couldn't trace back to the candidate's own source material
+    // for the current CurrentContent — List<string>, System.Text.Json. Null (not just empty)
+    // until the first verification pass runs, so "never checked" stays distinguishable from
+    // "checked, nothing flagged" if that distinction is ever needed later.
+    public string? AccuracyWarningsJson { get; set; }
     public string Status { get; set; } = AgentThreadStatus.AwaitingContext;
     public string? LastMessageId { get; set; }        // Telegram message_id of the most recent bot message, or null (web-originated)
     // Hiring company, if identifiable from the posting at generation time — used to name

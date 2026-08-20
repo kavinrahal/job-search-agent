@@ -100,6 +100,10 @@ export interface GenerationResult {
   text?: string;
   content?: string;
   mode?: "ask_followup" | "final_answer";
+  // Claims AccuracyVerifierAgent couldn't trace back to the candidate's own background/CV —
+  // absent or empty means nothing was flagged (or, for a follow-up question, nothing final
+  // exists yet to check).
+  accuracyWarnings?: string[];
 }
 
 export interface PostingCandidate {

@@ -20,6 +20,21 @@ function PasteInsteadLink({ label, onClick }: { label: string; onClick: () => vo
   );
 }
 
+// Non-blocking by design (see AccuracyVerifierAgent's own comment) — the content above this
+// is already generated and downloadable either way, this just tells the user what to
+// double-check before they actually submit it somewhere.
+function AccuracyWarningBanner({ warnings }: { warnings?: string[] }) {
+  if (!warnings || warnings.length === 0) return null;
+  return (
+    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+      <p className="font-medium">Worth double-checking before you send this:</p>
+      <ul className="mt-1 list-inside list-disc space-y-0.5">
+        {warnings.map((w, i) => <li key={i}>{w}</li>)}
+      </ul>
+    </div>
+  );
+}
+
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
@@ -248,6 +263,7 @@ export function GeneratePage() {
       {cvResult && (
         <div className={`${CARD} animate-fade-in-up`}>
           <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">CV ready</p>
+          <AccuracyWarningBanner warnings={cvResult.accuracyWarnings} />
           <ResumePdfViewer source={`${threadPdfUrl(cvResult.threadId)}?r=${cvRevision}`} />
           <a href={threadPdfUrl(cvResult.threadId)} className={`mt-3 inline-block ${SECONDARY_BUTTON}`}>
             Download PDF
@@ -269,6 +285,7 @@ export function GeneratePage() {
               <span className="text-xs text-emerald-600 dark:text-emerald-400">Copied to clipboard.</span>
             )}
           </div>
+          <AccuracyWarningBanner warnings={letterResult.accuracyWarnings} />
           <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 dark:text-gray-300">{letterResult.text}</pre>
           <div className="mt-3 flex gap-2">
             <a href={threadPdfUrl(letterResult.threadId)} className={`inline-block ${SECONDARY_BUTTON}`}>
@@ -304,6 +321,7 @@ export function GeneratePage() {
             {answerResult.mode === "ask_followup" && (
               <p className="mb-1 text-xs font-medium text-amber-600 dark:text-amber-400">Needs more context:</p>
             )}
+            <AccuracyWarningBanner warnings={answerResult.accuracyWarnings} />
             <p className="whitespace-pre-wrap">{answerResult.content}</p>
             <RevisionBox
               threadId={answerResult.threadId}
