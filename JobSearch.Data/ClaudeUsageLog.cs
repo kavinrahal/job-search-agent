@@ -26,5 +26,4 @@ public static class ClaudeAgentName
     public const string ResumeIntakeAgent = "ResumeIntakeAgent";
     public const string PostingMatcherAgent = "PostingMatcherAgent";
     public const string CompanyExtractorAgent = "CompanyExtractorAgent";
-    public const string SearchKeywordAgent = "SearchKeywordAgent";
 }

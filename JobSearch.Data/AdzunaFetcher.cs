@@ -14,8 +14,9 @@ public class AdzunaFetcher : IJobFetcher
     // fail-safe: this app serves candidates in any profession, so a generic default here
     // would silently mean "search for software engineer roles" for everyone. Callers that
     // only need SearchAsync (a one-off targeted lookup, keywords passed directly to it) never
-    // need this at all — see DiscoverySourceResolver for where FetchAllAsync's keywords are
-    // actually derived, per user, from their own job criteria (SearchKeywordAgent).
+    // need this at all — see DiscoverySourceResolver for where FetchAllAsync's keywords come
+    // from: the user's own target_job_titles field (TargetJobTitles.Parse), typed by them
+    // directly, not inferred.
     private readonly IReadOnlyList<string> _keywords;
 
     public AdzunaFetcher(string appId, string appKey, IReadOnlyList<string>? keywords = null)

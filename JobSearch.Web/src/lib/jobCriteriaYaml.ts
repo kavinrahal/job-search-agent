@@ -22,6 +22,12 @@ export interface Disqualifier {
 }
 
 export interface JobCriteriaData {
+  // Exactly what to search job boards for (Adzuna) — required for automatic discovery to
+  // run at all. Deliberately a plain user-typed list, not something inferred from the rest
+  // of criteria: an earlier version tried deriving this with AI from looser criteria, which
+  // risked searching for the wrong thing whenever criteria was thin or incomplete.
+  targetJobTitles: string;
+
   employmentTypes: string[];
   countries: string;
   states: string;
@@ -95,6 +101,8 @@ export interface JobCriteriaData {
 }
 
 const DEFAULTS: Omit<JobCriteriaData, "extra"> = {
+  targetJobTitles: "",
+
   employmentTypes: ["full_time"],
   countries: "",
   states: "",
@@ -233,6 +241,16 @@ export function parseJobCriteriaYaml(text: string): JobCriteriaData {
 
   const extra: Record<string, unknown> = { ...raw };
   const data = { ...DEFAULTS };
+
+  if (typeof raw.target_job_titles === "string") {
+    data.targetJobTitles = raw.target_job_titles;
+    delete extra.target_job_titles;
+  } else if (isStringArray(raw.target_job_titles)) {
+    // Tolerate a hand-edited YAML list too (Advanced section), not just the plain string
+    // this editor itself writes.
+    data.targetJobTitles = raw.target_job_titles.join(", ");
+    delete extra.target_job_titles;
+  }
 
   if (isStringArray(raw.employment_type_preference) && raw.employment_type_preference.length > 0) {
     data.employmentTypes = raw.employment_type_preference;
@@ -499,6 +517,7 @@ function optionalNumber(text: string): number | undefined {
 // than being overwritten by the form's empty/default value for that same key.
 export function serializeJobCriteriaYaml(data: JobCriteriaData): string {
   const fromForm: Record<string, unknown> = {
+    target_job_titles: data.targetJobTitles,
     employment_type_preference: data.employmentTypes,
     location: {
       countries: split(data.countries, ","),

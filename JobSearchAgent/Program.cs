@@ -70,10 +70,6 @@ var userSecrets = new UserSecretService(dataProtectionServices.BuildServiceProvi
 // log write, so it's safe to reuse across the whole loop below.
 var usageLogger = new ClaudeUsageLogger(dbOptions);
 
-// Derives Adzuna's search keywords from each user's own criteria — see AdzunaFetcher's and
-// DiscoverySourceResolver's comments for why nothing here is a fixed/hardcoded keyword list.
-var searchKeywordAgent = new SearchKeywordAgent(apiKey, usageLogger);
-
 // clientId/clientSecret are the app's own Gmail OAuth client (shared across every user's
 // Gmail connection, like GOOGLE_CLIENT_ID for the web login) — stays an env var. Each
 // user's own refresh token lives encrypted in UserSecrets.
@@ -150,12 +146,32 @@ if (!testMode)
     // Without real criteria, evaluate_posting.md has no disqualifiers or skill dimensions to
     // check a posting against, so the model has nothing to reject an irrelevant posting on —
     // a live incident where an incomplete-profile user got emailed about a role from a
-    // completely unrelated profession. Requiring non-empty JobCriteria matches the same
-    // "has this user actually finished onboarding" check the frontend's needsCriteria uses.
-    var discoveryUsers = await db.Users
-        .Where(u => u.Tier == UserTier.Tier2
-                 && db.UserProfiles.Any(p => p.UserId == u.Id && p.JobCriteria != null && p.JobCriteria != ""))
+    // completely unrelated profession.
+    //
+    // Beyond that, target_job_titles specifically must be filled in too — this is what
+    // Adzuna's proactive search actually runs against (see RunDiscoveryForUserAsync /
+    // TargetJobTitles.Parse), and it's a deliberately explicit, user-typed field rather than
+    // something inferred from the rest of criteria: an AI-derived guess at "what should we
+    // search for" was the earlier version of this, and it still risked searching for the
+    // wrong thing when criteria was thin. No titles means no legitimate search to run, so
+    // discovery is skipped for that user entirely rather than guessing.
+    //
+    // JobCriteria has to be fetched here (not just checked for existence via Any()) since
+    // TargetJobTitles.Parse needs the actual text — filtered in-memory after, since EF Core
+    // can't translate that parse into SQL.
+    var discoveryCandidates = await db.Users
+        .Where(u => u.Tier == UserTier.Tier2)
+        .Select(u => new
+        {
+            User = u,
+            JobCriteria = db.UserProfiles.Where(p => p.UserId == u.Id).Select(p => p.JobCriteria).FirstOrDefault(),
+        })
         .ToListAsync();
+
+    var discoveryUsers = discoveryCandidates
+        .Where(c => !string.IsNullOrEmpty(c.JobCriteria) && TargetJobTitles.Parse(c.JobCriteria).Length > 0)
+        .Select(c => c.User)
+        .ToList();
 
     Console.WriteLine($"Running aggregator discovery for {discoveryUsers.Count} Tier 2 user(s)...");
     foreach (var user in discoveryUsers)
@@ -228,13 +244,12 @@ async Task<(int Discovered, int Evaluated, int Notified)> RunDiscoveryForUserAsy
 {
     await using var userDb = new AppDbContext(dbOptions) { CurrentUserId = user.Id };
 
-    // discoveryUsers (see the query above) already requires non-empty JobCriteria, so this
-    // should always find real criteria to work from — the null-conditional is just for the
-    // FindAsync itself, not a "criteria might be blank" case.
+    // discoveryUsers (see the query above) already requires target_job_titles to be filled
+    // in, so this should always find real titles to search for — re-parsed here rather than
+    // threaded through from the eligibility check, since that's a cheap regex, not worth
+    // carrying state across for.
     var profile = await userDb.UserProfiles.FindAsync(user.Id);
-    string[] adzunaKeywords = profile is not null
-        ? await searchKeywordAgent.GenerateAsync(user.Id, profile.JobCriteria)
-        : [];
+    var adzunaKeywords = TargetJobTitles.Parse(profile?.JobCriteria);
 
     var fetchers = DiscoverySourceResolver.Resolve(user.EnabledSources, adzunaAppId, adzunaAppKey, adzunaKeywords);
     if (fetchers.Count == 0)

@@ -13,11 +13,12 @@ public static class DiscoverySourceResolver
     // selection means the user turned everything off; that's respected as-is. Jooble has no
     // fetcher yet — selecting it is a no-op until one exists.
     //
-    // adzunaKeywords is per-user (derived from their own job criteria via SearchKeywordAgent,
-    // see JobSearchAgent/Program.cs) — not defaulted here to anything hardcoded. A missing or
-    // empty list means Adzuna is skipped even if selected+configured, since a keyword-search
-    // source with no keywords has nothing useful to do; that's the safe failure, not falling
-    // back to some generic default that would only really suit one profession.
+    // adzunaKeywords is per-user (the user's own target_job_titles field, see
+    // TargetJobTitles.Parse and JobCriteriaEditor.tsx) — not defaulted here to anything
+    // hardcoded. A missing or empty list means Adzuna is skipped even if selected+configured,
+    // since a keyword-search source with no keywords has nothing useful to do; that's the
+    // safe failure, not falling back to some generic default that would only really suit one
+    // profession.
     public static List<IJobFetcher> Resolve(
         string? enabledSources, string? adzunaAppId, string? adzunaAppKey, IReadOnlyList<string>? adzunaKeywords = null)
     {
