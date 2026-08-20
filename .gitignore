@@ -44,3 +44,18 @@ JobSearch.Web/dist/
 
 # Throwaway Playwright browser-testing artifacts
 .playwright-mcp/
+
+# Ruflo — local dev tooling only, never committed
+CLAUDE.md
+.mcp.json
+.claude-flow/
+.swarm/
+.agents/
+.claude/settings.json
+.claude/skills/
+.claude/commands/
+.claude/agents/
+.claude/helpers/
+.claude/security-scans/
+.claude/.proven-config-version
+.claude/proven-config.json
