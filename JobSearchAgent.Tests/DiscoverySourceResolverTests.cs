@@ -6,13 +6,15 @@ namespace JobSearchAgent.Tests;
 
 public class DiscoverySourceResolverTests
 {
+    private static readonly string[] Keywords = ["sous chef", "line cook", "kitchen manager"];
+
     // TC01 — Null selection (Tier 2, "choose your sources" not completed yet) defaults to
-    // every automatic source, including Adzuna when creds are configured. This is the whole
-    // point of the ticket: discovery has value with zero setup.
+    // every automatic source, including Adzuna when creds AND keywords are both available.
+    // This is the whole point of the ticket: discovery has value with zero setup.
     [Fact]
-    public void Resolve_NullSelection_WithAdzunaCreds_ReturnsAllAutomaticSources()
+    public void Resolve_NullSelection_WithAdzunaCredsAndKeywords_ReturnsAllAutomaticSources()
     {
-        var result = DiscoverySourceResolver.Resolve(null, "app-id", "app-key");
+        var result = DiscoverySourceResolver.Resolve(null, "app-id", "app-key", Keywords);
 
         Assert.Equal(3, result.Count);
         Assert.Contains(result, f => f is AdzunaFetcher);
@@ -26,7 +28,20 @@ public class DiscoverySourceResolverTests
     [Fact]
     public void Resolve_NullSelection_NoAdzunaCreds_ExcludesAdzunaOnly()
     {
-        var result = DiscoverySourceResolver.Resolve(null, null, null);
+        var result = DiscoverySourceResolver.Resolve(null, null, null, Keywords);
+
+        Assert.Equal(2, result.Count);
+        Assert.DoesNotContain(result, f => f is AdzunaFetcher);
+    }
+
+    // TC02b — Creds present but no keywords derived (e.g. SearchKeywordAgent came back empty,
+    // or the caller forgot to pass any): Adzuna is excluded rather than falling back to some
+    // generic default search — a keyword-search source with nothing to search for has no
+    // useful default, and a hardcoded one would only really suit one profession.
+    [Fact]
+    public void Resolve_NullSelection_NoKeywords_ExcludesAdzunaOnly()
+    {
+        var result = DiscoverySourceResolver.Resolve(null, "app-id", "app-key", adzunaKeywords: null);
 
         Assert.Equal(2, result.Count);
         Assert.DoesNotContain(result, f => f is AdzunaFetcher);
@@ -38,7 +53,7 @@ public class DiscoverySourceResolverTests
     [Fact]
     public void Resolve_ExplicitEmptySelection_ReturnsNone()
     {
-        var result = DiscoverySourceResolver.Resolve("", "app-id", "app-key");
+        var result = DiscoverySourceResolver.Resolve("", "app-id", "app-key", Keywords);
 
         Assert.Empty(result);
     }
@@ -48,7 +63,7 @@ public class DiscoverySourceResolverTests
     [Fact]
     public void Resolve_ExplicitPartialSelection_OnlyReturnsChosenSources()
     {
-        var result = DiscoverySourceResolver.Resolve("lever", "app-id", "app-key");
+        var result = DiscoverySourceResolver.Resolve("lever", "app-id", "app-key", Keywords);
 
         Assert.Single(result);
         Assert.IsType<LeverFetcher>(result[0]);
@@ -59,7 +74,7 @@ public class DiscoverySourceResolverTests
     [Fact]
     public void Resolve_UnknownKeyInSelection_IgnoredWithoutThrowing()
     {
-        var result = DiscoverySourceResolver.Resolve("lever,not_a_real_source", "app-id", "app-key");
+        var result = DiscoverySourceResolver.Resolve("lever,not_a_real_source", "app-id", "app-key", Keywords);
 
         Assert.Single(result);
         Assert.IsType<LeverFetcher>(result[0]);

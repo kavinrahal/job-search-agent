@@ -12,15 +12,23 @@ public static class DiscoverySourceResolver
     // source, so discovery has value from the moment someone subscribes. An explicit empty
     // selection means the user turned everything off; that's respected as-is. Jooble has no
     // fetcher yet — selecting it is a no-op until one exists.
-    public static List<IJobFetcher> Resolve(string? enabledSources, string? adzunaAppId, string? adzunaAppKey)
+    //
+    // adzunaKeywords is per-user (derived from their own job criteria via SearchKeywordAgent,
+    // see JobSearchAgent/Program.cs) — not defaulted here to anything hardcoded. A missing or
+    // empty list means Adzuna is skipped even if selected+configured, since a keyword-search
+    // source with no keywords has nothing useful to do; that's the safe failure, not falling
+    // back to some generic default that would only really suit one profession.
+    public static List<IJobFetcher> Resolve(
+        string? enabledSources, string? adzunaAppId, string? adzunaAppKey, IReadOnlyList<string>? adzunaKeywords = null)
     {
         var keys = enabledSources is null
             ? JobSource.Catalog.Where(c => c.Automatic).Select(c => c.Key).ToHashSet()
             : JobSource.Sanitize(enabledSources.Split(',', StringSplitOptions.RemoveEmptyEntries)).ToHashSet();
 
         var fetchers = new List<IJobFetcher>();
-        if (keys.Contains(JobSource.Adzuna) && adzunaAppId is not null && adzunaAppKey is not null)
-            fetchers.Add(new AdzunaFetcher(adzunaAppId, adzunaAppKey));
+        if (keys.Contains(JobSource.Adzuna) && adzunaAppId is not null && adzunaAppKey is not null
+            && adzunaKeywords is { Count: > 0 })
+            fetchers.Add(new AdzunaFetcher(adzunaAppId, adzunaAppKey, adzunaKeywords));
         if (keys.Contains(JobSource.Greenhouse))
             fetchers.Add(new GreenhouseFetcher());
         if (keys.Contains(JobSource.Lever))

@@ -9,32 +9,32 @@ public class AdzunaFetcher : IJobFetcher
     private readonly HttpClient _http;
     private readonly string _appId;
     private readonly string _appKey;
+    // Empty by default, not a hardcoded profession-specific list — FetchAllAsync (the
+    // proactive discovery sweep) is a no-op without real keywords, which is the correct
+    // fail-safe: this app serves candidates in any profession, so a generic default here
+    // would silently mean "search for software engineer roles" for everyone. Callers that
+    // only need SearchAsync (a one-off targeted lookup, keywords passed directly to it) never
+    // need this at all — see DiscoverySourceResolver for where FetchAllAsync's keywords are
+    // actually derived, per user, from their own job criteria (SearchKeywordAgent).
+    private readonly IReadOnlyList<string> _keywords;
 
-    public AdzunaFetcher(string appId, string appKey)
-        : this(appId, appKey, new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
+    public AdzunaFetcher(string appId, string appKey, IReadOnlyList<string>? keywords = null)
+        : this(appId, appKey, keywords, new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
 
-    public AdzunaFetcher(string appId, string appKey, HttpClient http)
+    public AdzunaFetcher(string appId, string appKey, IReadOnlyList<string>? keywords, HttpClient http)
     {
         _appId = appId;
         _appKey = appKey;
+        _keywords = keywords ?? [];
         _http = http;
     }
-
-    private static readonly string[] Keywords =
-    [
-        ".net",
-        "react developer",
-        "software engineer",
-        "full stack developer",
-        "full stack engineer",
-    ];
 
     public async Task<List<JobFeedItem>> FetchAllAsync()
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var results = new List<JobFeedItem>();
 
-        foreach (var keyword in Keywords)
+        foreach (var keyword in _keywords)
         {
             try
             {

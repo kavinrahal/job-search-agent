@@ -13,6 +13,12 @@ public class HttpFetcherTests
     private static HttpClient Stub(string json, HttpStatusCode status = HttpStatusCode.OK) =>
         new(new StubHandler(json, status));
 
+    // AdzunaFetcher takes no hardcoded default anymore (see its own comment) — these are
+    // just a representative test keyword set, standing in for whatever SearchKeywordAgent
+    // would have derived for a real user.
+    private static readonly string[] TestKeywords =
+        ["chef", "sous chef", "kitchen manager", "line cook", "head chef"];
+
     private static string Fixture(string name) =>
         File.ReadAllText(Path.Combine(
             AppContext.BaseDirectory, "Fixtures", name));
@@ -130,7 +136,7 @@ public class HttpFetcherTests
     [Fact]
     public async Task Adzuna_ValidJob_MappedWithSalary()
     {
-        var fetcher = new AdzunaFetcher("id", "key", Stub(Fixture("adzuna_response.json")));
+        var fetcher = new AdzunaFetcher("id", "key", TestKeywords, Stub(Fixture("adzuna_response.json")));
 
         var items = await fetcher.FetchAllAsync();
 
@@ -146,7 +152,7 @@ public class HttpFetcherTests
     [Fact]
     public async Task Adzuna_EmptyRedirectUrl_Filtered()
     {
-        var fetcher = new AdzunaFetcher("id", "key", Stub(Fixture("adzuna_response.json")));
+        var fetcher = new AdzunaFetcher("id", "key", TestKeywords, Stub(Fixture("adzuna_response.json")));
 
         var items = await fetcher.FetchAllAsync();
 
@@ -168,7 +174,7 @@ public class HttpFetcherTests
                   { Content = new StringContent(Fixture("adzuna_response.json"),
                         System.Text.Encoding.UTF8, "application/json") };
         });
-        var fetcher = new AdzunaFetcher("id", "key", new HttpClient(handler));
+        var fetcher = new AdzunaFetcher("id", "key", TestKeywords, new HttpClient(handler));
 
         var items = await fetcher.FetchAllAsync();
 
@@ -215,7 +221,7 @@ public class HttpFetcherTests
     public async Task Adzuna_SearchWithoutCompany_FetchesOnlyOnePage()
     {
         var handler = new SequenceStubHandler(Fixture("adzuna_response.json"), AdzunaPageTwoWithCodafication);
-        var fetcher = new AdzunaFetcher("id", "key", new HttpClient(handler));
+        var fetcher = new AdzunaFetcher("id", "key", null, new HttpClient(handler));
 
         await fetcher.SearchAsync("software engineer", "melbourne");
 
@@ -227,7 +233,7 @@ public class HttpFetcherTests
     public async Task Adzuna_SearchWithCompany_PagesUntilFound_ThenStops()
     {
         var handler = new SequenceStubHandler(Fixture("adzuna_response.json"), AdzunaPageTwoWithCodafication);
-        var fetcher = new AdzunaFetcher("id", "key", new HttpClient(handler));
+        var fetcher = new AdzunaFetcher("id", "key", null, new HttpClient(handler));
 
         var items = await fetcher.SearchAsync("software engineer", "melbourne", "Codafication");
 
@@ -240,7 +246,7 @@ public class HttpFetcherTests
     public async Task Adzuna_SearchWithCompany_FoundOnFirstPage_MakesOneRequest()
     {
         var handler = new SequenceStubHandler(Fixture("adzuna_response.json"));
-        var fetcher = new AdzunaFetcher("id", "key", new HttpClient(handler));
+        var fetcher = new AdzunaFetcher("id", "key", null, new HttpClient(handler));
 
         await fetcher.SearchAsync("full stack developer", "melbourne", "Acme Corp");
 
@@ -252,7 +258,7 @@ public class HttpFetcherTests
     public async Task Adzuna_SearchWithCompany_NeverFound_StopsAtPageCap()
     {
         var handler = new SequenceStubHandler(Fixture("adzuna_response.json"));
-        var fetcher = new AdzunaFetcher("id", "key", new HttpClient(handler));
+        var fetcher = new AdzunaFetcher("id", "key", null, new HttpClient(handler));
 
         await fetcher.SearchAsync("software engineer", "melbourne", "Nonexistent Company");
 

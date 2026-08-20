@@ -70,6 +70,10 @@ var userSecrets = new UserSecretService(dataProtectionServices.BuildServiceProvi
 // log write, so it's safe to reuse across the whole loop below.
 var usageLogger = new ClaudeUsageLogger(dbOptions);
 
+// Derives Adzuna's search keywords from each user's own criteria — see AdzunaFetcher's and
+// DiscoverySourceResolver's comments for why nothing here is a fixed/hardcoded keyword list.
+var searchKeywordAgent = new SearchKeywordAgent(apiKey, usageLogger);
+
 // clientId/clientSecret are the app's own Gmail OAuth client (shared across every user's
 // Gmail connection, like GOOGLE_CLIENT_ID for the web login) — stays an env var. Each
 // user's own refresh token lives encrypted in UserSecrets.
@@ -224,7 +228,15 @@ async Task<(int Discovered, int Evaluated, int Notified)> RunDiscoveryForUserAsy
 {
     await using var userDb = new AppDbContext(dbOptions) { CurrentUserId = user.Id };
 
-    var fetchers = DiscoverySourceResolver.Resolve(user.EnabledSources, adzunaAppId, adzunaAppKey);
+    // discoveryUsers (see the query above) already requires non-empty JobCriteria, so this
+    // should always find real criteria to work from — the null-conditional is just for the
+    // FindAsync itself, not a "criteria might be blank" case.
+    var profile = await userDb.UserProfiles.FindAsync(user.Id);
+    string[] adzunaKeywords = profile is not null
+        ? await searchKeywordAgent.GenerateAsync(user.Id, profile.JobCriteria)
+        : [];
+
+    var fetchers = DiscoverySourceResolver.Resolve(user.EnabledSources, adzunaAppId, adzunaAppKey, adzunaKeywords);
     if (fetchers.Count == 0)
     {
         Console.WriteLine("    (no automatic sources enabled — skipped)");
