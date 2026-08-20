@@ -141,8 +141,16 @@ else if (ownerRefreshToken is null && clientId is null)
 // ---------------------------------------------------------------------------
 if (!testMode)
 {
+    // A UserProfile row alone isn't enough — every user gets one auto-seeded blank (empty
+    // Background/JobCriteria) on their very first login, before they've done any onboarding.
+    // Without real criteria, evaluate_posting.md has no disqualifiers or skill dimensions to
+    // check a posting against, so the model has nothing to reject an irrelevant posting on —
+    // a live incident where an incomplete-profile user got emailed about a role from a
+    // completely unrelated profession. Requiring non-empty JobCriteria matches the same
+    // "has this user actually finished onboarding" check the frontend's needsCriteria uses.
     var discoveryUsers = await db.Users
-        .Where(u => u.Tier == UserTier.Tier2 && db.UserProfiles.Any(p => p.UserId == u.Id))
+        .Where(u => u.Tier == UserTier.Tier2
+                 && db.UserProfiles.Any(p => p.UserId == u.Id && p.JobCriteria != null && p.JobCriteria != ""))
         .ToListAsync();
 
     Console.WriteLine($"Running aggregator discovery for {discoveryUsers.Count} Tier 2 user(s)...");
@@ -161,11 +169,13 @@ if (!testMode)
 }
 
 // ---------------------------------------------------------------------------
-// Active users: Gmail connected AND a criteria profile exists. Anyone missing either is
-// skipped for now — no partial-pipeline branching for a case with no real users yet.
+// Active users: Gmail connected AND criteria actually filled in (not just a UserProfile row
+// existing — see the comment on discoveryUsers above for why that alone isn't enough).
+// Anyone missing either is skipped for now — no partial-pipeline branching for a case with no
+// real users yet.
 // ---------------------------------------------------------------------------
 var activeUsers = await db.Users
-    .Where(u => db.UserProfiles.Any(p => p.UserId == u.Id)
+    .Where(u => db.UserProfiles.Any(p => p.UserId == u.Id && p.JobCriteria != null && p.JobCriteria != "")
              && db.UserSecrets.Any(s => s.UserId == u.Id && s.Key == UserSecretKey.GmailRefreshToken))
     .ToListAsync();
 
