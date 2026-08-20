@@ -36,6 +36,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<SupportMessage> SupportMessages { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
     public DbSet<BetaInvite> BetaInvites { get; set; }
+    public DbSet<CrashTriageDispatch> CrashTriageDispatches { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -121,6 +122,14 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         {
             e.HasIndex(c => new { c.UserId, c.MessageId }).IsUnique();
             e.HasQueryFilter(c => c.UserId == CurrentUserId);
+        });
+
+        // Unique at the database level so a concurrent double-delivery of the same Sentry
+        // webhook can't produce two agent runs — the second insert loses.
+        modelBuilder.Entity<CrashTriageDispatch>(e =>
+        {
+            e.HasIndex(d => d.SentryIssueId).IsUnique();
+            e.HasIndex(d => d.DispatchedAt);
         });
 
         modelBuilder.Entity<Application>(e =>

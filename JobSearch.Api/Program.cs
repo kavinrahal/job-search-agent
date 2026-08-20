@@ -251,6 +251,17 @@ var gmailOAuthRedirectUri = builder.Configuration["GMAIL_OAUTH_REDIRECT_URI"];
 var sendGridApiKey = builder.Configuration["SENDGRID_API_KEY"];
 var sendGridFromEmail = builder.Configuration["SENDGRID_FROM_EMAIL"];
 
+// Automated crash triage. SENTRY_WEBHOOK_SECRET is the Sentry Internal Integration's client
+// secret (used to verify the webhook signature); CRASH_FIX_GITHUB_TOKEN is a PAT with repo +
+// workflow scope, used only to fire repository_dispatch. All optional, same reasoning as the
+// blocks above — the endpoint 401s until they're configured rather than failing at startup.
+var sentryWebhookSecret = builder.Configuration["SENTRY_WEBHOOK_SECRET"];
+var crashFixGitHubToken = builder.Configuration["CRASH_FIX_GITHUB_TOKEN"];
+var crashFixRepo = builder.Configuration["CRASH_FIX_GITHUB_REPO"] ?? "kavinrahal/job-search-agent";
+// Deliberately low. Each dispatch is a full Claude Code session, and the failure mode worth
+// guarding is a bad deploy producing many distinct new issues at once — see CrashTriage.
+const int CrashFixHourlyCap = 3;
+
 builder.Services.AddSingleton(_ => new JobPostingFetcher());
 builder.Services.AddSingleton(sp => new ClaudeUsageLogger(sp.GetRequiredService<DbContextOptions<AppDbContext>>()));
 builder.Services.AddSingleton(sp => new PostingEvaluator(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
@@ -2291,6 +2302,86 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
             }
         }
     });
+
+    return Results.Ok();
+}).AllowAnonymous().RequireRateLimiting("webhook");
+
+// ---------------------------------------------------------------------------
+// Sentry webhook — unauthenticated but HMAC-verified. Relays a newly-created Sentry issue
+// into a GitHub repository_dispatch, which starts the automated crash-fix workflow.
+//
+// This relay exists because Sentry can't call GitHub directly: repository_dispatch needs an
+// Authorization header and Sentry's webhook config can't set one. Doing it here also means
+// triage runs as cheap deterministic C# rather than as an agent prompt — see CrashTriage.
+// ---------------------------------------------------------------------------
+app.MapPost("/api/v1/sentry/webhook", async (HttpRequest request, AppDbContext db) =>
+{
+    // Raw bytes, not the parsed model: the signature covers the exact body Sentry sent, so
+    // it has to be verified before anything is deserialized from it.
+    using var ms = new MemoryStream();
+    await request.Body.CopyToAsync(ms);
+    var rawBody = ms.ToArray();
+
+    if (!SentryWebhookVerifier.IsValid(
+            request.Headers["sentry-hook-signature"].FirstOrDefault(), rawBody, sentryWebhookSecret))
+        return Results.Unauthorized();
+
+    // Only newly-created issues start a fix run. Sentry also delivers resolved/assigned/
+    // ignored events on the same hook.
+    if (request.Headers["sentry-hook-resource"].FirstOrDefault() != "issue")
+        return Results.Ok();
+
+    using var doc = JsonDocument.Parse(rawBody);
+    var root = doc.RootElement;
+    if (root.TryGetProperty("action", out var action) && action.GetString() != "created")
+        return Results.Ok();
+
+    if (!root.TryGetProperty("data", out var data) || !data.TryGetProperty("issue", out var issue))
+        return Results.Ok();
+
+    string? Str(string name) => issue.TryGetProperty(name, out var v) ? v.GetString() : null;
+
+    var issueId = Str("id");
+    if (string.IsNullOrEmpty(issueId)) return Results.Ok();
+
+    var title = Str("title") ?? "";
+    var permalink = Str("permalink") ?? "";
+    var projectSlug = issue.TryGetProperty("project", out var proj) && proj.TryGetProperty("slug", out var slug)
+        ? slug.GetString() ?? ""
+        : "";
+
+    var alreadyDispatched = await db.CrashTriageDispatches.AnyAsync(d => d.SentryIssueId == issueId);
+    var since = DateTime.UtcNow.AddHours(-1);
+    var recentCount = await db.CrashTriageDispatches.CountAsync(d => d.DispatchedAt >= since);
+
+    var decision = CrashTriage.Evaluate(Str("level"), title, alreadyDispatched, recentCount, CrashFixHourlyCap);
+    if (!decision.ShouldDispatch)
+    {
+        Console.WriteLine($"[CrashTriage] Skipped issue {issueId}: {decision.Reason}");
+        return Results.Ok();
+    }
+
+    if (crashFixGitHubToken is null)
+    {
+        Console.WriteLine($"[CrashTriage] Would dispatch issue {issueId} but no GitHub token configured.");
+        return Results.Ok();
+    }
+
+    // Recorded before dispatching, so a failure to reach GitHub doesn't leave the door open
+    // for the same issue to be retried indefinitely on webhook redelivery. The unique index
+    // on SentryIssueId is what makes this safe under concurrent delivery.
+    db.CrashTriageDispatches.Add(new CrashTriageDispatch
+    {
+        SentryIssueId = issueId,
+        Title = title,
+        ProjectSlug = projectSlug,
+        DispatchedAt = DateTime.UtcNow,
+    });
+    await db.SaveChangesAsync();
+
+    var dispatcher = new GitHubDispatcher(crashFixRepo, crashFixGitHubToken);
+    var ok = await dispatcher.DispatchCrashFixAsync(issueId, title, projectSlug, permalink);
+    Console.WriteLine($"[CrashTriage] Dispatched issue {issueId} → GitHub: {(ok ? "ok" : "failed")}");
 
     return Results.Ok();
 }).AllowAnonymous().RequireRateLimiting("webhook");
