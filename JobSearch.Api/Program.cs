@@ -2385,9 +2385,23 @@ app.MapPost("/api/v1/sentry/webhook", async (HttpRequest request, AppDbContext d
         return Results.Ok();
     }
 
-    // Recorded before dispatching, so a failure to reach GitHub doesn't leave the door open
-    // for the same issue to be retried indefinitely on webhook redelivery. The unique index
-    // on SentryIssueId is what makes this safe under concurrent delivery.
+    // Dispatched BEFORE the dedup row is written — the first real run of this pipeline
+    // recorded dedup first, and a GitHub-side failure (bad token, wrong repo) then silently
+    // and permanently marked a never-actually-dispatched issue as handled, with no automatic
+    // retry and only a bare "failed" boolean in the logs to diagnose it from. Dispatching
+    // first means a failure is retryable on the next webhook redelivery. The residual risk —
+    // two concurrent deliveries both dispatching before either's row lands — is bounded by
+    // the workflow's own `concurrency: group: crash-fix-<issueId>` (crash-fix.yml), which
+    // queues rather than races a second run onto the same branch.
+    var dispatcher = new GitHubDispatcher(crashFixRepo, crashFixGitHubToken);
+    var result = await dispatcher.DispatchCrashFixAsync(issueId, title, projectSlug, permalink);
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"[CrashTriage] Dispatch failed for issue {issueId}: HTTP {result.StatusCode} — {result.ResponseBody}");
+        return Results.Ok();
+    }
+
     db.CrashTriageDispatches.Add(new CrashTriageDispatch
     {
         SentryIssueId = issueId,
@@ -2396,10 +2410,7 @@ app.MapPost("/api/v1/sentry/webhook", async (HttpRequest request, AppDbContext d
         DispatchedAt = DateTime.UtcNow,
     });
     await db.SaveChangesAsync();
-
-    var dispatcher = new GitHubDispatcher(crashFixRepo, crashFixGitHubToken);
-    var ok = await dispatcher.DispatchCrashFixAsync(issueId, title, projectSlug, permalink);
-    Console.WriteLine($"[CrashTriage] Dispatched issue {issueId} → GitHub: {(ok ? "ok" : "failed")}");
+    Console.WriteLine($"[CrashTriage] Dispatched issue {issueId} → GitHub: ok");
 
     return Results.Ok();
 }).AllowAnonymous().RequireRateLimiting("webhook");
