@@ -1,0 +1,39 @@
+name: TEMP - Test Crash Notify Email
+
+# TEMPORARY. Exists only to confirm the crashbot@worksanta.com sender identity (added in
+# cb73115) actually delivers and reads correctly, without spending a full crash-fix agent run
+# (a real Claude Code session) just to test an email. Delete this file once confirmed.
+on:
+  workflow_dispatch:
+
+jobs:
+  send-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test email
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SENDGRID_FROM_EMAIL: crashbot@worksanta.com
+          SENDGRID_FROM_NAME: "Work Santa Crash Bot"
+          NOTIFY_EMAIL: kavinrahal@gmail.com
+        run: |
+          if [ -z "$SENDGRID_API_KEY" ]; then
+            echo "SENDGRID_API_KEY not set."
+            exit 1
+          fi
+
+          HTTP_STATUS=$(jq -n \
+            --arg to "$NOTIFY_EMAIL" --arg from "$SENDGRID_FROM_EMAIL" --arg fromName "$SENDGRID_FROM_NAME" \
+            '{personalizations:[{to:[{email:$to}]}],from:{email:$from,name:$fromName},subject:"Test: Work Santa Crash Bot sender",content:[{type:"text/plain",value:"This is a manual test of the crashbot@worksanta.com sender identity used by crash-fix.yml. If this landed in your inbox rather than spam, the sender is working as intended. Safe to ignore/delete."}]}' \
+          | curl -sS -o "$RUNNER_TEMP/sendgrid-response.json" -w "%{http_code}" -X POST https://api.sendgrid.com/v3/mail/send \
+              -H "Authorization: Bearer $SENDGRID_API_KEY" \
+              -H "Content-Type: application/json" \
+              --data @-)
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Sent (HTTP $HTTP_STATUS). Check kavinrahal@gmail.com."
+          else
+            echo "SendGrid rejected it: HTTP $HTTP_STATUS"
+            cat "$RUNNER_TEMP/sendgrid-response.json"
+            exit 1
+          fi
