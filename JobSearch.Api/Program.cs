@@ -878,6 +878,12 @@ api.MapGet("/admin/crash-pipeline-smoke-test", (HttpContext ctx) =>
     if (CurrentUserId(ctx, UserIdClaimType) != ownerUserId)
         return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
 
+    // A unique fingerprint per hit — otherwise Sentry groups every hit into the same issue by
+    // stack trace, and the webhook only fires on the FIRST occurrence of a new issue. Without
+    // this, re-testing after a fix requires clearing state in Sentry or the DB instead of just
+    // hitting the URL again.
+    SentrySdk.ConfigureScope(scope => scope.SetFingerprint("crash-pipeline-smoke-test", Guid.NewGuid().ToString()));
+
     throw new InvalidOperationException(
         "Crash pipeline smoke test: deliberate exception from a temporary owner-only endpoint " +
         "in JobSearch.Api/Program.cs. This is not a product defect. The correct fix is to " +
