@@ -153,11 +153,16 @@ jobs:
         if: always()
         env:
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
-          SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
+          # Deliberately not SENDGRID_FROM_EMAIL (the invites@ sender) — ops/monitoring mail
+          # and product mail to real users shouldn't share a sender identity. Not a secret:
+          # an address isn't sensitive, and the domain is already SendGrid-authenticated, so
+          # any address under it sends without further per-address verification.
+          SENDGRID_FROM_EMAIL: crashbot@worksanta.com
+          SENDGRID_FROM_NAME: "Work Santa Crash Bot"
           NOTIFY_EMAIL: kavinrahal@gmail.com
           PERMALINK: ${{ github.event.client_payload.permalink }}
         run: |
-          if [ -z "$SENDGRID_API_KEY" ] || [ -z "$SENDGRID_FROM_EMAIL" ]; then
+          if [ -z "$SENDGRID_API_KEY" ]; then
             echo "SendGrid not configured — skipping email (Sentry and GitHub still notify)."
             exit 0
           fi
@@ -178,15 +183,13 @@ jobs:
           Sentry: $PERMALINK"
           fi
 
-          # from.name matters, not just from.email — SendGridEmailService.cs (the same
-          # SendGrid account's other sender, used for beta invites) already established why:
-          # a bare address with no display name is itself a small spam/trust signal on top of
-          # domain authentication. This call was a separate, hand-rolled duplicate of that
-          # logic and had silently dropped it.
+          # from.name matters, not just from.email — SendGridEmailService.cs (the invites@
+          # sender) already established why: a bare address with no display name is itself a
+          # small spam/trust signal on top of domain authentication.
           HTTP_STATUS=$(jq -n \
-            --arg to "$NOTIFY_EMAIL" --arg from "$SENDGRID_FROM_EMAIL" \
+            --arg to "$NOTIFY_EMAIL" --arg from "$SENDGRID_FROM_EMAIL" --arg fromName "$SENDGRID_FROM_NAME" \
             --arg subject "$SUBJECT" --arg body "$BODY" \
-            '{personalizations:[{to:[{email:$to}]}],from:{email:$from,name:"Work Santa"},subject:$subject,content:[{type:"text/plain",value:$body}]}' \
+            '{personalizations:[{to:[{email:$to}]}],from:{email:$from,name:$fromName},subject:$subject,content:[{type:"text/plain",value:$body}]}' \
           | curl -sS -o "$RUNNER_TEMP/sendgrid-response.json" -w "%{http_code}" -X POST https://api.sendgrid.com/v3/mail/send \
               -H "Authorization: Bearer $SENDGRID_API_KEY" \
               -H "Content-Type: application/json" \
