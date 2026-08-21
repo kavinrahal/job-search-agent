@@ -186,10 +186,15 @@ jobs:
           # from.name matters, not just from.email — SendGridEmailService.cs (the invites@
           # sender) already established why: a bare address with no display name is itself a
           # small spam/trust signal on top of domain authentication.
+          #
+          # click_tracking disabled: SendGrid's account default rewrites $PR_URL through a
+          # branded urlNNNN.worksanta.com redirect whose certificate isn't valid yet on
+          # SendGrid's side (ERR_CERT_COMMON_NAME_INVALID, discovered when this exact PR link
+          # got clicked). No click analytics are needed on a link only sent to one inbox.
           HTTP_STATUS=$(jq -n \
             --arg to "$NOTIFY_EMAIL" --arg from "$SENDGRID_FROM_EMAIL" --arg fromName "$SENDGRID_FROM_NAME" \
             --arg subject "$SUBJECT" --arg body "$BODY" \
-            '{personalizations:[{to:[{email:$to}]}],from:{email:$from,name:$fromName},subject:$subject,content:[{type:"text/plain",value:$body}]}' \
+            '{personalizations:[{to:[{email:$to}]}],from:{email:$from,name:$fromName},subject:$subject,content:[{type:"text/plain",value:$body}],tracking_settings:{click_tracking:{enable:false}}}' \
           | curl -sS -o "$RUNNER_TEMP/sendgrid-response.json" -w "%{http_code}" -X POST https://api.sendgrid.com/v3/mail/send \
               -H "Authorization: Bearer $SENDGRID_API_KEY" \
               -H "Content-Type: application/json" \

@@ -40,6 +40,13 @@ public class SendGridEmailService
             from = new { email = _fromEmail, name = _fromName },
             subject,
             content = new[] { new { type = "text/plain", value = bodyText } },
+            // SendGrid's account-wide default rewrites every link in the body through a
+            // branded urlNNNN.worksanta.com tracking redirect. That subdomain's certificate
+            // isn't valid yet on SendGrid's side, which breaks the invite link itself —
+            // Chrome hard-blocks it on mobile (HSTS) and shows "not secure" on desktop.
+            // These emails don't need click analytics; a plain, unmodified link is also
+            // more trustworthy to both spam filters and the person reading it.
+            tracking_settings = new { click_tracking = new { enable = false } },
         };
 
         var request = new HttpRequestMessage(HttpMethod.Post, SendUrl)
