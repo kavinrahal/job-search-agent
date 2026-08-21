@@ -30,13 +30,38 @@ jobs:
       BRANCH: crash-fix/sentry-${{ github.event.client_payload.issueId }}
 
     steps:
+      # Mints a short-lived (1h) installation token for the GitHub App created specifically
+      # for this pipeline, rather than using the repo owner's own PAT. This is the actual fix
+      # for a problem the PAT approach could not solve: GitHub hard-blocks a PR's own author
+      # from approving it, so if commits/PRs are attributed to the owner's account, the owner
+      # can never approve the fix PRs this pipeline produces. An earlier attempt used
+      # claude-code-action's `use_commit_signing` option instead — that turned out to only
+      # engage when the action manages commits internally, not when the agent runs its own
+      # `git`/`gh` commands via Bash (verified: the resulting commit had author "Claude" but
+      # `verified: false`, and the PR was still owned by the PAT's account regardless — PR
+      # authorship is set by whichever credential calls the API, not by commit metadata).
+      # Minting a real token here works regardless of how the agent chooses to do its git
+      # operations, because the credential itself is what's different, not a mode flag.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.CRASH_FIX_APP_ID }}
+          private-key: ${{ secrets.CRASH_FIX_APP_PRIVATE_KEY }}
+
+      # Job-level `env:` is evaluated before any step runs, so it cannot see this token —
+      # `steps.*` context only exists once that step has actually executed. $GITHUB_ENV is
+      # the correct way to make a value available to every later step, including whatever
+      # `gh`/`git` commands the agent runs itself via Bash later in this job.
+      - run: echo "GH_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          # A PAT, not the built-in GITHUB_TOKEN: pushes made with the built-in token
-          # deliberately do not trigger other workflows, so CI and CodeQL would never run on
-          # the fix PR and you'd be reviewing an unverified change.
-          token: ${{ secrets.CRASH_FIX_GITHUB_TOKEN }}
+          # An App installation token, not the built-in GITHUB_TOKEN: pushes made with the
+          # built-in token deliberately do not trigger other workflows, so CI and CodeQL would
+          # never run on the fix PR and you'd be reviewing an unverified change. Persisted
+          # (the default) so the agent's own later `git push`/`gh` calls inherit it.
+          token: ${{ steps.app-token.outputs.token }}
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -71,14 +96,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.CRASH_FIX_GITHUB_TOKEN }}
-          # Without this, commits and the PR are attributed to whichever GitHub account owns
-          # CRASH_FIX_GITHUB_TOKEN — the repo owner's own PAT — which means the PR shows up
-          # authored by them and GitHub refuses to let them approve their own PR. This routes
-          # commit creation and PR opening through Anthropic's Claude GitHub App instead
-          # (bot identity, distinct from any human account), which the repo owner must install
-          # once at https://github.com/apps/claude.
-          use_commit_signing: true
+          github_token: ${{ steps.app-token.outputs.token }}
           claude_args: --max-turns 50 --model claude-sonnet-5 --allowedTools Bash,Read,Edit,Write,Glob,Grep
           prompt: |
             A crash was reported in production and you are fixing it.
@@ -129,11 +147,11 @@ jobs:
               verified, and anything you were unsure about. Link the Sentry issue:
               ${{ github.event.client_payload.permalink }}
 
-      # Runs even if the agent failed, so a silent no-op is still visible.
+      # Runs even if the agent failed, so a silent no-op is still visible. GH_TOKEN comes from
+      # $GITHUB_ENV (set above) rather than being redeclared here.
       - name: Notify
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.CRASH_FIX_GITHUB_TOKEN }}
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
           SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
           NOTIFY_EMAIL: kavinrahal@gmail.com

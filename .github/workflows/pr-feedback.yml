@@ -33,10 +33,13 @@ jobs:
     #   2. it's a PR, not a plain issue (issue_comment fires for both)
     #   3. the comment is not the agent's own
     #
-    # (3) is not optional. The agent posts its summary comment using the owner's PAT, so
-    # that comment's actor is also the owner — without this guard the agent's own comment
-    # re-triggers this workflow, which comments again, forever. The agent is instructed to
-    # prefix its comments with the marker below; anything carrying it is ignored here.
+    # (3) is defense in depth. The agent now posts its summary comment authenticated as the
+    # crash-fix GitHub App's own bot identity (not the owner's account — see the app-token
+    # step below), so `github.actor` for that comment should already be the bot, not
+    # 'kavinrahal', and condition 1 alone would exclude it. The marker check stays anyway:
+    # this exact class of bug (self-triggered infinite loop) is expensive enough, and this
+    # guard cheap enough, that removing it on an unverified assumption isn't worth it. The
+    # agent is instructed to prefix its comments with the marker below.
     if: >
       github.actor == 'kavinrahal' &&
       (github.event.pull_request != null || github.event.issue.pull_request != null) &&
@@ -47,17 +50,29 @@ jobs:
       PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
 
     steps:
+      # See crash-fix.yml for why this exists: a PAT attributes commits/PRs/comments to the
+      # repo owner's own account, and GitHub hard-blocks an author from approving their own
+      # PR. The App's installation token gives this workflow a distinct bot identity instead.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.CRASH_FIX_APP_ID }}
+          private-key: ${{ secrets.CRASH_FIX_APP_PRIVATE_KEY }}
+
+      # Job-level `env:` can't see this — `steps.*` only exists once that step has run. This
+      # makes it available to every later step, including the agent's own `gh`/`git` calls.
+      - run: echo "GH_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ secrets.CRASH_FIX_GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       # Confirms this is a crash-fix branch before doing anything expensive, and checks out
-      # the PR's head so edits land on the right branch.
+      # the PR's head so edits land on the right branch. GH_TOKEN comes from $GITHUB_ENV
+      # (set above) rather than being redeclared here.
       - name: Resolve PR branch
         id: pr
-        env:
-          GH_TOKEN: ${{ secrets.CRASH_FIX_GITHUB_TOKEN }}
         run: |
           BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName -q .headRefName)
           case "$BRANCH" in
@@ -84,10 +99,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.CRASH_FIX_GITHUB_TOKEN }}
-          # Same reasoning as crash-fix.yml: without this, the follow-up commit is attributed
-          # to the PAT's own account (the repo owner), not a bot — see that file's comment.
-          use_commit_signing: true
+          github_token: ${{ steps.app-token.outputs.token }}
           claude_args: --max-turns 40 --model claude-sonnet-5 --allowedTools Bash,Read,Edit,Write,Glob,Grep
           prompt: |
             You are applying review feedback to PR #${{ github.event.issue.number || github.event.pull_request.number }} in this repository.
