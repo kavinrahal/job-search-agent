@@ -178,12 +178,28 @@ jobs:
           Sentry: $PERMALINK"
           fi
 
-          jq -n \
+          # from.name matters, not just from.email — SendGridEmailService.cs (the same
+          # SendGrid account's other sender, used for beta invites) already established why:
+          # a bare address with no display name is itself a small spam/trust signal on top of
+          # domain authentication. This call was a separate, hand-rolled duplicate of that
+          # logic and had silently dropped it.
+          HTTP_STATUS=$(jq -n \
             --arg to "$NOTIFY_EMAIL" --arg from "$SENDGRID_FROM_EMAIL" \
             --arg subject "$SUBJECT" --arg body "$BODY" \
-            '{personalizations:[{to:[{email:$to}]}],from:{email:$from},subject:$subject,content:[{type:"text/plain",value:$body}]}' \
-          | curl -sS -X POST https://api.sendgrid.com/v3/mail/send \
+            '{personalizations:[{to:[{email:$to}]}],from:{email:$from,name:"Work Santa"},subject:$subject,content:[{type:"text/plain",value:$body}]}' \
+          | curl -sS -o "$RUNNER_TEMP/sendgrid-response.json" -w "%{http_code}" -X POST https://api.sendgrid.com/v3/mail/send \
               -H "Authorization: Bearer $SENDGRID_API_KEY" \
               -H "Content-Type: application/json" \
-              --data @- \
-          && echo "Notification sent."
+              --data @-)
+
+          # Plain curl only fails on a network-level error, not on a 4xx/5xx response — the
+          # first real run of this notify step logged "Notification sent." for a request that
+          # SendGrid may or may not have actually accepted, since the exit code alone can't
+          # tell the difference. Checked explicitly here for the same reason GitHubDispatcher
+          # returns the real status/body instead of a bare bool.
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Notification sent (HTTP $HTTP_STATUS)."
+          else
+            echo "SendGrid rejected the notification: HTTP $HTTP_STATUS"
+            cat "$RUNNER_TEMP/sendgrid-response.json"
+          fi
