@@ -85,6 +85,9 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.CRASH_FIX_GITHUB_TOKEN }}
+          # Same reasoning as crash-fix.yml: without this, the follow-up commit is attributed
+          # to the PAT's own account (the repo owner), not a bot — see that file's comment.
+          use_commit_signing: true
           claude_args: --max-turns 40 --model claude-sonnet-5 --allowedTools Bash,Read,Edit,Write,Glob,Grep
           prompt: |
             You are applying review feedback to PR #${{ github.event.issue.number || github.event.pull_request.number }} in this repository.

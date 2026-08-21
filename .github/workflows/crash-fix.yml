@@ -72,6 +72,13 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.CRASH_FIX_GITHUB_TOKEN }}
+          # Without this, commits and the PR are attributed to whichever GitHub account owns
+          # CRASH_FIX_GITHUB_TOKEN — the repo owner's own PAT — which means the PR shows up
+          # authored by them and GitHub refuses to let them approve their own PR. This routes
+          # commit creation and PR opening through Anthropic's Claude GitHub App instead
+          # (bot identity, distinct from any human account), which the repo owner must install
+          # once at https://github.com/apps/claude.
+          use_commit_signing: true
           claude_args: --max-turns 50 --model claude-sonnet-5 --allowedTools Bash,Read,Edit,Write,Glob,Grep
           prompt: |
             A crash was reported in production and you are fixing it.
