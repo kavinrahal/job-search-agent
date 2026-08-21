@@ -108,4 +108,35 @@ public class SentryConfigTests
         Assert.DoesNotContain("kavin@example.com", scrubbed);
         Assert.Contains("[email]", scrubbed);
     }
+
+    // TC08 — reproduces the actual production incident: SentrySdk.Init throws synchronously
+    // on a malformed DSN, and with no handler around JobSearchAgent's top-level Main, that
+    // took the entire worker down before it did anything else — Gmail sync, discovery,
+    // everything. Crash reporting must never be able to crash the process it monitors.
+    [Fact]
+    public void TryInitConsole_MalformedDsn_ReturnsNullInsteadOfThrowing()
+    {
+        var result = SentryConfig.TryInitConsole("not-a-valid-dsn", "production");
+
+        Assert.Null(result);
+    }
+
+    // TC09 — the counterweight to TC08: the guard must not silently disable Sentry when the
+    // DSN is actually fine.
+    [Fact]
+    public void TryInitConsole_ValidDsn_InitializesSuccessfully()
+    {
+        using var result = SentryConfig.TryInitConsole(
+            "https://abc123@o0.ingest.sentry.io/123456", "production");
+
+        Assert.NotNull(result);
+    }
+
+    // TC10 — absent DSN is the normal state locally and in CI; it must stay a silent no-op,
+    // not something that logs an error every time.
+    [Fact]
+    public void TryInitConsole_NoDsn_ReturnsNull()
+    {
+        Assert.Null(SentryConfig.TryInitConsole(null, "production"));
+    }
 }

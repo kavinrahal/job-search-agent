@@ -45,6 +45,31 @@ public static class SentryConfig
             : redacted;
     }
 
+    // Console-app entry point (JobSearchAgent). SentrySdk.Init parses the DSN synchronously
+    // and throws on a malformed value — with no handler around a top-level Main, that takes
+    // the entire process down before it does anything else. Crash reporting must never be
+    // able to crash the process it exists to monitor, so a bad DSN degrades to "no crash
+    // reporting this run" instead of an outage. This is not a hypothetical: it happened in
+    // production the first time SENTRY_DSN was set on the worker.
+    public static IDisposable? TryInitConsole(string? dsn, string environment)
+    {
+        if (!IsEnabled(dsn)) return null;
+        try
+        {
+            return SentrySdk.Init(o =>
+            {
+                o.Dsn = dsn!;
+                o.Environment = environment;
+                Harden(o);
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Sentry] Failed to initialize — continuing without crash reporting: {ex.Message}");
+            return null;
+        }
+    }
+
     // True when Sentry should be wired up at all. Absent DSN = disabled, which is the normal
     // state locally and in tests — no dev machine should be shipping events to production
     // Sentry, and CI shouldn't either.

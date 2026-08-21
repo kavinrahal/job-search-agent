@@ -44,15 +44,7 @@ var runStart = DateTime.UtcNow;
 // service sets SENTRY_DSN. Initialized before the database work below so a migration or
 // connection failure — which would otherwise only ever surface in Railway logs that don't
 // survive the next container boot — still produces a durable, alertable event.
-var sentryDsn = config["SENTRY_DSN"];
-using var sentry = SentryConfig.IsEnabled(sentryDsn)
-    ? SentrySdk.Init(o =>
-    {
-        o.Dsn = sentryDsn!;
-        o.Environment = "production";
-        SentryConfig.Harden(o);
-    })
-    : null;
+using var sentry = SentryConfig.TryInitConsole(config["SENTRY_DSN"], "production");
 
 // Init database — connection string from user-secrets / DATABASE_URL env var / local default.
 // Smaller pool than the API's: users are processed sequentially, so this rarely needs more
