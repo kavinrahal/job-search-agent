@@ -1,0 +1,54 @@
+name: Open PR (App)
+
+# Manually triggered by whoever is driving a coding session (Claude Code or the repo owner)
+# once a feature branch is already pushed. Opens the PR under the same GitHub App used by
+# the crash-fix pipeline, rather than whichever personal account triggered this run — the
+# point isn't automation, it's giving the repo owner an app-authored PR to review/approve
+# instead of one that shows up under their own account (see crash-fix.yml's comment on
+# create-github-app-token for why that distinction matters: GitHub blocks a PR's own author
+# from approving it).
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Head branch to open the PR from (already pushed)"
+        required: true
+        type: string
+      title:
+        description: "PR title"
+        required: true
+        type: string
+      body:
+        description: "PR body"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.CRASH_FIX_APP_ID }}
+          private-key: ${{ secrets.CRASH_FIX_APP_PRIVATE_KEY }}
+
+      - run: echo "GH_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      # Passed via env, not interpolated directly into the run: line — same reasoning as the
+      # Sentry crash-data handling in crash-fix.yml, just for workflow_dispatch inputs instead
+      # of webhook payload data: don't splice caller-controlled text into a shell command.
+      - name: Open PR
+        env:
+          BRANCH: ${{ inputs.branch }}
+          TITLE: ${{ inputs.title }}
+          BODY: ${{ inputs.body }}
+        run: gh pr create --head "$BRANCH" --base master --title "$TITLE" --body "$BODY"
