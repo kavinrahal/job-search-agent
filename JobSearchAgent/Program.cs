@@ -82,6 +82,14 @@ var usageLogger = new ClaudeUsageLogger(dbOptions);
 var clientId     = config["GMAIL_CLIENT_ID"];
 var clientSecret = config["GMAIL_CLIENT_SECRET"];
 
+// Filter tracking mode's Gmail Settings API access (installing per-domain forwarding
+// filters) and the SendGrid inbound domain their forwarded mail arrives through — same
+// client credentials as GmailClient above, just a narrower scope (see GmailSettingsClient).
+var gmailSettingsClient = clientId is not null && clientSecret is not null
+    ? new GmailSettingsClient(clientId, clientSecret)
+    : null;
+var sendGridInboundDomain = config["SENDGRID_INBOUND_DOMAIN"];
+
 // Telegram stays personal-use-only, never extended per-user (see the Telegram retirement
 // decision) — only the owner's iteration below actually sends via it.
 var botToken = config["TELEGRAM_BOT_TOKEN"];
@@ -232,6 +240,56 @@ foreach (var user in activeUsers)
     }
 }
 
+// ---------------------------------------------------------------------------
+// Filter-mode users: gmail.settings.basic scope only, no inbox read access. Their forwarded
+// mail already arrived via the SendGrid inbound webhook (see /api/v1/sendgrid/inbound) and
+// sits in RawEmails unclassified — nothing to fetch from Gmail here, just classify what's
+// already stored and hand it to the same tracking/auto-capture pipeline full-mode users use.
+// ---------------------------------------------------------------------------
+if (!testMode)
+{
+    var filterModeUsers = await db.Users
+        .Where(u => u.GmailTrackingMode == GmailTrackingMode.Filter
+                 && db.UserProfiles.Any(p => p.UserId == u.Id && p.JobCriteria != null && p.JobCriteria != "")
+                 && db.UserSecrets.Any(s => s.UserId == u.Id && s.Key == UserSecretKey.GmailSettingsRefreshToken))
+        .ToListAsync();
+
+    Console.WriteLine($"Processing {filterModeUsers.Count} filter-mode user(s)...");
+
+    foreach (var user in filterModeUsers)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"=== {user.Email} (filter mode) ===");
+        try
+        {
+            await using var userDb = new AppDbContext(dbOptions) { CurrentUserId = user.Id };
+            var unclassified = userDb.RawEmails
+                .Where(r => !userDb.Classifications.Any(c => c.MessageId == r.MessageId))
+                .AsEnumerable()
+                .Select(r => new RawEmail(
+                    r.MessageId, r.ThreadId, r.FromAddress, r.Subject, r.BodyText,
+                    new DateTimeOffset(r.ReceivedAt, TimeSpan.Zero)))
+                .ToList();
+
+            if (unclassified.Count == 0)
+            {
+                Console.WriteLine("Nothing to classify.");
+                continue;
+            }
+
+            Console.WriteLine($"Classifying {unclassified.Count}...");
+            var (results, tracking) = await ClassifyAndTrackAsync(userDb, user, unclassified);
+            totalEmailsClassified += results.Count;
+            totalNewApplications += tracking.Created;
+        }
+        catch (Exception ex)
+        {
+            SentrySdk.CaptureException(ex, scope => scope.User = new SentryUser { Id = user.Id.ToString() });
+            await Console.Error.WriteLineAsync($"[{user.Email}] Unhandled error (filter mode): {ex}");
+        }
+    }
+}
+
 db.SystemHealth.Add(new SystemHealth
 {
     CheckedAt = DateTime.UtcNow,
@@ -372,61 +430,13 @@ async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> Proce
         return (emails.Count, 0, 0);
     }
 
-    var classifier = new EmailClassifier(apiKey, usageLogger);
-    var results = await classifier.ClassifyBatchAsync(emailsToClassify, user.Id);
-
-    var now = DateTime.UtcNow;
-    foreach (var (email, clf) in results)
-    {
-        var existing = await userDb.Classifications.FirstOrDefaultAsync(c => c.MessageId == email.MessageId);
-        if (existing is not null)
-        {
-            existing.IsJobRelated = clf.IsJobRelated;
-            existing.Category     = clf.Category;
-            existing.Confidence   = clf.Confidence;
-            existing.Company      = clf.Company;
-            existing.RoleTitle    = clf.RoleTitle;
-            existing.ClassifiedAt = now;
-        }
-        else
-        {
-            userDb.Classifications.Add(new ClassificationRecord
-            {
-                UserId       = user.Id,
-                MessageId    = email.MessageId,
-                IsJobRelated = clf.IsJobRelated,
-                Category     = clf.Category,
-                Confidence   = clf.Confidence,
-                Company      = clf.Company,
-                RoleTitle    = clf.RoleTitle,
-                ClassifiedAt = now,
-            });
-        }
-    }
-    await userDb.SaveChangesAsync();
+    var (results, tracking) = await ClassifyAndTrackAsync(userDb, user, emailsToClassify);
 
     var jobRelated = results.Where(r => r.Classification.IsJobRelated).ToList();
     int notRelevantCount = results.Count - jobRelated.Count;
 
     Console.WriteLine();
     Console.WriteLine($"Results: {jobRelated.Count} job-related, {notRelevantCount} not relevant.");
-
-    var tracking = await ApplicationTracker.ProcessClassificationsAsync(userDb, results);
-    if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
-        Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
-
-    // Privacy: clear full body text for anything nothing will read again — see
-    // RawEmailRetentionPolicy for which emails that is and why.
-    var messageIdsToScrub = RawEmailRetentionPolicy.SelectMessageIdsToScrub(results);
-    if (messageIdsToScrub.Count > 0)
-    {
-        var rawRecords = await userDb.RawEmails
-            .Where(r => messageIdsToScrub.Contains(r.MessageId))
-            .ToListAsync();
-        foreach (var raw in rawRecords)
-            raw.BodyText = "";
-        await userDb.SaveChangesAsync();
-    }
 
     // Process job alert emails — query all stored alerts so previously-classified
     // ones are retried each run (dedup in JobAlertProcessor handles already-done URLs).
@@ -488,6 +498,103 @@ async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> Proce
     }
 
     return (emails.Count, emailsToClassify.Count, tracking.Created);
+}
+
+// ---------------------------------------------------------------------------
+// Classify a batch of emails, persist the classifications, run application tracking, then
+// two follow-ups that both key off the classification results: acknowledgment-domain
+// auto-capture (filter mode only — see AcknowledgmentDomainCapture) and the retention scrub.
+// Shared by both the full-mode (readonly-fetched) and filter-mode (webhook-forwarded) paths
+// above — the only difference between them is where emailsToClassify came from.
+// ---------------------------------------------------------------------------
+async Task<(List<(RawEmail Email, EmailClassification Classification)> Results, TrackingResult Tracking)> ClassifyAndTrackAsync(
+    AppDbContext userDb, User user, List<RawEmail> emailsToClassify)
+{
+    var classifier = new EmailClassifier(apiKey, usageLogger);
+    var results = await classifier.ClassifyBatchAsync(emailsToClassify, user.Id);
+
+    var now = DateTime.UtcNow;
+    foreach (var (email, clf) in results)
+    {
+        var existing = await userDb.Classifications.FirstOrDefaultAsync(c => c.MessageId == email.MessageId);
+        if (existing is not null)
+        {
+            existing.IsJobRelated = clf.IsJobRelated;
+            existing.Category     = clf.Category;
+            existing.Confidence   = clf.Confidence;
+            existing.Company      = clf.Company;
+            existing.RoleTitle    = clf.RoleTitle;
+            existing.ClassifiedAt = now;
+        }
+        else
+        {
+            userDb.Classifications.Add(new ClassificationRecord
+            {
+                UserId       = user.Id,
+                MessageId    = email.MessageId,
+                IsJobRelated = clf.IsJobRelated,
+                Category     = clf.Category,
+                Confidence   = clf.Confidence,
+                Company      = clf.Company,
+                RoleTitle    = clf.RoleTitle,
+                ClassifiedAt = now,
+            });
+        }
+    }
+    await userDb.SaveChangesAsync();
+
+    var tracking = await ApplicationTracker.ProcessClassificationsAsync(userDb, results);
+    if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
+        Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
+
+    await AutoCaptureAcknowledgmentDomainsAsync(userDb, user, results);
+
+    // Privacy: clear full body text for anything nothing will read again — see
+    // RawEmailRetentionPolicy for which emails that is and why.
+    var messageIdsToScrub = RawEmailRetentionPolicy.SelectMessageIdsToScrub(results);
+    if (messageIdsToScrub.Count > 0)
+    {
+        var rawRecords = await userDb.RawEmails
+            .Where(r => messageIdsToScrub.Contains(r.MessageId))
+            .ToListAsync();
+        foreach (var raw in rawRecords)
+            raw.BodyText = "";
+        await userDb.SaveChangesAsync();
+    }
+
+    return (results, tracking);
+}
+
+// ---------------------------------------------------------------------------
+// Filter tracking mode only: an acknowledgment matched by AcknowledgmentFilterQuery's phrase
+// half (not one of the pre-known ATS domains) gets that sender's domain installed as its own
+// filter, so this specific sender is caught by domain — not phrasing — from now on. Best
+// effort, same as EnsureCompanyFilterAsync's other call site: a failure here shouldn't affect
+// the classification/tracking that already succeeded.
+// ---------------------------------------------------------------------------
+async Task AutoCaptureAcknowledgmentDomainsAsync(
+    AppDbContext userDb, User user, List<(RawEmail Email, EmailClassification Classification)> results)
+{
+    if (gmailSettingsClient is null || sendGridInboundDomain is null) return;
+
+    var domains = AcknowledgmentDomainCapture.SelectDomainsToCapture(results, GmailSettingsClient.KnownAckDomains);
+    if (domains.Count == 0) return;
+
+    var settingsRefreshToken = await userSecrets.GetAsync(userDb, user.Id, UserSecretKey.GmailSettingsRefreshToken);
+    if (settingsRefreshToken is null) return;
+
+    var address = await InboundEmailService.GetOrCreateAddressAsync(userDb, user.Id, sendGridInboundDomain);
+    foreach (var domain in domains)
+    {
+        try
+        {
+            await gmailSettingsClient.EnsureCompanyFilterAsync(settingsRefreshToken, domain, address);
+        }
+        catch (Exception ex)
+        {
+            await Console.Error.WriteLineAsync($"Acknowledgment domain auto-capture failed for user {user.Id}/{domain}: {ex}");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

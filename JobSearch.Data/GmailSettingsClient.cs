@@ -84,6 +84,11 @@ public class GmailSettingsClient
     public static bool HasFilterForwardingTo(IEnumerable<Filter>? filters, string address) =>
         filters?.Any(f => f.Action?.Forward == address) == true;
 
+    // Matches on query too, not just forward address — needed once a user can have more than
+    // one filter forwarding to the same address (job-alert filter + acknowledgment filter).
+    public static bool HasFilterForQuery(IEnumerable<Filter>? filters, string query, string address) =>
+        filters?.Any(f => f.Action?.Forward == address && f.Criteria?.Query == query) == true;
+
     // Idempotent — safe to call on every status poll once verified. Returns whether it
     // actually created a new filter (false if one already existed). Shared by both filter
     // kinds this app installs (the fixed job-alert filter and per-company ones) — only the
@@ -122,9 +127,40 @@ public class GmailSettingsClient
     public static string CompanyFilterQuery(string companyDomain) => $"from:(*@{companyDomain})";
 
     public static bool HasCompanyFilter(IEnumerable<Filter>? filters, string companyDomain, string address) =>
-        filters?.Any(f => f.Action?.Forward == address && f.Criteria?.Query == CompanyFilterQuery(companyDomain)) == true;
+        HasFilterForQuery(filters, CompanyFilterQuery(companyDomain), address);
 
     public Task<bool> EnsureCompanyFilterAsync(string refreshToken, string companyDomain, string forwardToAddress) =>
         EnsureFilterAsync(refreshToken, CompanyFilterQuery(companyDomain), forwardToAddress,
             filters => HasCompanyFilter(filters, companyDomain, forwardToAddress));
+
+    // Sender domains for the ~20 ATS/job-board platforms that account for the large majority
+    // of real application-acknowledgment traffic (derived by analyzing 197 of the account
+    // owner's own real acknowledgment emails — see the forwarding-strategy discussion this
+    // shipped with). Exposed publicly so AcknowledgmentDomainCapture can skip auto-installing
+    // a redundant per-domain filter for a sender already covered here.
+    public static readonly IReadOnlySet<string> KnownAckDomains = new HashSet<string>
+    {
+        "s.seek.com.au", "linkedin.com", "indeed.com", "smartrecruiters.com",
+        "adzuna.com.au", "app.bamboohr.com", "employmenthero.com", "candidates.workablemail.com",
+        "us.greenhouse-mail.io", "myworkday.com", "otp.workday.com", "hire.lever.co",
+        "livehire.com", "broadbean.net", "jobadder.com", "send.dover.com",
+        "au.notification.hays.com", "successfactors.com", "mail.pageuppeople.com", "ashbyhq.com",
+    };
+
+    // Direct company/agency senders (their own domain, not a shared ATS platform) don't share
+    // a sender domain worth pre-populating — this phrase list is what catches those instead.
+    // Subject-only, not body text: keeps the filter precise and matches the existing
+    // job-alert filter's own subject:(...) group rather than introducing a new matching style.
+    // Built from KnownAckDomains rather than a second hand-typed list — one list to keep
+    // in sync with AcknowledgmentDomainCapture's "already covered" check, not two.
+    public static readonly string AcknowledgmentFilterQuery =
+        $"from:(*@{string.Join(" OR *@", KnownAckDomains)}) " +
+        "OR subject:(\"successfully submitted\" OR \"application submitted\" OR \"thank you for applying\" " +
+        "OR \"thanks for applying\" OR \"thank you for your application\" OR \"received your application\" " +
+        "OR \"application confirmation\" OR \"track your application\" OR \"application received\" " +
+        "OR \"thank you for submitting your job application\")";
+
+    public Task<bool> EnsureAcknowledgmentFilterAsync(string refreshToken, string forwardToAddress) =>
+        EnsureFilterAsync(refreshToken, AcknowledgmentFilterQuery, forwardToAddress,
+            filters => HasFilterForQuery(filters, AcknowledgmentFilterQuery, forwardToAddress));
 }

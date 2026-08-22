@@ -1106,13 +1106,17 @@ api.MapGet("/gmail-forwarding-status", async (HttpContext ctx, AppDbContext db, 
             // Return value is whether a *new* filter was just created — either way (already
             // existed or just created), the filter now exists.
             await gmailSettings.EnsureJobAlertFilterAsync(refreshToken, address);
+            // Separate filter, same address — catches application-acknowledgment mail
+            // (ATS/platform domains + phrase matches) so filter tracking mode can follow
+            // applications through to acknowledgment without requiring full inbox access.
+            await gmailSettings.EnsureAcknowledgmentFilterAsync(refreshToken, address);
             filterInstalled = true;
         }
         catch (Exception ex)
         {
             // Don't let a filter-install hiccup hide an already-successful verification —
             // the address status itself is still accurate and worth returning regardless.
-            await Console.Error.WriteLineAsync($"EnsureJobAlertFilterAsync failed for user {user.Id}: {ex}");
+            await Console.Error.WriteLineAsync($"Filter install failed for user {user.Id}: {ex}");
         }
     }
 
