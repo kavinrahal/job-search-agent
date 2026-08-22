@@ -29,6 +29,10 @@ public record SourcesUpdateRequest(string[] Sources);
 // POST /api/v1/admin/invite
 public record InviteRequest(string Email);
 
+// POST /api/v1/account/cancel — the user's own explicit choice, not a default we pick for
+// them. See the endpoint's own comment for exactly what this does and doesn't control.
+public record CancelAccountRequest(bool DeleteData);
+
 // POST /api/v1/applications — manually logging an application (the only creation path
 // besides ApplicationTracker's email-driven one). CompanyDomain is only meaningful in
 // filter tracking mode (see GmailTrackingMode) — installs a per-company Gmail filter.

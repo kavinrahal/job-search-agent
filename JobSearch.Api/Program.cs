@@ -1270,20 +1270,25 @@ api.MapPost("/admin/invite", async (HttpContext ctx, InviteRequest body, AppDbCo
     return Results.Ok(new { email, emailSent });
 });
 
-// POST /api/v1/account/cancel — soft-deactivates the account (blocks future login) and signs
-// out the current session immediately. Doesn't revoke any other active session for this
-// account elsewhere — there's no server-side session store to revoke against, only the
-// signed cookie — so a second open tab stays signed in until it expires or the cookie is
-// cleared there too. Acceptable for now: the login check still blocks any future sign-in
-// attempt regardless.
+// POST /api/v1/account/cancel — body: { deleteData: bool }. Soft-deactivates the account
+// (blocks future login) and signs out the current session immediately. Doesn't revoke any
+// other active session for this account elsewhere — there's no server-side session store to
+// revoke against, only the signed cookie — so a second open tab stays signed in until it
+// expires or the cookie is cleared there too. Acceptable for now: the login check still
+// blocks any future sign-in attempt regardless.
 //
-// Unlike the deactivation flag, Gmail access and inbox-derived content genuinely end here:
-// the refresh token is revoked with Google directly (not just dropped locally — a cancelled
-// account shouldn't leave a grant standing in the user's Google Account permissions) and
-// deleted, and RawEmails/Classifications are deleted outright rather than kept. Applications
-// (the actually-useful derived record) are left alone; the raw email content behind them
-// isn't, and there's no reason for it to survive account cancellation.
-api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db, UserSecretService secrets) =>
+// Gmail access always ends here, unconditionally: the refresh token is revoked with Google
+// directly (not just dropped locally — a cancelled account shouldn't leave a grant standing
+// in the user's Google Account permissions) and deleted. There's no reason for a deactivated
+// account to keep a live grant just because the user wants their history preserved —
+// reconnecting Gmail is a normal, expected part of coming back anyway.
+//
+// deleteData is the user's own explicit choice, not a default we pick for them: RawEmails
+// and Classifications (the raw inbox-derived content) are deleted only if they asked for
+// that, so someone planning to return can keep their tracked application history intact
+// rather than starting over. Applications itself (the actually-useful derived record) is
+// never touched either way — this only ever controls the raw content behind it.
+api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db, UserSecretService secrets, CancelAccountRequest body) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     var user = await db.Users.FindAsync(userId);
@@ -1312,10 +1317,13 @@ api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db, UserSecr
         await secrets.DeleteAsync(db, userId, key);
     }
 
-    var rawEmails = await db.RawEmails.Where(r => r.UserId == userId).ToListAsync();
-    db.RawEmails.RemoveRange(rawEmails);
-    var classifications = await db.Classifications.Where(c => c.UserId == userId).ToListAsync();
-    db.Classifications.RemoveRange(classifications);
+    if (body.DeleteData)
+    {
+        var rawEmails = await db.RawEmails.Where(r => r.UserId == userId).ToListAsync();
+        db.RawEmails.RemoveRange(rawEmails);
+        var classifications = await db.Classifications.Where(c => c.UserId == userId).ToListAsync();
+        db.Classifications.RemoveRange(classifications);
+    }
 
     user.DeactivatedAt = DateTime.UtcNow;
     await db.SaveChangesAsync();

@@ -23,6 +23,11 @@ export function SettingsPage() {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteResult, setInviteResult] = useState<{ email: string; emailSent: boolean } | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  // Deleting is the default — matches what actually happens if this choice screen is somehow
+  // skipped, and "your data is gone unless you explicitly ask to keep it" is the safer
+  // default to land on than the reverse.
+  const [deleteDataOnCancel, setDeleteDataOnCancel] = useState(true);
 
   const { data: me } = useMe();
   const save = useUpdateProfile();
@@ -70,8 +75,7 @@ export function SettingsPage() {
   }
 
   async function handleCancelAccount() {
-    if (!confirm("Cancel your account? You'll be signed out and won't be able to log back in unless it's reactivated. Your data is kept, not deleted.")) return;
-    await cancel.execute();
+    await cancel.execute(deleteDataOnCancel);
     window.location.href = "/";
   }
 
@@ -207,15 +211,61 @@ export function SettingsPage() {
       <div className="rounded-xl border border-red-200 bg-white p-5 shadow-sm dark:border-red-900/50 dark:bg-gray-900">
         <p className="mb-1 text-sm font-medium text-red-700 dark:text-red-400">Danger zone</p>
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-          Cancels your account and signs you out. Your data is kept, not deleted, in case you
-          come back. You just won't be able to sign in again unless it's reactivated.
+          Cancels your account and signs you out. Gmail access is disconnected either way —
+          we revoke it with Google directly, not just stop using it. You just won't be able to
+          sign in again unless it's reactivated.
         </p>
-        <button
-          onClick={handleCancelAccount}
-          className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 transition-colors duration-150 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
-        >
-          Cancel my account
-        </button>
+
+        {!confirmingCancel ? (
+          <button
+            onClick={() => setConfirmingCancel(true)}
+            className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 transition-colors duration-150 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
+          >
+            Cancel my account
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              {(
+                [
+                  { value: true, label: "Delete my data", description: "Removes your tracked application history and everything derived from your inbox. Starting again later means starting fresh." },
+                  { value: false, label: "Keep my data", description: "In case you come back — your tracked application history stays, ready to pick up where you left off." },
+                ] as const
+              ).map(opt => (
+                <button
+                  key={String(opt.value)}
+                  type="button"
+                  onClick={() => setDeleteDataOnCancel(opt.value)}
+                  className={`block w-full rounded-lg border p-3 text-left transition-colors duration-150 ${
+                    deleteDataOnCancel === opt.value
+                      ? "border-violet-300 bg-violet-50 dark:border-violet-700 dark:bg-violet-500/10"
+                      : "border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
+                  }`}
+                >
+                  <p className={`text-sm font-medium ${deleteDataOnCancel === opt.value ? "text-violet-700 dark:text-violet-300" : "text-gray-700 dark:text-gray-200"}`}>
+                    {opt.label}
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{opt.description}</p>
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleCancelAccount}
+                disabled={cancel.loading}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {cancel.loading ? "Cancelling…" : "Confirm cancellation"}
+              </button>
+              <button
+                onClick={() => setConfirmingCancel(false)}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+              >
+                Never mind
+              </button>
+            </div>
+          </div>
+        )}
         {cancel.error && <p className="mt-2 text-sm text-red-700 dark:text-red-400">{cancel.error}</p>}
       </div>
     </div>

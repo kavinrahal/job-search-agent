@@ -91,8 +91,12 @@ const TRACKING_MODES: { value: "full" | "filter" | "manual"; label: string; desc
     label: "Full inbox access",
     description:
       "We read your inbox to catch application status changes automatically, regardless of " +
-      "which company emails you. This is the most complete option, and the best experience if " +
-      "you're comfortable granting it.",
+      "which company emails you. This access is read-only — we can never send, delete, or " +
+      "change anything in your inbox — and we only keep what's actually job-related; " +
+      "everything else is cleared right after we check it. Classifying a message briefly " +
+      "sends a few lines of it to our AI provider, for every email we fetch, not just the " +
+      "ones we keep. If you ever cancel, you choose whether that data is deleted or kept for " +
+      "if you come back.",
   },
   {
     value: "filter",

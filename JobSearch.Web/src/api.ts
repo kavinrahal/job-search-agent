@@ -118,8 +118,8 @@ export async function logout(): Promise<void> {
   await request("/auth/logout", { method: "POST" });
 }
 
-export async function cancelAccount(): Promise<void> {
-  await request("/account/cancel", { method: "POST" });
+export async function cancelAccount(deleteData: boolean): Promise<void> {
+  await request("/account/cancel", { method: "POST", ...json({ deleteData }) });
 }
 
 // Beta-only, no payment gate — see the matching backend endpoint's comment.
