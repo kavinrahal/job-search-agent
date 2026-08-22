@@ -1270,17 +1270,52 @@ api.MapPost("/admin/invite", async (HttpContext ctx, InviteRequest body, AppDbCo
     return Results.Ok(new { email, emailSent });
 });
 
-// POST /api/v1/account/cancel — soft-deactivates the account (blocks future login, data is
-// kept) and signs out the current session immediately. Doesn't revoke any other active
-// session for this account elsewhere — there's no server-side session store to revoke
-// against, only the signed cookie — so a second open tab stays signed in until it expires
-// or the cookie is cleared there too. Acceptable for now: the login check still blocks any
-// future sign-in attempt regardless.
-api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db) =>
+// POST /api/v1/account/cancel — soft-deactivates the account (blocks future login) and signs
+// out the current session immediately. Doesn't revoke any other active session for this
+// account elsewhere — there's no server-side session store to revoke against, only the
+// signed cookie — so a second open tab stays signed in until it expires or the cookie is
+// cleared there too. Acceptable for now: the login check still blocks any future sign-in
+// attempt regardless.
+//
+// Unlike the deactivation flag, Gmail access and inbox-derived content genuinely end here:
+// the refresh token is revoked with Google directly (not just dropped locally — a cancelled
+// account shouldn't leave a grant standing in the user's Google Account permissions) and
+// deleted, and RawEmails/Classifications are deleted outright rather than kept. Applications
+// (the actually-useful derived record) are left alone; the raw email content behind them
+// isn't, and there's no reason for it to survive account cancellation.
+api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db, UserSecretService secrets) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     var user = await db.Users.FindAsync(userId);
     if (user is null) return Results.NotFound();
+
+    var gmailOAuth = ctx.RequestServices.GetService<GmailOAuthService>();
+    foreach (var key in new[] { UserSecretKey.GmailRefreshToken, UserSecretKey.GmailSettingsRefreshToken })
+    {
+        var token = await secrets.GetAsync(db, userId, key);
+        if (token is null) continue;
+
+        if (gmailOAuth is not null)
+        {
+            try
+            {
+                await gmailOAuth.RevokeAsync(token);
+            }
+            catch (Exception ex)
+            {
+                // Best-effort: Google being briefly unreachable shouldn't block the user from
+                // cancelling their own account. The token is deleted from our side either way,
+                // so we stop using it regardless of whether Google's revoke call succeeded.
+                await Console.Error.WriteLineAsync($"Gmail token revoke failed for user {userId}: {ex}");
+            }
+        }
+        await secrets.DeleteAsync(db, userId, key);
+    }
+
+    var rawEmails = await db.RawEmails.Where(r => r.UserId == userId).ToListAsync();
+    db.RawEmails.RemoveRange(rawEmails);
+    var classifications = await db.Classifications.Where(c => c.UserId == userId).ToListAsync();
+    db.Classifications.RemoveRange(classifications);
 
     user.DeactivatedAt = DateTime.UtcNow;
     await db.SaveChangesAsync();

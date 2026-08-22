@@ -85,4 +85,49 @@ public class UserSecretServiceTests
         Assert.Equal("user-1-token", await service.GetAsync(db, userId: 1, "gmail_refresh_token"));
         Assert.Equal("user-2-token", await service.GetAsync(db, userId: 2, "gmail_refresh_token"));
     }
+
+    // TC06 — the actual data-deletion guarantee account cancellation depends on: once
+    // deleted, the value is genuinely gone, not just unreachable through GetAsync.
+    [Fact]
+    public async Task DeleteAsync_RemovesTheRowEntirely()
+    {
+        using var db = FreshDb();
+        var service = MakeService();
+        await service.SetAsync(db, userId: 1, "gmail_refresh_token", "token-value");
+
+        await service.DeleteAsync(db, userId: 1, "gmail_refresh_token");
+
+        Assert.Empty(db.UserSecrets);
+        Assert.Null(await service.GetAsync(db, userId: 1, "gmail_refresh_token"));
+    }
+
+    // TC07 — account cancellation calls this for both possible Gmail secret keys
+    // unconditionally; a user who only ever connected one of them must not throw on the
+    // other, or cancellation itself would fail.
+    [Fact]
+    public async Task DeleteAsync_KeyNeverSet_NoOpsWithoutThrowing()
+    {
+        using var db = FreshDb();
+        var service = MakeService();
+
+        await service.DeleteAsync(db, userId: 1, "gmail_refresh_token");
+
+        Assert.Empty(db.UserSecrets);
+    }
+
+    // TC08 — deleting one user's secret must never touch another user's row under the same
+    // key, the same isolation guarantee TC05 checks for Set/Get.
+    [Fact]
+    public async Task DeleteAsync_SameKeyDifferentUsers_OnlyDeletesTargetUsersRow()
+    {
+        using var db = FreshDb();
+        var service = MakeService();
+        await service.SetAsync(db, userId: 1, "gmail_refresh_token", "user-1-token");
+        await service.SetAsync(db, userId: 2, "gmail_refresh_token", "user-2-token");
+
+        await service.DeleteAsync(db, userId: 1, "gmail_refresh_token");
+
+        Assert.Null(await service.GetAsync(db, userId: 1, "gmail_refresh_token"));
+        Assert.Equal("user-2-token", await service.GetAsync(db, userId: 2, "gmail_refresh_token"));
+    }
 }

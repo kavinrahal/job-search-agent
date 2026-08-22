@@ -121,4 +121,33 @@ public class GmailOAuthServiceTests
         var sentBody = await handler.LastRequest!.Content!.ReadAsStringAsync();
         Assert.Contains(Uri.EscapeDataString("https://api.example.com/api/v1/gmail-oauth/callback"), sentBody);
     }
+
+    // TC08 — the actual request account cancellation depends on to end Gmail access on
+    // Google's side, not just stop using the token locally: a bare POST of the token to
+    // Google's revoke endpoint, no client credentials attached (Google's revoke endpoint
+    // doesn't need or accept them — the token alone identifies what to revoke).
+    [Fact]
+    public async Task RevokeAsync_PostsTokenToGoogleRevokeEndpoint()
+    {
+        var handler = new StubHandler("{}");
+        var service = Service(handler);
+
+        await service.RevokeAsync("refresh-token-value");
+
+        Assert.Equal("https://oauth2.googleapis.com/revoke", handler.LastRequest!.RequestUri!.GetLeftPart(UriPartial.Path));
+        var sentBody = await handler.LastRequest!.Content!.ReadAsStringAsync();
+        Assert.Contains("token=refresh-token-value", sentBody);
+    }
+
+    // TC09 — a non-2xx from Google throws rather than silently succeeding. The caller
+    // (account cancellation) is expected to catch this and continue regardless — but that's
+    // only a safe design if a failure is actually observable as an exception, not swallowed
+    // here.
+    [Fact]
+    public async Task RevokeAsync_ErrorResponse_Throws()
+    {
+        var service = Service(new StubHandler("""{"error":"invalid_token"}""", HttpStatusCode.BadRequest));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => service.RevokeAsync("already-revoked-token"));
+    }
 }

@@ -22,6 +22,7 @@ public class GmailOAuthService
     public const string ReadonlyScope = "https://www.googleapis.com/auth/gmail.readonly";
     private const string AuthorizeUrl = "https://accounts.google.com/o/oauth2/v2/auth";
     private const string TokenUrl = "https://oauth2.googleapis.com/token";
+    private const string RevokeUrl = "https://oauth2.googleapis.com/revoke";
 #pragma warning restore S1075
 
     private readonly HttpClient _http;
@@ -79,5 +80,19 @@ public class GmailOAuthService
         // Missing rather than malformed — shouldn't occur with prompt=consent always set,
         // but surface it clearly rather than a downstream NullReferenceException if it does.
         throw new InvalidOperationException("Google's token response didn't include a refresh_token.");
+    }
+
+    // Ends the grant on Google's side, not just our own use of it. Cancelling an account (or
+    // disconnecting Gmail) should mean access actually stops, not just "we stopped calling
+    // the API with it" while the grant still shows in the user's Google Account permissions.
+    // No client credentials needed — Google's revoke endpoint accepts any token, refresh or
+    // access, as the sole identifier of what to revoke.
+    public virtual async Task RevokeAsync(string token)
+    {
+        var response = await _http.PostAsync(RevokeUrl, new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["token"] = token,
+        }));
+        response.EnsureSuccessStatusCode();
     }
 }

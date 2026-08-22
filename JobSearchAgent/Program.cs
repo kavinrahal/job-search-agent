@@ -415,6 +415,19 @@ async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> Proce
     if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
         Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
 
+    // Privacy: clear full body text for anything nothing will read again — see
+    // RawEmailRetentionPolicy for which emails that is and why.
+    var messageIdsToScrub = RawEmailRetentionPolicy.SelectMessageIdsToScrub(results);
+    if (messageIdsToScrub.Count > 0)
+    {
+        var rawRecords = await userDb.RawEmails
+            .Where(r => messageIdsToScrub.Contains(r.MessageId))
+            .ToListAsync();
+        foreach (var raw in rawRecords)
+            raw.BodyText = "";
+        await userDb.SaveChangesAsync();
+    }
+
     // Process job alert emails — query all stored alerts so previously-classified
     // ones are retried each run (dedup in JobAlertProcessor handles already-done URLs).
     if (!testMode)

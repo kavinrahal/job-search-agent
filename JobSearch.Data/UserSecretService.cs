@@ -35,4 +35,17 @@ public class UserSecretService
         var secret = await db.UserSecrets.FirstOrDefaultAsync(s => s.UserId == userId && s.Key == key);
         return secret is null ? null : _protector.Unprotect(secret.EncryptedValue);
     }
+
+    // Instance method for the same reason as SetAsync/GetAsync — API symmetry as a matched
+    // Set/Get/Delete trio callers use the same way — even though this one never touches
+    // _protector.
+#pragma warning disable S2325
+    public async Task DeleteAsync(AppDbContext db, int userId, string key)
+    {
+        var secret = await db.UserSecrets.FirstOrDefaultAsync(s => s.UserId == userId && s.Key == key);
+        if (secret is null) return;
+        db.UserSecrets.Remove(secret);
+        await db.SaveChangesAsync();
+    }
+#pragma warning restore S2325
 }
