@@ -21,6 +21,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<User> Users { get; set; }
     public DbSet<UserProfile> UserProfiles { get; set; }
+    public DbSet<UserResume> UserResumes { get; set; }
     public DbSet<UserSecret> UserSecrets { get; set; }
     public DbSet<RawEmailRecord> RawEmails { get; set; }
     public DbSet<ClassificationRecord> Classifications { get; set; }
@@ -96,6 +97,18 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasOne(p => p.User)
              .WithOne()
              .HasForeignKey<UserProfile>(p => p.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Same PK-reuse, no-query-filter pattern as UserProfile above, same reasoning — always
+        // looked up by an exact known UserId. Row absence is itself meaningful here (see
+        // UserResume.cs): it's the "not yet migrated" signal for the resume-builder backfill.
+        modelBuilder.Entity<UserResume>(e =>
+        {
+            e.HasKey(r => r.UserId);
+            e.HasOne(r => r.User)
+             .WithOne()
+             .HasForeignKey<UserResume>(r => r.UserId)
              .OnDelete(DeleteBehavior.Cascade);
         });
 

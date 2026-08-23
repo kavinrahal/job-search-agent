@@ -1,0 +1,135 @@
+using System.Text.Json;
+using JobSearch.Data;
+
+namespace JobSearchAgent.Tests;
+
+// Extraction-only tests, same principle as ResumeIntakeAgentTests — verifies the tool-response
+// parsing logic without a live API call, using JsonDocument to build inputs shaped exactly like
+// what Anthropic's tool_use.input would contain.
+public class ResumeBackfillAgentTests
+{
+    private static IReadOnlyDictionary<string, JsonElement> Input(string json)
+    {
+        var doc = JsonDocument.Parse(json);
+        return doc.RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
+    }
+
+    [Fact]
+    public void ExtractSectionConfig_ReturnsEntriesInOrder()
+    {
+        var input = Input("""{"section_config": [{"section_key": "experience", "included": true}, {"section_key": "skills", "included": false}]}""");
+
+        var result = ResumeBackfillAgent.ExtractSectionConfig(input, "section_config");
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(new SectionConfigEntry("experience", true), result[0]);
+        Assert.Equal(new SectionConfigEntry("skills", false), result[1]);
+    }
+
+    [Fact]
+    public void ExtractSectionConfig_MissingKey_ReturnsEmpty()
+    {
+        var result = ResumeBackfillAgent.ExtractSectionConfig(Input("{}"), "section_config");
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ExtractExperienceOverrides_CapturesTextOverrideExtraAchievementsAndNotes()
+    {
+        var input = Input("""
+            {
+              "experience_overrides": [
+                {
+                  "experience_index": 0,
+                  "included": true,
+                  "company_description_override": "Shorter description.",
+                  "achievements": [{"index": 0, "included": true, "text_override": "Reworded bullet."}],
+                  "extra_achievements": ["Synthesized bullet with no source."],
+                  "notes": "De-emphasise in some applications."
+                },
+                {
+                  "experience_index": 3,
+                  "included": false,
+                  "achievements": [],
+                  "extra_achievements": [],
+                  "notes": "Weakest role — only include for design-focused applications."
+                }
+              ]
+            }
+            """);
+
+        var result = ResumeBackfillAgent.ExtractExperienceOverrides(input, "experience_overrides");
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(0, result[0].ExperienceIndex);
+        Assert.True(result[0].Included);
+        Assert.Equal("Shorter description.", result[0].CompanyDescriptionOverride);
+        Assert.Single(result[0].Achievements);
+        Assert.Equal("Reworded bullet.", result[0].Achievements[0].TextOverride);
+        Assert.Single(result[0].ExtraAchievements);
+        Assert.Equal("Synthesized bullet with no source.", result[0].ExtraAchievements[0]);
+
+        Assert.Equal(3, result[1].ExperienceIndex);
+        Assert.False(result[1].Included);
+        Assert.Contains("Weakest role", result[1].Notes);
+    }
+
+    [Fact]
+    public void ExtractSkillsSection_TranscribesLabelsAndItemsVerbatim()
+    {
+        var input = Input("""
+            {"skills_section": [
+              {"label": "Languages", "items": ["C#", "TypeScript"]},
+              {"label": "Cloud", "items": ["Azure (App Services, Functions)", "AWS"]}
+            ]}
+            """);
+
+        var result = ResumeBackfillAgent.ExtractSkillsSection(input, "skills_section");
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("Languages", result[0].Label);
+        Assert.Equal(["C#", "TypeScript"], result[0].Items);
+        Assert.Equal("Azure (App Services, Functions)", result[1].Items[0]);
+    }
+
+    [Fact]
+    public void ExtractProjectOverrides_CapturesHighlightOverridesAndExtras()
+    {
+        var input = Input("""
+            {
+              "project_overrides": [
+                {
+                  "project_index": 0,
+                  "included": true,
+                  "description_override": "Short tailored description.",
+                  "highlights": [{"index": 1, "included": false}],
+                  "extra_highlights": ["Highlight with no Background source."]
+                }
+              ]
+            }
+            """);
+
+        var result = ResumeBackfillAgent.ExtractProjectOverrides(input, "project_overrides");
+
+        var project = Assert.Single(result);
+        Assert.Equal("Short tailored description.", project.DescriptionOverride);
+        Assert.Single(project.Highlights);
+        Assert.False(project.Highlights[0].Included);
+        Assert.Single(project.ExtraHighlights);
+    }
+
+    [Fact]
+    public void ExtractExperienceOverrides_IncludedDefaultsTrue_WhenFieldOmitted()
+    {
+        // GetBool's defaultValue: true for "included" matters here — an override entry that
+        // forgets to set included shouldn't silently exclude a real, currently-live role.
+        var input = Input("""
+            {"experience_overrides": [{"experience_index": 0, "achievements": [], "extra_achievements": []}]}
+            """);
+
+        var result = ResumeBackfillAgent.ExtractExperienceOverrides(input, "experience_overrides");
+
+        Assert.True(Assert.Single(result).Included);
+    }
+}

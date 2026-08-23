@@ -319,6 +319,51 @@ projects:
       Do not use if the role explicitly discourages personal projects (rare).
 
 # ---------------------------------------------------------------------------
+# VOLUNTEERING & LEADERSHIP
+# ---------------------------------------------------------------------------
+volunteering:
+  - role: Mentor
+    org: Kolmeo Pty. Ltd.
+    dates:
+      start: "2023-03"
+      end: "2024-07"
+    description: >
+      Mentored junior developers through pair programming and guidance sessions to
+      help them get up to speed with the Kolmeo tech stack.
+
+  - role: Student Mentor
+    org: RMIT University
+    dates:
+      start: "2021-08"
+      end: "2021-10"
+    description: >
+      Selected as a student mentor to aid students with their coursework.
+
+  - role: PR Manager
+    org: Sri Lanka Unites
+    dates:
+      start: "2016-05"
+      end: "2017-12"
+    description: >
+      Managed public relations for two fundraising projects (Stride to Ride 16,
+      Vibrance 17) raising funds and goods for underprivileged children in rural
+      Sri Lanka.
+
+# ---------------------------------------------------------------------------
+# CREDENTIALS
+# Licenses, bar admissions, and certifications — one shape covers all three
+# (kind: license | bar_admission | certification). Empty for this candidate;
+# populated per-user where relevant (e.g. a nursing license, a bar admission).
+# ---------------------------------------------------------------------------
+credentials: []
+
+# ---------------------------------------------------------------------------
+# PUBLICATIONS
+# Empty for this candidate; populated for academia-track profiles.
+# ---------------------------------------------------------------------------
+publications: []
+
+# ---------------------------------------------------------------------------
 # NARRATIVE GUIDELINES
 # For use by write_cover_letter.md and tailor_cv.md
 # ---------------------------------------------------------------------------
