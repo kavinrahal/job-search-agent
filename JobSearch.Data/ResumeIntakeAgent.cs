@@ -66,11 +66,13 @@ public class ResumeIntakeAgent
     public Task<ParsedResume> ParseFromTextAsync(int userId, string resumeText) =>
         ParseAsync(userId, [new TextBlockParam { Text = resumeText }]);
 
+    // Extracts text locally instead of attaching the raw PDF — Claude's native PDF support
+    // renders every page as an image in addition to extracting its text, and ParseAsync below
+    // fires two parallel calls (background + cv_base), so the raw-PDF version paid that image
+    // cost twice per upload. Text extraction is free and local; see PdfTextExtractor for what
+    // it can't handle (scanned/image-only PDFs — no OCR).
     public Task<ParsedResume> ParseFromPdfAsync(int userId, byte[] pdfBytes) =>
-        ParseAsync(userId, [
-            new TextBlockParam { Text = "Resume attached as a PDF." },
-            new DocumentBlockParam(new Base64PdfSource(Convert.ToBase64String(pdfBytes))),
-        ]);
+        ParseFromTextAsync(userId, PdfTextExtractor.ExtractText(pdfBytes));
 
     private async Task<ParsedResume> ParseAsync(int userId, List<ContentBlockParam> content)
     {

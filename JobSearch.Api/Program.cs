@@ -941,7 +941,14 @@ api.MapPost("/onboarding/parse-resume", async (
     {
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
-        parsed = await intakeAgent.ParseFromPdfAsync(userId, ms.ToArray());
+        try
+        {
+            parsed = await intakeAgent.ParseFromPdfAsync(userId, ms.ToArray());
+        }
+        catch (PdfTextExtractionException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
     }
     else if (!string.IsNullOrWhiteSpace(text))
     {
