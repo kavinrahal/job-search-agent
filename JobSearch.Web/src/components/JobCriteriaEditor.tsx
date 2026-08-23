@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
 import type { JobCriteriaData, SkillDimension, Disqualifier } from "../lib/jobCriteriaYaml";
 import { LABEL, INPUT, Field, TopicCard, EntryCard, AddButton, AdvancedSection } from "./CardEditor";
 import { COUNTRIES, CURRENCIES, STATES_BY_COUNTRY } from "../lib/regionData";
 import { InfoTooltip } from "./InfoTooltip";
 import { ChoiceButtons } from "./ChoiceButtons";
+import { getMissingCriteriaFields } from "../lib/criteriaCompleteness";
 
 // Exported so CriteriaWizard.tsx's Employment type question reuses the exact same list rather
 // than maintaining a second copy that could drift.
@@ -39,7 +41,7 @@ function TieredMatchFields({ value, onChange }: { value: SkillDimension; onChang
   );
 }
 
-function SkillDimensionsSection({ value, onChange }: { value: SkillDimension[]; onChange: (v: SkillDimension[]) => void }) {
+function SkillDimensionsSection({ value, onChange, missing }: { value: SkillDimension[]; onChange: (v: SkillDimension[]) => void; missing?: boolean }) {
   const update = (i: number, patch: Partial<SkillDimension>) =>
     onChange(value.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
   const remove = (i: number) => onChange(value.filter((_, idx) => idx !== i));
@@ -74,6 +76,7 @@ function SkillDimensionsSection({ value, onChange }: { value: SkillDimension[]; 
         ))}
         <AddButton onClick={add}>+ Add skill dimension</AddButton>
       </div>
+      {missing && <RequiredWarning>Required — add at least one skill dimension with a name and a strong match.</RequiredWarning>}
     </TopicCard>
   );
 }
@@ -105,6 +108,13 @@ function DisqualifiersSection({ value, onChange }: { value: Disqualifier[]; onCh
   );
 }
 
+// Matches the existing Target-job-titles warning's exact styling — one visual language for
+// "this is required and currently blank" everywhere it appears, in both this editor and
+// (via getMissingCriteriaFields) the wizard/dashboard banner.
+function RequiredWarning({ children }: { children: ReactNode }) {
+  return <p className="text-xs text-amber-600 dark:text-amber-400">{children}</p>;
+}
+
 export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteriaData; onChange: (v: JobCriteriaData) => void; tier: string }) {
   const set = <K extends keyof JobCriteriaData>(key: K, v: JobCriteriaData[K]) => onChange({ ...value, [key]: v });
 
@@ -114,6 +124,11 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
   const knownStates = selectedCountries.length > 0 && selectedCountries.every(c => c in STATES_BY_COUNTRY)
     ? Array.from(new Set(selectedCountries.flatMap(c => STATES_BY_COUNTRY[c])))
     : null;
+
+  // Same check the wizard and the dashboard nudge use — one definition of "complete" everywhere,
+  // so this editor can never disagree with either about what's still missing.
+  const missing = getMissingCriteriaFields(value, tier);
+  const isMissing = (key: string) => missing.some(m => m.key === key);
 
   return (
     <div className="space-y-4">
@@ -135,10 +150,8 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
             value={value.targetJobTitles}
             onChange={v => set("targetJobTitles", v)}
           />
-          {!value.targetJobTitles.trim() && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              Required — automatic discovery won't run until at least one title is added here.
-            </p>
+          {isMissing("targetJobTitles") && (
+            <RequiredWarning>Required — automatic discovery won't run until at least one title is added here.</RequiredWarning>
           )}
         </TopicCard>
       )}
@@ -150,12 +163,13 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
           value={value.employmentTypes}
           onChange={v => set("employmentTypes", v)}
         />
+        {isMissing("employmentTypes") && <RequiredWarning>Required — select at least one.</RequiredWarning>}
       </TopicCard>
 
       <TopicCard title="Location">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className={LABEL}>Countries you're eligible/willing to work in</label>
+            <label className={LABEL}>Countries you're eligible/willing to work in *</label>
             <select
               multiple
               className={`${INPUT} h-32`}
@@ -164,6 +178,7 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
             >
               {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+            {isMissing("location") && <RequiredWarning>Required — select at least one country.</RequiredWarning>}
           </div>
           <div>
             <label className={LABEL}>States/regions (optional)</label>
@@ -210,6 +225,7 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
             <Field label="Notes" value={value.onsiteNotes} onChange={v => set("onsiteNotes", v)} />
           </div>
         </div>
+        {isMissing("arrangement") && <RequiredWarning>Required — check at least one of remote, hybrid, or on-site.</RequiredWarning>}
       </TopicCard>
 
       <TopicCard title="Sponsorship" defaultOpen={false}>
@@ -233,7 +249,10 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
               {SENIORITY_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
             </select>
           </div>
-          <Field label={'Your current experience (e.g. "~4 years")'} value={value.candidateCurrentExperience} onChange={v => set("candidateCurrentExperience", v)} />
+          <div>
+            <Field label={'Your current experience (e.g. "~4 years") *'} value={value.candidateCurrentExperience} onChange={v => set("candidateCurrentExperience", v)} />
+            {isMissing("experience") && <RequiredWarning>Required.</RequiredWarning>}
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Ideal (years required, up to)" type="number" min={0} value={value.idealMaxYears} onChange={v => set("idealMaxYears", v)} />
@@ -259,12 +278,13 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
           <Field label="Target range (high)" type="number" min={0} value={value.salaryMax} onChange={v => set("salaryMax", v)} />
           <Field label="Flag if above" type="number" min={0} value={value.salaryFlagAbove} onChange={v => set("salaryFlagAbove", v)} />
         </div>
+        {isMissing("salary") && <RequiredWarning>Required — fill in at least one of minimum acceptable, target range, or target range (low).</RequiredWarning>}
         <Field label="Why flag below minimum" value={value.salaryBelowMinNote} onChange={v => set("salaryBelowMinNote", v)} multiline />
         <Field label="Why flag above range" value={value.salaryAboveMaxNote} onChange={v => set("salaryAboveMaxNote", v)} multiline />
         <Field label="When salary isn't stated" value={value.salaryMissingNote} onChange={v => set("salaryMissingNote", v)} multiline />
       </TopicCard>
 
-      <SkillDimensionsSection value={value.skillDimensions} onChange={v => set("skillDimensions", v)} />
+      <SkillDimensionsSection value={value.skillDimensions} onChange={v => set("skillDimensions", v)} missing={isMissing("skillDimensions")} />
 
       <DisqualifiersSection value={value.disqualifiers} onChange={v => set("disqualifiers", v)} />
 

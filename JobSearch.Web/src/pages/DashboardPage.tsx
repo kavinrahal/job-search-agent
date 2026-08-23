@@ -2,23 +2,28 @@ import { Link } from "react-router-dom";
 import { useMe } from "../hooks/useAuth";
 import { useProfile } from "../hooks/useProfile";
 import { parseJobCriteriaYaml } from "../lib/jobCriteriaYaml";
+import { getMissingCriteriaFields } from "../lib/criteriaCompleteness";
 import { Tier1Dashboard } from "../components/Tier1Dashboard";
 import { Tier2Dashboard } from "../components/Tier2Dashboard";
 import { DashboardGreeting } from "../components/DashboardGreeting";
 
 // Separate from the /auth/me needsCriteria gate (App.tsx), which only checks that the user
 // has visited and saved the Criteria page once — saving always writes a full YAML skeleton
-// with defaults, so that flag alone can't tell whether anything meaningful was entered. This
-// checks the actual parsed content instead, and keeps nudging until skill dimensions exist.
-function CriteriaNudge() {
+// with defaults, so that flag alone can't tell whether anything meaningful was entered. Now
+// that the same mandatory fields block Save on the Criteria page itself, this should rarely
+// fire for anyone who saves going forward — it's a safety net for accounts that had partial
+// criteria saved before that enforcement existed.
+function CriteriaNudge({ tier }: { tier: string }) {
   const { data: profile } = useProfile();
-  if (!profile || parseJobCriteriaYaml(profile.jobCriteria).skillDimensions.length > 0) return null;
+  if (!profile) return null;
+  const missing = getMissingCriteriaFields(parseJobCriteriaYaml(profile.jobCriteria), tier);
+  if (missing.length === 0) return null;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-500/10 dark:text-amber-300">
       <p>
-        Your job criteria isn't set yet. It's what makes Tier 2's automatic matching accurate,
-        worth filling in now even before you upgrade.
+        Your job criteria is missing: {missing.map(m => m.label).join(", ")}. It's what makes
+        Tier 2's automatic matching accurate, worth filling in now even before you upgrade.
       </p>
       <Link
         to="/criteria"
@@ -38,7 +43,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <DashboardGreeting name={me.firstName} />
-      <CriteriaNudge />
+      <CriteriaNudge tier={me.tier} />
       {me.tier === "Tier2" ? <Tier2Dashboard /> : <Tier1Dashboard />}
     </div>
   );
