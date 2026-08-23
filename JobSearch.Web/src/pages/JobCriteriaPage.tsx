@@ -3,6 +3,7 @@ import { useProfile, useUpdateProfile } from "../hooks/useProfile";
 import { useMe } from "../hooks/useAuth";
 import { JobCriteriaEditor } from "../components/JobCriteriaEditor";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
+import { getMissingCriteriaFields } from "../lib/criteriaCompleteness";
 import { PageTagline } from "../components/PageTagline";
 import { PRIMARY_BUTTON } from "../lib/styles";
 
@@ -32,6 +33,8 @@ export function JobCriteriaPage({ hideHeader = false, onSaved }: { hideHeader?: 
 
   if (loadingProfile) return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
 
+  const missing = getMissingCriteriaFields(criteria, me?.tier ?? "Tier1");
+
   return (
     <div className="space-y-6">
       {!hideHeader && (
@@ -43,10 +46,16 @@ export function JobCriteriaPage({ hideHeader = false, onSaved }: { hideHeader?: 
 
       <JobCriteriaEditor value={criteria} onChange={setCriteria} tier={me?.tier ?? "Tier1"} />
 
+      {missing.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-500/10 dark:text-amber-300">
+          Still needed before you can save: {missing.map(m => m.label).join(", ")}.
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || missing.length > 0}
           className={PRIMARY_BUTTON}
         >
           {saving ? "Saving…" : "Save criteria"}

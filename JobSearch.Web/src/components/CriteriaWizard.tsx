@@ -24,9 +24,11 @@ import {
 //
 // Every step follows the same contract: it owns its own local "pending answer" state (so partial
 // typing/clicking never touches shared data until the user explicitly hits Next), and calls
-// onNext(patch) to commit. Skip and Back never carry a patch, so neither can ever overwrite an
-// existing real value — the wizard-level commit function only ever merges what onNext explicitly
-// hands it.
+// onNext(patch) to commit. Back never carries a patch, so it can never overwrite an existing
+// real value — the wizard-level commit function only ever merges what onNext explicitly hands
+// it. Every step except Disqualifiers requires a real answer before Next enables at all — a
+// candidate with no dealbreakers is a complete answer, but every other question has no
+// meaningful "nothing" state, so Skip only exists on that one step.
 
 const GHOST_BUTTON = "text-sm text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300";
 const EMPTY: JobCriteriaData = parseJobCriteriaYaml("");
@@ -40,15 +42,22 @@ interface StepProps {
   isLast: boolean;
 }
 
-function StepFooter({ onBack, onSkip, onNext, isFirst, isLast }: {
+// canSkip defaults to false — Disqualifiers is the only step that opts in. Everything else in
+// this wizard is a mandatory question now: a candidate with no dealbreakers worth naming is a
+// complete answer, but "no experience level," "no skills," "no location" etc. aren't real
+// answers, they're gaps that would otherwise silently reach evaluate_posting.md.
+function StepFooter({ onBack, onSkip, onNext, isFirst, isLast, canSkip = false, nextDisabled = false }: {
   onBack: () => void; onSkip: () => void; onNext: () => void; isFirst: boolean; isLast: boolean;
+  canSkip?: boolean; nextDisabled?: boolean;
 }) {
   return (
     <div className="mt-6 flex items-center justify-between">
       {isFirst ? <span /> : <button onClick={onBack} className={GHOST_BUTTON}>Back</button>}
       <div className="flex items-center gap-4">
-        <button onClick={onSkip} className={GHOST_BUTTON}>Skip</button>
-        <button onClick={onNext} className={PRIMARY_BUTTON}>{isLast ? "Finish" : "Next"}</button>
+        {canSkip && <button onClick={onSkip} className={GHOST_BUTTON}>Skip</button>}
+        <button onClick={onNext} disabled={nextDisabled} className={PRIMARY_BUTTON}>
+          {isLast ? "Finish" : "Next"}
+        </button>
       </div>
     </div>
   );
@@ -76,7 +85,7 @@ function TitlesStep({ data, onNext, ...nav }: StepProps) {
         value={titles}
         onChange={e => setTitles(e.target.value)}
       />
-      <StepFooter {...nav} onNext={() => onNext({ targetJobTitles: sanitizeCriteriaInput(titles) })} />
+      <StepFooter {...nav} nextDisabled={!titles.trim()} onNext={() => onNext({ targetJobTitles: sanitizeCriteriaInput(titles) })} />
     </div>
   );
 }
@@ -91,7 +100,7 @@ function ExperienceStep({ data, onNext, ...nav }: StepProps) {
         value={selected}
         onChange={setSelected}
       />
-      <StepFooter {...nav} onNext={() => onNext(selected ? experienceBucketPatch(selected) : {})} />
+      <StepFooter {...nav} nextDisabled={!selected} onNext={() => onNext(selected ? experienceBucketPatch(selected) : {})} />
     </div>
   );
 }
@@ -107,11 +116,11 @@ function SkillsStep({ data, onNext, ...nav }: StepProps) {
         What's the most important skill or specialization for you?
       </StepHeading>
       <div className="space-y-3">
-        <Field label="Skill or specialization" value={name} onChange={setName} />
-        <Field label="Must-haves (comma-separated)" value={strongMatch} onChange={setStrongMatch} />
+        <Field label="Skill or specialization *" value={name} onChange={setName} />
+        <Field label="Must-haves (comma-separated) *" value={strongMatch} onChange={setStrongMatch} />
         <Field label="Nice-to-haves, optional (comma-separated)" value={goodMatch} onChange={setGoodMatch} />
       </div>
-      <StepFooter {...nav} onNext={() => onNext({
+      <StepFooter {...nav} nextDisabled={!name.trim() || !strongMatch.trim()} onNext={() => onNext({
         skillDimensions: applySkillDimensionAnswer(data.skillDimensions, {
           name: sanitizeCriteriaInput(name),
           strongMatch: sanitizeCriteriaInput(strongMatch),
@@ -133,7 +142,7 @@ function EmploymentStep({ data, onNext, ...nav }: StepProps) {
         value={selected}
         onChange={setSelected}
       />
-      <StepFooter {...nav} onNext={() => onNext({ employmentTypes: selected })} />
+      <StepFooter {...nav} nextDisabled={selected.length === 0} onNext={() => onNext({ employmentTypes: selected })} />
     </div>
   );
 }
@@ -174,7 +183,7 @@ function LocationStep({ data, onNext, ...nav }: StepProps) {
       <div className="mt-3">
         <ChoiceButtons multi options={ARRANGEMENT_OPTIONS} value={arrangements} onChange={setArrangements} />
       </div>
-      <StepFooter {...nav} onNext={commit} />
+      <StepFooter {...nav} nextDisabled={!country || arrangements.length === 0} onNext={commit} />
     </div>
   );
 }
@@ -257,7 +266,7 @@ function SponsorshipStep({ data, onNext, ...nav }: StepProps) {
     <div>
       <StepHeading>Do you need visa or work sponsorship?</StepHeading>
       <ChoiceButtons options={SPONSORSHIP_OPTIONS} value={selected} onChange={setSelected} />
-      <StepFooter {...nav} onNext={() => onNext(selected === "yes" ? SPONSORSHIP_YES_PATCH : {})} />
+      <StepFooter {...nav} nextDisabled={!selected} onNext={() => onNext(selected === "yes" ? SPONSORSHIP_YES_PATCH : {})} />
     </div>
   );
 }
@@ -300,7 +309,7 @@ function DisqualifiersStep({ data, onNext, ...nav }: StepProps) {
       >
         + Add another
       </button>
-      <StepFooter {...nav} onNext={() => onNext({
+      <StepFooter {...nav} canSkip onNext={() => onNext({
         disqualifiers: applyDisqualifierAnswer(data.disqualifiers, inputs.map(sanitizeCriteriaInput)),
       })} />
     </div>
