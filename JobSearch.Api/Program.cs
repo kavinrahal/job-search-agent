@@ -1446,6 +1446,13 @@ static async Task<(string? PostingText, string EvalJson, string? Company, string
         return (null, "{}", null, "Discovery not found.");
 
     string evalJson = posting.EvaluationJson ?? "{}";
+
+    // Cached at discovery time, when the page was still reachable — preferred over re-fetching
+    // both because it can't fail and because it's the same text the evaluation was based on.
+    // Only rows discovered before PostingText existed fall through to the fetch below.
+    if (!string.IsNullOrWhiteSpace(posting.PostingText))
+        return (posting.PostingText, evalJson, posting.Company, null);
+
     try
     {
         var text = await fetcher.FetchAsync(posting.Url);

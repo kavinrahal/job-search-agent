@@ -195,11 +195,22 @@ export async function searchPostingCandidates(title: string, company?: string): 
   return request(`/postings/search-candidates?title=${encodeURIComponent(title)}${companyParam}`);
 }
 
-export async function generateCv(input: { postingUrl?: string; postingText?: string; postingTitle?: string; postingCompany?: string }): Promise<GenerationResult> {
+// discoveryId is the Discover tab's one-tap path: the backend resolves the posting text from
+// the discovery record itself (cached at discovery time — see DiscoveredPosting.PostingText),
+// so nothing has to be re-fetched from a job board that may block us by then.
+export interface GenerateInput {
+  discoveryId?: number;
+  postingUrl?: string;
+  postingText?: string;
+  postingTitle?: string;
+  postingCompany?: string;
+}
+
+export async function generateCv(input: GenerateInput): Promise<GenerationResult> {
   return request("/cv", { method: "POST", ...json(input) });
 }
 
-export async function generateLetter(input: { postingUrl?: string; postingText?: string; postingTitle?: string; postingCompany?: string }): Promise<GenerationResult> {
+export async function generateLetter(input: GenerateInput): Promise<GenerationResult> {
   return request("/letter", { method: "POST", ...json(input) });
 }
 

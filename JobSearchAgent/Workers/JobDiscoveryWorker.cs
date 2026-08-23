@@ -117,6 +117,9 @@ public class JobDiscoveryWorker
 
                 record.Company = eval.Company;
                 record.Title = string.IsNullOrEmpty(eval.RoleTitle) ? item.Title : eval.RoleTitle;
+                // Kept so one-tap CV/cover-letter generation doesn't have to re-fetch a page
+                // that may well be unfetchable by then — see DiscoveredPosting.PostingText.
+                record.PostingText = postingText;
                 record.Recommendation = eval.Recommendation;
                 record.EvaluationJson = JsonSerializer.Serialize(eval);
                 record.DisqualifierHit = eval.DisqualifierHit;
