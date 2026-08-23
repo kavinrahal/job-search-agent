@@ -1,5 +1,5 @@
 import { OnboardingShell } from "../../components/OnboardingShell";
-import { JobCriteriaPage } from "../JobCriteriaPage";
+import { CriteriaWizard } from "../../components/CriteriaWizard";
 
 export function OnboardingCriteriaPage({ tier }: { tier: string }) {
   return (
@@ -7,12 +7,12 @@ export function OnboardingCriteriaPage({ tier }: { tier: string }) {
       step={2}
       tier={tier}
       title="Now, what are you actually looking for?"
-      blurb="This is what every posting gets measured against: salary, location, must-haves, dealbreakers. The more specific you are, the sharper the evaluations, and the fewer irrelevant matches you'll have to wade through."
+      blurb="A few quick questions, mostly buttons, no essay required. You can always add more detail later from Settings."
     >
       {/* Hard-navigates rather than reloading in place — this route only exists during
           onboarding, so the natural next stop is "/", which re-evaluates the next required
           step (Sources for Tier 2, or straight to the dashboard for Tier 1). */}
-      <JobCriteriaPage hideHeader onSaved={() => { window.location.href = "/"; }} />
+      <CriteriaWizard tier={tier} onSaved={() => { window.location.href = "/"; }} />
     </OnboardingShell>
   );
 }

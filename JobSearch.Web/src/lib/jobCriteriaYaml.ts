@@ -337,7 +337,12 @@ export function parseJobCriteriaYaml(text: string): JobCriteriaData {
     delete extra.experience;
   }
 
-  const salaryKeys = ["currency", "target_base", "thresholds", "flag_reasons"];
+  // minimum_acceptable/target_max are what serializeJobCriteriaYaml actually writes alongside
+  // thresholds/flag_reasons below — target_base is an older shape kept only so a file written
+  // by a previous version of this serializer still parses. Without both sets of keys allowed
+  // here, isCleanMatch rejects the real current output (extra keys present) and the entire
+  // salary section silently falls back to extra/Advanced instead of populating these fields.
+  const salaryKeys = ["currency", "target_base", "minimum_acceptable", "target_max", "thresholds", "flag_reasons"];
   if (isCleanMatch(raw.salary, salaryKeys)) {
     const s = raw.salary;
     if (typeof s.currency === "string") data.currency = s.currency;

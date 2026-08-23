@@ -1,5 +1,6 @@
 import { allCountries } from "country-region-data";
 import currencyData from "currency-codes/data";
+import countryToCurrency from "country-to-currency";
 
 // currency-codes ships the full, current ISO 4217 list (~180 currencies) as a static dataset —
 // unlike Intl.supportedValuesOf("currency"), which is a fairly recent addition to the spec and
@@ -21,4 +22,15 @@ export const STATES_BY_COUNTRY: Record<string, string[]> = Object.fromEntries(
   allCountries
     .filter(([name, , regions]) => regions.length > 1 || (regions.length === 1 && regions[0][0] !== name))
     .map(([name, , regions]) => [name, regions.map(([regionName]) => regionName)]),
+);
+
+// country-to-currency maps by ISO 3166-1 alpha-2 code, not by name — country-region-data's own
+// tuples already carry that code as the second element, so this reuses the same country list
+// rather than introducing a second, potentially-drifting one. A handful of alpha-2 codes (e.g.
+// disputed/unrecognized territories) have no entry in country-to-currency; those are simply
+// omitted here, same fallback behavior as an unmapped country in STATES_BY_COUNTRY above.
+export const COUNTRY_TO_CURRENCY: Record<string, string> = Object.fromEntries(
+  allCountries
+    .filter(([, code]) => code in countryToCurrency)
+    .map(([name, code]) => [name, countryToCurrency[code as keyof typeof countryToCurrency]]),
 );

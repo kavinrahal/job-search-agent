@@ -2,8 +2,11 @@ import type { JobCriteriaData, SkillDimension, Disqualifier } from "../lib/jobCr
 import { LABEL, INPUT, Field, TopicCard, EntryCard, AddButton, AdvancedSection } from "./CardEditor";
 import { COUNTRIES, CURRENCIES, STATES_BY_COUNTRY } from "../lib/regionData";
 import { InfoTooltip } from "./InfoTooltip";
+import { ChoiceButtons } from "./ChoiceButtons";
 
-const EMPLOYMENT_TYPES = ["full_time", "part_time", "contract", "casual"];
+// Exported so CriteriaWizard.tsx's Employment type question reuses the exact same list rather
+// than maintaining a second copy that could drift.
+export const EMPLOYMENT_TYPES = ["full_time", "part_time", "contract", "casual"];
 const SENIORITY_LEVELS = ["junior", "mid", "senior", "lead"];
 
 function splitCsv(text: string): string[] {
@@ -105,12 +108,6 @@ function DisqualifiersSection({ value, onChange }: { value: Disqualifier[]; onCh
 export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteriaData; onChange: (v: JobCriteriaData) => void; tier: string }) {
   const set = <K extends keyof JobCriteriaData>(key: K, v: JobCriteriaData[K]) => onChange({ ...value, [key]: v });
 
-  function toggleEmploymentType(type: string) {
-    set("employmentTypes", value.employmentTypes.includes(type)
-      ? value.employmentTypes.filter(t => t !== type)
-      : [...value.employmentTypes, type]);
-  }
-
   // Only show a states multi-select when every currently-selected country has a known list —
   // for anything else (including no selection) free text is the only sane fallback.
   const selectedCountries = splitCsv(value.countries);
@@ -147,22 +144,12 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
       )}
 
       <TopicCard title="Employment type">
-        <div className="flex flex-wrap gap-2">
-          {EMPLOYMENT_TYPES.map(type => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => toggleEmploymentType(type)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
-                value.employmentTypes.includes(type)
-                  ? "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
-              }`}
-            >
-              {type.replace("_", " ")}
-            </button>
-          ))}
-        </div>
+        <ChoiceButtons
+          multi
+          options={EMPLOYMENT_TYPES.map(type => ({ value: type, label: type.replace("_", " ") }))}
+          value={value.employmentTypes}
+          onChange={v => set("employmentTypes", v)}
+        />
       </TopicCard>
 
       <TopicCard title="Location">
