@@ -3,6 +3,8 @@ import { useDiscoveries } from "../hooks/useDashboardData";
 import type { DiscoveredPosting } from "../types";
 import { InfoTooltip } from "../components/InfoTooltip";
 import { PageTagline } from "../components/PageTagline";
+import { GenerationDrawer, type GenerationKind } from "../components/GenerationDrawer";
+import { PRIMARY_BUTTON_SM, SECONDARY_BUTTON } from "../lib/styles";
 
 // ---------------------------------------------------------------------------
 // Recommendation config
@@ -115,6 +117,7 @@ function RecBadge({ rec }: { rec: string | null }) {
 // ---------------------------------------------------------------------------
 function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
   const [expanded, setExpanded] = useState(false);
+  const [generating, setGenerating] = useState<GenerationKind | null>(null);
 
   const hasFlags = posting.orangeFlags.length > 0;
   const [primarySkill, ...otherSkills] = posting.skillMatches;
@@ -244,29 +247,52 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
       )}
 
       {/* Footer */}
-      <div className="mt-auto mt-3 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-800">
-        <div className="flex gap-3">
-          <a
-            href={posting.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
-          >
-            View posting
-          </a>
-          {(posting.rationale || hasFlags || posting.experienceDetail) && (
-            <button
-              onClick={() => setExpanded(e => !e)}
-              className="text-sm text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+      <div className="mt-auto mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
+        <div className="flex items-center justify-between">
+          <div className="flex gap-3">
+            <a
+              href={posting.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
             >
-              {expanded ? "Less" : "More"}
-            </button>
-          )}
+              View posting
+            </a>
+            {(posting.rationale || hasFlags || posting.experienceDetail) && (
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="text-sm text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+              >
+                {expanded ? "Less" : "More"}
+              </button>
+            )}
+          </div>
+          <span className="text-xs text-gray-400 dark:text-gray-500" title={new Date(posting.discoveredAt).toLocaleString("en-AU")}>
+            Found {discoveredLabel(posting.discoveredAt)}
+          </span>
         </div>
-        <span className="text-xs text-gray-400 dark:text-gray-500" title={new Date(posting.discoveredAt).toLocaleString("en-AU")}>
-          Found {discoveredLabel(posting.discoveredAt)}
-        </span>
+
+        {/* One-tap generation — no posting URL round trip, the backend resolves this
+            discovery's own cached posting text (see DiscoveredPosting.PostingText). */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={() => setGenerating("cv")} className={PRIMARY_BUTTON_SM}>
+            Generate CV
+          </button>
+          <button onClick={() => setGenerating("letter")} className={SECONDARY_BUTTON}>
+            Cover letter
+          </button>
+        </div>
       </div>
+
+      {generating && (
+        <GenerationDrawer
+          discoveryId={posting.id}
+          kind={generating}
+          title={posting.title}
+          company={posting.company}
+          onClose={() => setGenerating(null)}
+        />
+      )}
     </div>
   );
 }
