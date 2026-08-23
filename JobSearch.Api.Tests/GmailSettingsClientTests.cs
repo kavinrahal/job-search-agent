@@ -90,4 +90,64 @@ public class GmailSettingsClientTests
 
         Assert.True(GmailSettingsClient.HasCompanyFilter(filters, "acmecorp.com", "abc@alerts.worksanta.com"));
     }
+
+    // TC07 — The job-alert filter and the acknowledgment filter forward to the same address
+    // but carry different queries; without matching on query too, installing the second
+    // filter would look like the first one "already exists" and silently never get created.
+    [Fact]
+    public void HasFilterForQuery_DifferentQuerySameAddress_ReturnsFalse()
+    {
+        var filters = new List<Filter>
+        {
+            new()
+            {
+                Action = new FilterAction { Forward = "abc@alerts.worksanta.com" },
+                Criteria = new FilterCriteria { Query = GmailSettingsClient.FilterQuery },
+            },
+        };
+
+        Assert.False(GmailSettingsClient.HasFilterForQuery(filters, GmailSettingsClient.AcknowledgmentFilterQuery, "abc@alerts.worksanta.com"));
+    }
+
+    // TC08 — The matching case: this exact query already installed for this address.
+    [Fact]
+    public void HasFilterForQuery_MatchingQueryAndAddress_ReturnsTrue()
+    {
+        var filters = new List<Filter>
+        {
+            new()
+            {
+                Action = new FilterAction { Forward = "abc@alerts.worksanta.com" },
+                Criteria = new FilterCriteria { Query = GmailSettingsClient.AcknowledgmentFilterQuery },
+            },
+        };
+
+        Assert.True(GmailSettingsClient.HasFilterForQuery(filters, GmailSettingsClient.AcknowledgmentFilterQuery, "abc@alerts.worksanta.com"));
+    }
+
+    // TC09 — A typo or accidental edit to the approved domain/phrase list should fail loudly
+    // here rather than silently stop forwarding acknowledgments from a major ATS platform.
+    [Fact]
+    public void AcknowledgmentFilterQuery_CoversApprovedDomainsAndPhrases()
+    {
+        Assert.Contains("s.seek.com.au", GmailSettingsClient.AcknowledgmentFilterQuery);
+        Assert.Contains("linkedin.com", GmailSettingsClient.AcknowledgmentFilterQuery);
+        Assert.Contains("indeed.com", GmailSettingsClient.AcknowledgmentFilterQuery);
+        Assert.Contains("myworkday.com", GmailSettingsClient.AcknowledgmentFilterQuery);
+        Assert.Contains("successfully submitted", GmailSettingsClient.AcknowledgmentFilterQuery);
+        Assert.Contains("thank you for applying", GmailSettingsClient.AcknowledgmentFilterQuery);
+        Assert.Contains("received your application", GmailSettingsClient.AcknowledgmentFilterQuery);
+    }
+
+    // TC10 — Guards against an accidental truncation of the approved domain list (e.g. a bad
+    // merge) going unnoticed — this is the set AcknowledgmentDomainCapture treats as "no
+    // per-domain filter needed", so losing entries here means redundant filters get installed,
+    // not a forwarding gap, but still a silent behavioral change worth catching.
+    [Fact]
+    public void KnownAckDomains_ContainsApprovedDomains()
+    {
+        Assert.Equal(20, GmailSettingsClient.KnownAckDomains.Count);
+        Assert.Contains("s.seek.com.au", GmailSettingsClient.KnownAckDomains);
+        Assert.Contains("ashbyhq.com", GmailSettingsClient.KnownAckDomains);
+    }
 }
