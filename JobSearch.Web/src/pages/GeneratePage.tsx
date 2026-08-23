@@ -1,37 +1,18 @@
 import { useState, type ReactNode } from "react";
-import { threadPdfUrl, threadDocxUrl } from "../api";
-import { useGenerateCv, useGenerateLetter, useAskQuestion, useEditThread, useSearchPostingCandidates } from "../hooks/useGeneration";
+import { useGenerateCv, useGenerateLetter, useAskQuestion, useSearchPostingCandidates } from "../hooks/useGeneration";
 import type { GenerationResult, PostingCandidate } from "../types";
 import { PageTagline } from "../components/PageTagline";
 import { GeneratingIndicator } from "../components/GeneratingIndicator";
-import { ResumePdfViewer } from "../components/ResumePdfViewer";
-import { CARD, PRIMARY_BUTTON } from "../lib/styles";
+import { AccuracyWarningBanner, CvResult, LetterResult, RevisionBox } from "../components/GenerationResult";
+import { CARD, PRIMARY_BUTTON, INPUT, SECONDARY_BUTTON } from "../lib/styles";
 
 type Mode = "url" | "text";
-
-const INPUT = "w-full rounded-lg border border-gray-200 bg-white p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:ring-violet-500";
-const SECONDARY_BUTTON = "rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors duration-150 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700";
 
 function PasteInsteadLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button onClick={onClick} className="text-xs font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
       {label}
     </button>
-  );
-}
-
-// Non-blocking by design (see AccuracyVerifierAgent's own comment) — the content above this
-// is already generated and downloadable either way, this just tells the user what to
-// double-check before they actually submit it somewhere.
-function AccuracyWarningBanner({ warnings }: { warnings?: string[] }) {
-  if (!warnings || warnings.length === 0) return null;
-  return (
-    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
-      <p className="font-medium">Worth double-checking before you send this:</p>
-      <ul className="mt-1 list-inside list-disc space-y-0.5">
-        {warnings.map((w, i) => <li key={i}>{w}</li>)}
-      </ul>
-    </div>
   );
 }
 
@@ -50,38 +31,6 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-// Same input drives two things depending on the thread's state (the backend endpoint
-// handles both transparently): replying to an answer-agent follow-up question, or
-// requesting a revision to an already-complete CV/letter/answer.
-function RevisionBox({ threadId, placeholder, onRevised }: {
-  threadId: number; placeholder: string; onRevised: (r: GenerationResult) => void;
-}) {
-  const [message, setMessage] = useState("");
-  const { execute, loading, error } = useEditThread();
-
-  async function handleSubmit() {
-    onRevised(await execute(threadId, message));
-    setMessage("");
-  }
-
-  return (
-    <div className="mt-3">
-      <div className="flex gap-2">
-        <input
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          placeholder={placeholder}
-          className={INPUT}
-        />
-        <button onClick={handleSubmit} disabled={message.trim().length === 0 || loading} className={SECONDARY_BUTTON}>
-          {loading ? "Sending…" : "Send"}
-        </button>
-      </div>
-      {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
-    </div>
-  );
-}
-
 export function GeneratePage() {
   const [mode, setMode] = useState<Mode>("url");
   const [postingUrl, setPostingUrl] = useState("");
@@ -90,12 +39,7 @@ export function GeneratePage() {
   const [postingCompany, setPostingCompany] = useState("");
   const [question, setQuestion] = useState("");
   const [cvResult, setCvResult] = useState<GenerationResult | null>(null);
-  // Revising a CV keeps the same threadId, so the PDF URL doesn't change on its own — this
-  // cache-busts it after every revision so the preview reflects the new content instead of
-  // whatever react-pdf (or the browser) cached under that same URL.
-  const [cvRevision, setCvRevision] = useState(0);
   const [letterResult, setLetterResult] = useState<GenerationResult | null>(null);
-  const [letterCopied, setLetterCopied] = useState(false);
   const [answerResult, setAnswerResult] = useState<GenerationResult | null>(null);
   const [candidates, setCandidates] = useState<PostingCandidate[] | null>(null);
 
@@ -130,31 +74,10 @@ export function GeneratePage() {
 
   async function handleGenerateCv() {
     setCvResult(await generateCv.execute(postingInput));
-    setCvRevision(0);
-  }
-
-  function handleCvRevised(result: GenerationResult) {
-    setCvResult(result);
-    setCvRevision(r => r + 1);
   }
 
   async function handleGenerateLetter() {
-    handleLetterResult(await generateLetter.execute(postingInput));
-  }
-
-  // Every fresh or revised letter is copied automatically — the point of generating one is
-  // to paste it somewhere else (an application form, an email), so save that extra click.
-  // Clipboard access can fail quietly (permissions, non-secure context) — letterCopied only
-  // reflects the latest attempt, so a failed copy never shows a stale "Copied" from before.
-  async function handleLetterResult(result: GenerationResult) {
-    setLetterResult(result);
-    setLetterCopied(false);
-    try {
-      await navigator.clipboard.writeText(result.text ?? "");
-      setLetterCopied(true);
-    } catch {
-      // Clipboard write failed — the letter is still shown on screen, just not auto-copied.
-    }
+    setLetterResult(await generateLetter.execute(postingInput));
   }
 
   async function handleAskQuestion() {
@@ -263,43 +186,15 @@ export function GeneratePage() {
       {cvResult && (
         <div className={`${CARD} animate-fade-in-up`}>
           <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">CV ready</p>
-          <AccuracyWarningBanner warnings={cvResult.accuracyWarnings} />
-          <ResumePdfViewer source={`${threadPdfUrl(cvResult.threadId)}?r=${cvRevision}`} />
-          <a href={threadPdfUrl(cvResult.threadId)} className={`mt-3 inline-block ${SECONDARY_BUTTON}`}>
-            Download PDF
-          </a>
-          <RevisionBox
-            threadId={cvResult.threadId}
-            placeholder="Request changes (e.g. mention Docker experience)"
-            onRevised={handleCvRevised}
-          />
+          <CvResult result={cvResult} onRevised={setCvResult} />
         </div>
       )}
 
       {generateLetter.loading && <GeneratingIndicator kind="letter" />}
       {letterResult && (
         <div className={`${CARD} animate-fade-in-up`}>
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Cover letter</p>
-            {letterCopied && (
-              <span className="text-xs text-emerald-600 dark:text-emerald-400">Copied to clipboard.</span>
-            )}
-          </div>
-          <AccuracyWarningBanner warnings={letterResult.accuracyWarnings} />
-          <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 dark:text-gray-300">{letterResult.text}</pre>
-          <div className="mt-3 flex gap-2">
-            <a href={threadPdfUrl(letterResult.threadId)} className={`inline-block ${SECONDARY_BUTTON}`}>
-              Download PDF
-            </a>
-            <a href={threadDocxUrl(letterResult.threadId)} className={`inline-block ${SECONDARY_BUTTON}`}>
-              Download Word
-            </a>
-          </div>
-          <RevisionBox
-            threadId={letterResult.threadId}
-            placeholder="Request changes"
-            onRevised={handleLetterResult}
-          />
+          <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">Cover letter</p>
+          <LetterResult result={letterResult} onRevised={setLetterResult} />
         </div>
       )}
 
