@@ -9,10 +9,12 @@ import { CARD, PRIMARY_BUTTON } from "../lib/styles";
 import {
   type CriteriaPatch,
   EXPERIENCE_BUCKETS, experienceBucketPatch, nearestExperienceBucket,
-  SALARY_BUCKETS, salaryBucketPatch, nearestSalaryBucket,
+  SALARY_SLIDER_MIN, SALARY_SLIDER_MAX, SALARY_SLIDER_STEP,
+  salaryRangePatch, nearestSalaryRange, formatSalaryAmount,
   applySkillDimensionAnswer,
   SPONSORSHIP_YES_PATCH,
-  disqualifiersToTextareaValue, applyDisqualifierAnswer,
+  simpleDisqualifierDescriptions, applyDisqualifierAnswer,
+  sanitizeCriteriaInput,
 } from "../lib/criteriaWizardMapping";
 
 // A short, mostly-button, one-question-per-screen replacement for embedding the full
@@ -74,7 +76,7 @@ function TitlesStep({ data, onNext, ...nav }: StepProps) {
         value={titles}
         onChange={e => setTitles(e.target.value)}
       />
-      <StepFooter {...nav} onNext={() => onNext({ targetJobTitles: titles })} />
+      <StepFooter {...nav} onNext={() => onNext({ targetJobTitles: sanitizeCriteriaInput(titles) })} />
     </div>
   );
 }
@@ -110,7 +112,11 @@ function SkillsStep({ data, onNext, ...nav }: StepProps) {
         <Field label="Nice-to-haves, optional (comma-separated)" value={goodMatch} onChange={setGoodMatch} />
       </div>
       <StepFooter {...nav} onNext={() => onNext({
-        skillDimensions: applySkillDimensionAnswer(data.skillDimensions, { name, strongMatch, goodMatch }),
+        skillDimensions: applySkillDimensionAnswer(data.skillDimensions, {
+          name: sanitizeCriteriaInput(name),
+          strongMatch: sanitizeCriteriaInput(strongMatch),
+          goodMatch: sanitizeCriteriaInput(goodMatch),
+        }),
       })} />
     </div>
   );
@@ -173,18 +179,68 @@ function LocationStep({ data, onNext, ...nav }: StepProps) {
   );
 }
 
+// Two overlapping native <input type="range"> elements sharing one visual track, rather than a
+// slider library — the well-worn zero-dependency technique for this exact UI: pointer-events is
+// disabled on the input itself and re-enabled only on its thumb pseudo-element, so each thumb is
+// independently grabbable even though both inputs occupy the same position. The colored bar
+// between the two thumbs is a plain positioned div, not part of either input.
+const RANGE_THUMB_CLASSES =
+  "absolute inset-0 h-6 w-full cursor-pointer appearance-none bg-transparent pointer-events-none " +
+  "[&::-webkit-slider-runnable-track]:bg-transparent [&::-moz-range-track]:bg-transparent " +
+  "[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-violet-600 [&::-webkit-slider-thumb]:shadow " +
+  "[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-violet-600";
+
+function DualRangeSlider({ min, max, step, value, onChange }: {
+  min: number; max: number; step: number; value: [number, number]; onChange: (v: [number, number]) => void;
+}) {
+  const [lo, hi] = value;
+  const pctLo = ((lo - min) / (max - min)) * 100;
+  const pctHi = ((hi - min) / (max - min)) * 100;
+  return (
+    <div className="relative h-6">
+      <div className="absolute top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-gray-200 dark:bg-gray-700" />
+      <div
+        className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-violet-600"
+        style={{ left: `${pctLo}%`, right: `${100 - pctHi}%` }}
+      />
+      <input
+        type="range" min={min} max={max} step={step} value={lo} aria-label="Minimum salary"
+        onChange={e => onChange([Math.min(Number(e.target.value), hi), hi])}
+        className={RANGE_THUMB_CLASSES}
+      />
+      <input
+        type="range" min={min} max={max} step={step} value={hi} aria-label="Maximum salary"
+        onChange={e => onChange([lo, Math.max(Number(e.target.value), lo)])}
+        className={RANGE_THUMB_CLASSES}
+      />
+    </div>
+  );
+}
+
 function SalaryStep({ data, onNext, ...nav }: StepProps) {
-  const [selected, setSelected] = useState<string | null>(nearestSalaryBucket(data));
+  const initial = nearestSalaryRange(data);
+  const [range, setRange] = useState<[number, number]>([initial.min, initial.max]);
+  const [min, max] = range;
   const currency = data.currency || "AUD";
+
   return (
     <div>
-      <StepHeading>What salary are you targeting? <span className="font-normal text-gray-400">(in {currency})</span></StepHeading>
-      <ChoiceButtons
-        options={SALARY_BUCKETS.map(b => ({ value: b.id, label: b.label }))}
-        value={selected}
-        onChange={setSelected}
-      />
-      <StepFooter {...nav} onNext={() => onNext(selected ? salaryBucketPatch(selected, currency) : {})} />
+      <StepHeading>What salary range are you happy with?</StepHeading>
+      <p className="flex items-baseline gap-2 text-xl font-semibold text-gray-700 dark:text-gray-200">
+        <span>{formatSalaryAmount(min, currency)}</span>
+        <span className="text-sm font-normal text-gray-400">to</span>
+        <span>{formatSalaryAmount(max, currency)}</span>
+      </p>
+
+      <div className="mt-5">
+        <DualRangeSlider min={SALARY_SLIDER_MIN} max={SALARY_SLIDER_MAX} step={SALARY_SLIDER_STEP} value={range} onChange={setRange} />
+      </div>
+
+      <div className="mt-1 flex justify-between text-xs text-gray-400 dark:text-gray-500">
+        <span>{formatSalaryAmount(SALARY_SLIDER_MIN, currency)}</span>
+        <span>{formatSalaryAmount(SALARY_SLIDER_MAX, currency)}+</span>
+      </div>
+      <StepFooter {...nav} onNext={() => onNext(salaryRangePatch({ min, max }, currency))} />
     </div>
   );
 }
@@ -206,15 +262,47 @@ function SponsorshipStep({ data, onNext, ...nav }: StepProps) {
   );
 }
 
+const DISQUALIFIER_PLACEHOLDERS = ["e.g. Requires on-call rotation", "e.g. Requires relocation", "e.g. Gambling industry"];
+const MIN_DISQUALIFIER_INPUTS = 3;
+
 function DisqualifiersStep({ data, onNext, ...nav }: StepProps) {
-  const [text, setText] = useState(disqualifiersToTextareaValue(data.disqualifiers));
+  const existing = simpleDisqualifierDescriptions(data.disqualifiers);
+  const [inputs, setInputs] = useState<string[]>(
+    existing.length >= MIN_DISQUALIFIER_INPUTS
+      ? existing
+      : [...existing, ...Array(MIN_DISQUALIFIER_INPUTS - existing.length).fill("")],
+  );
+
+  function updateInput(i: number, value: string) {
+    setInputs(prev => prev.map((v, idx) => (idx === i ? value : v)));
+  }
+
   return (
     <div>
-      <StepHeading hint='One per line, optional — e.g. "Requires on-call rotation", "Requires relocation". Anything that would end the conversation immediately.'>
+      <StepHeading hint="Optional — anything that would end the conversation immediately.">
         Anything that would make you say no right away?
       </StepHeading>
-      <textarea className={`${INPUT} font-mono`} rows={5} value={text} onChange={e => setText(e.target.value)} />
-      <StepFooter {...nav} onNext={() => onNext({ disqualifiers: applyDisqualifierAnswer(data.disqualifiers, text) })} />
+      <div className="space-y-2">
+        {inputs.map((value, i) => (
+          <input
+            key={i}
+            className={INPUT}
+            placeholder={DISQUALIFIER_PLACEHOLDERS[i % DISQUALIFIER_PLACEHOLDERS.length]}
+            value={value}
+            onChange={e => updateInput(i, e.target.value)}
+          />
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => setInputs(prev => [...prev, ""])}
+        className="mt-2 text-sm font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+      >
+        + Add another
+      </button>
+      <StepFooter {...nav} onNext={() => onNext({
+        disqualifiers: applyDisqualifierAnswer(data.disqualifiers, inputs.map(sanitizeCriteriaInput)),
+      })} />
     </div>
   );
 }

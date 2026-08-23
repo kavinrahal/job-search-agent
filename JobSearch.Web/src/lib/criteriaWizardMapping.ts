@@ -52,8 +52,14 @@ export const EXPERIENCE_BUCKETS: ExperienceBucket[] = [
 export function experienceBucketPatch(id: string): CriteriaPatch {
   const b = EXPERIENCE_BUCKETS.find(x => x.id === id);
   if (!b) return {};
-  const { id: _id, label: _label, ...patch } = b;
-  return patch;
+  return {
+    seniorityLevel: b.seniorityLevel,
+    candidateCurrentExperience: b.candidateCurrentExperience,
+    idealMaxYears: b.idealMaxYears,
+    acceptableMinYears: b.acceptableMinYears,
+    acceptableMaxYears: b.acceptableMaxYears,
+    excludedMinYears: b.excludedMinYears,
+  };
 }
 
 // Best-effort nearest-bucket lookup for pre-filling a returning user (existing data from a prior
@@ -71,51 +77,54 @@ export function nearestExperienceBucket(data: Pick<JobCriteriaData, "acceptableM
 // Salary
 // ---------------------------------------------------------------------------
 
-export interface SalaryBucket {
-  id: string;
-  label: string;
-  salaryMin: string;
-  salaryTargetMin: string;
-  salaryMax: string;
-  salaryFlagBelow: string;
-  salaryFlagAbove: string;
+export const SALARY_SLIDER_MIN = 40_000;
+export const SALARY_SLIDER_MAX = 250_000;
+export const SALARY_SLIDER_STEP = 10_000;
+const DEFAULT_MIN = 80_000;
+const DEFAULT_MAX = 150_000;
+
+export interface SalaryRange {
+  min: number;
+  max: number;
 }
 
-// Same boundary-sharing pattern as Experience (salaryFlagBelow === salaryMin, matching the
-// owner's file where flag_below and acceptable_minimum are identical). salaryFlagAbove sits
-// roughly 10-15% above the bucket's top, matching the owner's own ratio (target max 140k ->
-// flag_above 160k, ~+14%). Numeric anchors are AUD-magnitude (this app's default currency,
-// DEFAULTS.currency in jobCriteriaYaml.ts) — the currency *code* attached at save time follows
-// the country chosen in the Location step (see CriteriaWizard.tsx), but these bucket sizes are
-// not converted per-currency. A non-AUD user gets a correctly-labeled but AUD-sized range; the
-// full editor's raw number fields are the correction path. Full magnitude conversion is out of
-// scope for this v1 wizard.
-export const SALARY_BUCKETS: SalaryBucket[] = [
-  { id: "u80", label: "Under 80k",
-    salaryMin: "50000", salaryFlagBelow: "50000", salaryTargetMin: "60000", salaryMax: "80000", salaryFlagAbove: "90000" },
-  { id: "80-110", label: "80k - 110k",
-    salaryMin: "70000", salaryFlagBelow: "70000", salaryTargetMin: "80000", salaryMax: "110000", salaryFlagAbove: "125000" },
-  { id: "110-140", label: "110k - 140k",
-    salaryMin: "100000", salaryFlagBelow: "100000", salaryTargetMin: "110000", salaryMax: "140000", salaryFlagAbove: "155000" },
-  { id: "140-180", label: "140k - 180k",
-    salaryMin: "125000", salaryFlagBelow: "125000", salaryTargetMin: "140000", salaryMax: "180000", salaryFlagAbove: "200000" },
-  { id: "180+", label: "180k+",
-    salaryMin: "160000", salaryFlagBelow: "160000", salaryTargetMin: "180000", salaryMax: "", salaryFlagAbove: "" },
-];
-
-export function salaryBucketPatch(id: string, currency: string): CriteriaPatch {
-  const b = SALARY_BUCKETS.find(x => x.id === id);
-  if (!b) return {};
-  const { id: _id, label: _label, ...patch } = b;
-  return { ...patch, currency };
+// Two explicit endpoints, used directly rather than padded into a synthetic band — the user
+// states exactly what they're happy with, so that's exactly what becomes the acceptable-minimum/
+// flag-below/target and target-max/flag-above thresholds evaluate_posting.md reads (same
+// boundary-sharing pattern used elsewhere in this file: salaryFlagBelow === salaryMin). Numeric
+// anchors are AUD-magnitude (this app's default currency) regardless of which currency code gets
+// attached — the code follows the Location step's country choice, but the slider's own
+// 40k-250k range and step size are not converted per-currency. A non-AUD user gets a
+// correctly-labeled but AUD-sized range; the full editor's raw number fields are the correction
+// path. Full magnitude conversion is out of scope for this v1 wizard.
+export function salaryRangePatch(range: SalaryRange, currency: string): CriteriaPatch {
+  return {
+    currency,
+    salaryMin: String(range.min),
+    salaryFlagBelow: String(range.min),
+    salaryTargetMin: String(range.min),
+    salaryMax: String(range.max),
+    salaryFlagAbove: String(range.max),
+  };
 }
 
-export function nearestSalaryBucket(data: Pick<JobCriteriaData, "salaryTargetMin">): string | null {
-  const v = Number(data.salaryTargetMin);
-  if (!data.salaryTargetMin.trim() || Number.isNaN(v)) return null;
-  return SALARY_BUCKETS.reduce((best, b) =>
-    Math.abs(Number(b.salaryTargetMin) - v) < Math.abs(Number(best.salaryTargetMin) - v) ? b : best
-  ).id;
+function snapToStep(v: number): number {
+  return Math.min(SALARY_SLIDER_MAX, Math.max(SALARY_SLIDER_MIN, Math.round(v / SALARY_SLIDER_STEP) * SALARY_SLIDER_STEP));
+}
+
+// Best-effort pre-fill: snaps existing salaryMin/salaryMax to the nearest slider steps, filling
+// in a sensible default for whichever end is missing (or both, if nothing's on file yet). Swaps
+// the pair if historical data somehow has min > max, so the two sliders never render inverted.
+export function nearestSalaryRange(data: Pick<JobCriteriaData, "salaryMin" | "salaryMax">): SalaryRange {
+  const hasMin = data.salaryMin.trim() !== "" && !Number.isNaN(Number(data.salaryMin));
+  const hasMax = data.salaryMax.trim() !== "" && !Number.isNaN(Number(data.salaryMax));
+  const min = hasMin ? snapToStep(Number(data.salaryMin)) : DEFAULT_MIN;
+  const max = hasMax ? snapToStep(Number(data.salaryMax)) : DEFAULT_MAX;
+  return min <= max ? { min, max } : { min: max, max: min };
+}
+
+export function formatSalaryAmount(value: number, currency: string): string {
+  return `$${value.toLocaleString()} ${currency}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,25 +180,49 @@ export const SPONSORSHIP_YES_PATCH: CriteriaPatch = {
 // Custom disqualifiers
 // ---------------------------------------------------------------------------
 
-// A disqualifier is "wizard-shaped" (safe to represent as one plain textarea line, and safe for
-// the wizard to overwrite) only if it has no id/signals/notes — anything richer came from the
-// full editor and is never shown in, or clobbered by, this textarea.
+// A disqualifier is "wizard-shaped" (safe to represent as one plain input, and safe for the
+// wizard to overwrite) only if it has no id/signals/notes — anything richer came from the full
+// editor and is never shown in, or clobbered by, these inputs.
 export function isSimpleDisqualifier(d: Disqualifier): boolean {
   return !d.id.trim() && !d.signals.trim() && !d.notes.trim();
 }
 
-export function disqualifierLinesToObjects(text: string): Disqualifier[] {
-  return text.split("\n").map(l => l.trim()).filter(Boolean)
+export function disqualifierInputsToObjects(inputs: string[]): Disqualifier[] {
+  return inputs.map(s => s.trim()).filter(Boolean)
     .map(description => ({ id: "", description, signals: "", notes: "" }));
 }
 
-export function disqualifiersToTextareaValue(existing: Disqualifier[]): string {
-  return existing.filter(isSimpleDisqualifier).map(d => d.description).join("\n");
+export function simpleDisqualifierDescriptions(existing: Disqualifier[]): string[] {
+  return existing.filter(isSimpleDisqualifier).map(d => d.description);
 }
 
-// Replaces only the simple (wizard-owned) disqualifiers with whatever the textarea now says;
-// anything richer (added via the full editor) is preserved regardless of textarea content.
-export function applyDisqualifierAnswer(existing: Disqualifier[], text: string): Disqualifier[] {
+// Replaces only the simple (wizard-owned) disqualifiers with whatever the inputs now say;
+// anything richer (added via the full editor) is preserved regardless of input content.
+export function applyDisqualifierAnswer(existing: Disqualifier[], inputs: string[]): Disqualifier[] {
   const rich = existing.filter(d => !isSimpleDisqualifier(d));
-  return [...rich, ...disqualifierLinesToObjects(text)];
+  return [...rich, ...disqualifierInputsToObjects(inputs)];
+}
+
+// ---------------------------------------------------------------------------
+// Input sanitization
+// ---------------------------------------------------------------------------
+
+// Applied to every free-text wizard field at commit time (Next), not on every keystroke, so
+// typing stays smooth and nothing vanishes mid-sentence. This criteria data gets interpolated
+// verbatim into evaluate_posting.md's prompt as "the candidate's own criteria" on every posting
+// evaluation, and is stored/re-rendered indefinitely afterward — worth keeping clean even though
+// the blast radius is inherently low (this app has no cross-user path for this data, so an
+// adversarial value can only ever skew the candidate's own evaluations). Strips HTML-tag-like
+// content and control characters (React already escapes rendered text; this guards the LLM
+// prompt and YAML serialization instead), collapses to a single line (every wizard free-text
+// field is single-line now), and caps length so one field can't blow out the evaluation prompt.
+const MAX_INPUT_LENGTH = 200;
+
+export function sanitizeCriteriaInput(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, "")
+    .replace(/[\x00-\x1F\x7F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_INPUT_LENGTH);
 }
