@@ -11,6 +11,9 @@
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.5" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <!-- Test-only: generates real fixture PDFs for PdfTextExtractorTests rather than hand-
+         crafting raw PDF bytes. Already a runtime dependency of JobSearch.Api's PdfRenderer. -->
+    <PackageReference Include="QuestPDF" Version="2026.7.3" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>

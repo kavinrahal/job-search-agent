@@ -16,6 +16,7 @@
          (GHSA-37gx-xxp4-5rgx and others). Patched in 9.0.19. -->
     <PackageReference Include="System.Security.Cryptography.Xml" Version="9.0.19" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.5">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
