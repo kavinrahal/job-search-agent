@@ -16,7 +16,10 @@ export const SECTION_LABELS: Record<string, string> = {
   volunteering: "Volunteering & Leadership",
 };
 
+// key is one of the fixed section_key values (see the enum reference above), and the ?? key
+// fallback means any other value is harmless anyway — typed Record lookup, not user input.
 export function sectionLabel(key: string): string {
+  // eslint-disable-next-line security/detect-object-injection
   return SECTION_LABELS[key] ?? key;
 }
 
@@ -26,6 +29,8 @@ export function moveSection(sections: SectionConfigEntry[], index: number, direc
   const target = index + direction;
   if (target < 0 || target >= sections.length) return sections;
   const next = [...sections];
+  // index and target are both bounds-checked against sections.length above — plain array swap.
+  // eslint-disable-next-line security/detect-object-injection
   [next[index], next[target]] = [next[target], next[index]];
   return next;
 }

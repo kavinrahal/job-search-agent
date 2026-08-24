@@ -55,6 +55,13 @@ function normalizeSkills(raw: unknown): Record<string, string[]> {
   if (raw === null || typeof raw !== "object") return {};
   const result: Record<string, string[]> = {};
   for (const [category, items] of Object.entries(raw as Record<string, unknown>)) {
+    // category comes straight from hand-edited YAML text. Object.entries only ever returns
+    // raw's own enumerable keys, so this can't repoint result's prototype via inherited
+    // "constructor"/"toString" — but "__proto__" is a real, literal key a YAML mapping can
+    // produce, and assigning through it reassigns result's own prototype rather than adding a
+    // property, so it's skipped explicitly rather than relying on eslint to catch it.
+    if (category === "__proto__") continue;
+    // eslint-disable-next-line security/detect-object-injection -- guarded above
     result[category] = Array.isArray(items) ? items.map(String) : [String(items)];
   }
   return result;
@@ -79,6 +86,9 @@ export function parseBackgroundYaml(text: string): BackgroundParseResult {
 
   const extra: Record<string, unknown> = {};
   for (const key of Object.keys(raw)) {
+    // Same "__proto__" concern as normalizeSkills above — key is hand-edited-YAML-controlled.
+    if (key === "__proto__") continue;
+    // eslint-disable-next-line security/detect-object-injection -- guarded above; key is one of raw's own keys either way
     if (!KNOWN_KEYS.includes(key)) extra[key] = raw[key];
   }
   return {
