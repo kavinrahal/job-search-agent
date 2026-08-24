@@ -34,6 +34,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="JobSearchAgent.Tests" />
+    <InternalsVisibleTo Include="JobSearch.Api.Tests" />
   </ItemGroup>
 
 </Project>

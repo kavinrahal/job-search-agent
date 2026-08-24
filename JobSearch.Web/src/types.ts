@@ -123,6 +123,32 @@ export interface Profile {
   hasResumePdf: boolean;
 }
 
+// Mirrors JobSearch.Data.SectionConfigEntry — the ordered list of resume sections
+// (UserResume.SectionConfigJson). sectionKey is one of ResumeRenderer's known keys
+// (experience/education/skills/projects/credentials/publications/volunteering).
+export interface SectionConfigEntry {
+  sectionKey: string;
+  included: boolean;
+}
+
+export interface ResumeIndustry {
+  key: string;
+  displayName: string;
+  hasSeniorityToggle: boolean;
+}
+
+export interface ResumeTemplatesResponse {
+  industries: ResumeIndustry[];
+}
+
+// GET/PUT /resume — the curation half of the resume-builder data model (UserResume), distinct
+// from the raw-fact Background editor at /profile.
+export interface ResumeData {
+  summary: string;
+  sectionConfig: SectionConfigEntry[];
+  updatedAt: string;
+}
+
 export interface SourceCatalogItem {
   key: string;
   label: string;

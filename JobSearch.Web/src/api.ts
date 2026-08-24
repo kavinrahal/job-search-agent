@@ -10,6 +10,8 @@ import type {
   GenerationResult,
   PostingCandidate,
   SourcesResponse,
+  ResumeData,
+  ResumeTemplatesResponse,
 } from "./types";
 
 // VITE_API_URL is set in production to the API's own Railway URL — the frontend and API are
@@ -184,6 +186,27 @@ export async function updateProfile(
   fields: Partial<Pick<Profile, "background" | "cvBase" | "jobCriteria">>,
 ): Promise<Profile> {
   return request("/profile", { method: "PUT", ...json(fields) });
+}
+
+// Static catalog, not per-user — safe to call before /resume has ever succeeded.
+export async function fetchResumeTemplates(): Promise<ResumeTemplatesResponse> {
+  return request("/resume-templates");
+}
+
+// Throws (409, "Resume setup isn't finished yet…") until UserResume exists for this user —
+// see the matching backend endpoint's comment.
+export async function fetchResume(): Promise<ResumeData> {
+  return request("/resume");
+}
+
+export async function updateResume(
+  fields: Partial<Pick<ResumeData, "summary" | "sectionConfig">>,
+): Promise<ResumeData> {
+  return request("/resume", { method: "PUT", ...json(fields) });
+}
+
+export async function applyResumeTemplate(industryKey: string, seniority?: "junior" | "experienced"): Promise<ResumeData> {
+  return request("/resume/apply-template", { method: "POST", ...json({ industryKey, seniority }) });
 }
 
 // Company is a separate query param, not folded into the title search string — Jora/Adzuna's

@@ -43,3 +43,13 @@ public record UpdateApplicationStatusRequest(string Status);
 
 // PUT /api/v1/gmail-tracking-mode
 public record GmailTrackingModeRequest(string Mode);
+
+// PUT /api/v1/resume — only provided (non-null) fields are updated, same partial-update shape
+// as ProfileUpdateRequest above. SectionConfig here (not the raw JSON string) since the frontend
+// builder edits it as structured {sectionKey, included} rows, not free text.
+public record ResumeUpdateRequest(string? Summary, List<SectionConfigEntry>? SectionConfig);
+
+// POST /api/v1/resume/apply-template — Seniority is "junior" or "experienced" (validated against
+// ResumeSeniority in Program.cs); omitted/ignored for industries where
+// ResumeIndustryTemplate.HasSeniorityToggle is false.
+public record ApplyResumeTemplateRequest(string IndustryKey, string? Seniority);

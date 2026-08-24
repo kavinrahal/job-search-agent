@@ -27,7 +27,11 @@ public static class ResumeRenderer
     // Default order/inclusion when SectionConfigJson is empty/missing — matches today's real
     // cv_base.md layout exactly. Credentials/Publications are new sections with nothing to match
     // against, so they default to excluded; a user (or the backfill) opts them in once populated.
-    private static readonly List<SectionConfigEntry> DefaultSectionConfig =
+    // internal (not private): ResumeIndustryTemplates reuses this exact list as the "baseline"
+    // shape for industries research found no distinguishing gate section for (Tech, Sales'
+    // experienced-hire order, Academia/Government's deferred generic fallback) — one definition,
+    // not two copies that could drift.
+    internal static readonly List<SectionConfigEntry> DefaultSectionConfig =
     [
         new("experience", true),
         new("education", true),
