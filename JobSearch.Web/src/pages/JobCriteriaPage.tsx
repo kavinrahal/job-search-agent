@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
 import { useProfile, useUpdateProfile } from "../hooks/useProfile";
 import { useMe } from "../hooks/useAuth";
+import { useSyncedState } from "../hooks/useSyncedState";
 import { JobCriteriaEditor } from "../components/JobCriteriaEditor";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
 import { getMissingCriteriaFields } from "../lib/criteriaCompleteness";
@@ -12,14 +12,10 @@ const EMPTY: JobCriteriaData = parseJobCriteriaYaml("");
 export function JobCriteriaPage({ hideHeader = false, onSaved }: { hideHeader?: boolean; onSaved?: () => void } = {}) {
   const { data: profile, loading: loadingProfile } = useProfile();
   const { data: me } = useMe();
-  const [criteria, setCriteria] = useState<JobCriteriaData>(EMPTY);
-  const { execute, loading: saving, error } = useUpdateProfile();
-
   // Reflects whatever's already saved rather than always starting from defaults — editing
   // and saving from a blank slate would otherwise silently wipe out existing criteria.
-  useEffect(() => {
-    if (profile) setCriteria(parseJobCriteriaYaml(profile.jobCriteria));
-  }, [profile]);
+  const [criteria, setCriteria] = useSyncedState(profile, EMPTY, p => parseJobCriteriaYaml(p.jobCriteria));
+  const { execute, loading: saving, error } = useUpdateProfile();
 
   // Full reload rather than re-setting local state — editing the Advanced (raw YAML) box
   // only updates the `extra` bucket locally, it doesn't re-derive the structured fields

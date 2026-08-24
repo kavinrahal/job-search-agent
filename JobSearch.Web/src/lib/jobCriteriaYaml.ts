@@ -400,10 +400,14 @@ export function parseJobCriteriaYaml(text: string): JobCriteriaData {
     delete extra.skill_dimensions;
   }
 
+  // key only ever comes from the literal tuple list above (two fixed, hardcoded keys) — not
+  // from raw's own keys, so there's no user/YAML-controlled key reaching either access below.
   for (const [key, label] of [["cloud_platform", "Cloud platform"], ["ai_tooling", "AI tooling"]] as const) {
+    // eslint-disable-next-line security/detect-object-injection
     const dim = parseTieredOrWeighted(raw[key], label);
     if (dim) {
       data.skillDimensions.push(dim);
+      // eslint-disable-next-line security/detect-object-injection
       delete extra[key];
     }
   }

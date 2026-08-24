@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
 import { useResume, useResumeTemplates, useUpdateResume, useApplyResumeTemplate } from "../hooks/useResume";
+import { useSyncedState } from "../hooks/useSyncedState";
 import { ResumeBuilder } from "../components/ResumeBuilder";
 import { PageTagline } from "../components/PageTagline";
 import { PRIMARY_BUTTON } from "../lib/styles";
@@ -10,15 +10,11 @@ const EMPTY: ResumeData = { summary: "", sectionConfig: [], updatedAt: "" };
 export function ResumeBuilderPage() {
   const { data: resume, loading: loadingResume, error: loadError, reload } = useResume();
   const { data: templates, loading: loadingTemplates } = useResumeTemplates();
-  const [draft, setDraft] = useState<ResumeData>(EMPTY);
-  const { execute: save, loading: saving, error: saveError } = useUpdateResume();
-  const { execute: applyTemplate, loading: applying, error: applyError } = useApplyResumeTemplate();
-
   // Reflects whatever's already saved, same pattern as JobCriteriaPage/CriteriaWizard — editing
   // from a blank slate would otherwise silently wipe out an existing section order.
-  useEffect(() => {
-    if (resume) setDraft(resume);
-  }, [resume]);
+  const [draft, setDraft] = useSyncedState(resume, EMPTY, r => r);
+  const { execute: save, loading: saving, error: saveError } = useUpdateResume();
+  const { execute: applyTemplate, loading: applying, error: applyError } = useApplyResumeTemplate();
 
   async function handleApplyTemplate(industryKey: string, seniority?: "junior" | "experienced") {
     const updated = await applyTemplate(industryKey, seniority);

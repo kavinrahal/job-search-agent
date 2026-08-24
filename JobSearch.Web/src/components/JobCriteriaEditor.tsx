@@ -120,8 +120,15 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
 
   // Only show a states multi-select when every currently-selected country has a known list —
   // for anything else (including no selection) free text is the only sane fallback.
+  // value.countries can be arbitrary text (set via the full editor's raw-YAML Advanced box,
+  // unvalidated against COUNTRIES — see jobCriteriaYaml.ts), so the `c in STATES_BY_COUNTRY`
+  // check that used to guard this isn't safe: `in` also matches inherited Object.prototype keys
+  // like "constructor", which would then read a function off STATES_BY_COUNTRY instead of a
+  // states array. hasOwnProperty restricts the check (and the lookup below) to real entries.
   const selectedCountries = splitCsv(value.countries);
-  const knownStates = selectedCountries.length > 0 && selectedCountries.every(c => c in STATES_BY_COUNTRY)
+  const knownStates = selectedCountries.length > 0
+    && selectedCountries.every(c => Object.prototype.hasOwnProperty.call(STATES_BY_COUNTRY, c))
+    // eslint-disable-next-line security/detect-object-injection -- guarded by hasOwnProperty above
     ? Array.from(new Set(selectedCountries.flatMap(c => STATES_BY_COUNTRY[c])))
     : null;
 
