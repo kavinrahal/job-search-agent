@@ -53,6 +53,14 @@ function KpiStrip({ summary, onStatusClick }: { summary: Summary; onStatusClick:
             <button
               key={status}
               onClick={() => onStatusClick(status)}
+              // ponytail: status is a backend application-status enum value (see ApplicationsPage's
+              // matching STATUS_COLORS), not free user text, and the `?? fallback` already covers
+              // any value outside the known set — treating this as a false positive rather than
+              // adding a hasOwnProperty guard, same call as ApplicationsPage/DiscoveriesPage's
+              // identical lookups. Upgrade path if that trust boundary ever changes: swap to
+              // Object.prototype.hasOwnProperty.call(STATUS_COLORS, status) like CriteriaWizard's
+              // COUNTRY_TO_CURRENCY lookup, which guards a genuinely user-influenced key.
+              // eslint-disable-next-line security/detect-object-injection
               className={`rounded-full px-3 py-1 text-sm font-medium transition-colors duration-150 ${STATUS_COLORS[status] ?? "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300"}`}
             >
               {status}: {count}
