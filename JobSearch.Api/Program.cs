@@ -1045,6 +1045,72 @@ api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbC
     return Results.Ok(new { profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt });
 });
 
+// GET /api/v1/resume-templates — static per-industry SectionConfig defaults for the resume
+// builder's industry picker (resume-builder Phase 2). No DB hit — this is a fixed catalog, not
+// per-user data.
+api.MapGet("/resume-templates", () => Results.Ok(new
+{
+    industries = ResumeIndustryTemplates.All.Select(t => new { t.Key, t.DisplayName, t.HasSeniorityToggle }),
+}));
+
+// GET /api/v1/resume — the current user's UserResume curation data (SectionConfig + Summary),
+// for the resume builder. 409 (same message /cv already uses) if the row doesn't exist yet —
+// UserResume isn't guaranteed to exist the moment a UserProfile does, see PUT /profile's
+// best-effort seeding comment above.
+api.MapGet("/resume", async (HttpContext ctx, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var resume = await db.UserResumes.FindAsync(userId);
+    return resume is null ? ResumeNotReadyError() : ResumeResponse(resume);
+});
+
+// PUT /api/v1/resume — partial update: only provided fields change. Manual section
+// include/reorder edits and Summary edits both go through this one endpoint.
+api.MapPut("/resume", async (HttpContext ctx, ResumeUpdateRequest body, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var resume = await db.UserResumes.FindAsync(userId);
+    if (resume is null) return ResumeNotReadyError();
+
+    if (body.Summary is not null) resume.Summary = body.Summary;
+    if (body.SectionConfig is not null) resume.SectionConfigJson = JsonSerializer.Serialize(body.SectionConfig);
+    resume.UpdatedAt = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+
+    return ResumeResponse(resume);
+});
+
+// POST /api/v1/resume/apply-template — seeds SectionConfigJson from a chosen industry's
+// default order (+ seniority, for the industries research found a junior/experienced split
+// for). Overwrites only SectionConfigJson — Summary/ExperienceOverrides/SkillsSection/
+// ProjectOverrides are untouched, so applying a template never discards curation work already
+// done elsewhere.
+api.MapPost("/resume/apply-template", async (HttpContext ctx, ApplyResumeTemplateRequest body, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var template = ResumeIndustryTemplates.Find(body.IndustryKey);
+    if (template is null)
+        return Results.BadRequest(new { error = $"Unknown industry \"{body.IndustryKey}\"." });
+
+    var seniority = body.Seniority?.ToLowerInvariant() switch
+    {
+        "junior" => ResumeSeniority.Junior,
+        "experienced" or null => ResumeSeniority.Experienced,
+        _ => (ResumeSeniority?)null,
+    };
+    if (seniority is null)
+        return Results.BadRequest(new { error = "Seniority must be \"junior\" or \"experienced\"." });
+
+    var resume = await db.UserResumes.FindAsync(userId);
+    if (resume is null) return ResumeNotReadyError();
+
+    resume.SectionConfigJson = JsonSerializer.Serialize(template.OrderFor(seniority.Value));
+    resume.UpdatedAt = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+
+    return ResumeResponse(resume);
+});
+
 // GET /api/v1/sources — Tier 2 only. Source catalog, the user's current selection, and
 // whether Gmail is already connected (so the frontend can hide the Connect Gmail button
 // instead of inviting a pointless re-consent).
@@ -1574,6 +1640,20 @@ static HashSet<string> MarkdownHeadings(string markdown) =>
     [.. markdown.ReplaceLineEndings("\n").Split('\n')
         .Where(l => l.StartsWith("## "))
         .Select(l => l[3..].Trim())];
+
+// Shared by GET/PUT /resume and POST /resume/apply-template — the one response shape all three
+// return.
+static IResult ResumeResponse(UserResume resume) => Results.Ok(new
+{
+    resume.Summary,
+    sectionConfig = JsonSerializer.Deserialize<List<SectionConfigEntry>>(resume.SectionConfigJson) ?? [],
+    resume.UpdatedAt,
+});
+
+// Same 409 message /cv already uses for the same condition (UserResume not seeded yet).
+static IResult ResumeNotReadyError() => Results.Json(
+    new { error = "Resume setup isn't finished yet — try again shortly, or contact support if this persists." },
+    statusCode: StatusCodes.Status409Conflict);
 
 // Shared by the admin backfill endpoint and PUT /profile's new-intake seeding — same mapping
 // from a ResumeBackfillResult to the row that gets saved.

@@ -4,6 +4,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
 import { DiscoveriesPage } from "./pages/DiscoveriesPage";
 import { ResumeIntakePage } from "./pages/ResumeIntakePage";
+import { ResumeBuilderPage } from "./pages/ResumeBuilderPage";
 import { JobCriteriaPage } from "./pages/JobCriteriaPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LandingPage } from "./pages/LandingPage";
@@ -28,6 +29,7 @@ const NAV_LINKS = [
   { to: "/applications", label: "Applications", tier2Only: true },
   { to: "/sources",      label: "Sources",      tier2Only: true },
   { to: "/profile",      label: "Profile"      },
+  { to: "/resume-builder", label: "Resume Builder" },
   { to: "/criteria",     label: "Criteria"     },
   { to: "/settings",     label: "Settings"     },
   { to: "/help",         label: "Help"         },
@@ -220,6 +222,7 @@ function PageBody({ me }: { me: NonNullable<ReturnType<typeof useMe>["data"]> })
           <Route path="/applications"       element={<ApplicationsPage />} />
           <Route path="/sources"            element={<SourcesPage />} />
           <Route path="/profile"            element={<ResumeIntakePage />} />
+          <Route path="/resume-builder"     element={<ResumeBuilderPage />} />
           <Route path="/criteria"           element={<JobCriteriaPage />} />
           <Route path="/settings"           element={<SettingsPage />} />
           <Route path="/help"               element={<HelpPage />} />
