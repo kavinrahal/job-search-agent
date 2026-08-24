@@ -487,9 +487,9 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
         || (user.Tier == UserTier.Tier2 && TargetJobTitles.Parse(profile?.JobCriteria).Length == 0);
     bool needsSourceSelection = user.Tier == UserTier.Tier2 && user.EnabledSources is null;
     bool isOwner = string.Equals(user.Email, ownerEmail, StringComparison.OrdinalIgnoreCase);
-    // First name only, for a casual dashboard greeting — null until CvBase exists (a brand
+    // First name only, for a casual dashboard greeting — null until Background exists (a brand
     // new user mid-onboarding), same source as BuildDownloadFilename's applicant name below.
-    string? firstName = ExtractApplicantName(profile?.CvBase)?.Split(' ', 2)[0];
+    string? firstName = ExtractApplicantName(profile?.Background)?.Split(' ', 2)[0];
 
     return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsCriteria, needsSourceSelection, isOwner, firstName });
 }).RequireAuthorization();
@@ -1676,15 +1676,21 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
 
     var profile = await db.UserProfiles.FindAsync(userId)
         ?? throw new InvalidOperationException("UserProfile not found for the current user.");
+    // Unlike UserProfile, not guaranteed to exist yet — it's created by the admin backfill or by
+    // PUT /profile's best-effort seeding (which explicitly swallows failure). A real, if rare,
+    // gap: surface it as a clear retryable error, not an NRE.
+    var resume = await db.UserResumes.FindAsync(userId);
+    if (resume is null)
+        return Results.Json(new { error = "Resume setup isn't finished yet — try again shortly, or contact support if this persists." }, statusCode: StatusCodes.Status409Conflict);
 
     var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
     // Matches CvTailorAgent.BuildSystemPrompt's own context exactly — verifying against
     // anything less (or more) would misrepresent what the generator actually had to work with.
-    var sourceMaterial = $"{profile.Background}\n\n--- BASE CV ---\n{profile.CvBase}";
+    var sourceMaterial = $"{profile.Background}\n\n--- BASE CV ---\n{ResumeRenderer.Render(BackgroundYamlParser.Parse(profile.Background), resume)}";
     return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, verifier, sourceMaterial, userId,
         body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingTitle, body.PostingCompany,
         AgentThreadType.Cv,
-        (text, evalJson) => cvAgent.GenerateAsync(profile, text, evalJson),
+        (text, evalJson) => cvAgent.GenerateAsync(profile, resume, text, evalJson),
         CvTailorAgent.BuildInitialUserContent);
 }).RequireRateLimiting("generation");
 
@@ -1828,6 +1834,14 @@ api.MapPost("/threads/{id:int}/edit", async (
         $"Please revise the previous draft with this feedback: {body.Message}\n\n" +
         "Keep following all the rules in your instructions unless the feedback specifically asks to change them."));
 
+    UserResume? resume = null;
+    if (thread.ArtifactType == AgentThreadType.Cv)
+    {
+        resume = await db.UserResumes.FindAsync(userId);
+        if (resume is null)
+            return Results.Json(new { error = "Resume setup isn't finished yet — try again shortly, or contact support if this persists." }, statusCode: StatusCodes.Status409Conflict);
+    }
+
     return await WithCreditAsync(db, userId, async () =>
     {
         string? text = null;
@@ -1835,7 +1849,7 @@ api.MapPost("/threads/{id:int}/edit", async (
         string? answerContent = null;
 
         if (thread.ArtifactType == AgentThreadType.Cv)
-            text = await cvAgent.ReviseAsync(profile, history);
+            text = await cvAgent.ReviseAsync(profile, resume!, history);
         else if (thread.ArtifactType == AgentThreadType.CoverLetter)
             text = await letterAgent.ReviseAsync(profile, history);
         else
@@ -1856,7 +1870,7 @@ api.MapPost("/threads/{id:int}/edit", async (
         else
         {
             var sourceMaterial = thread.ArtifactType == AgentThreadType.Cv
-                ? $"{profile.Background}\n\n--- BASE CV ---\n{profile.CvBase}"
+                ? $"{profile.Background}\n\n--- BASE CV ---\n{ResumeRenderer.Render(BackgroundYamlParser.Parse(profile.Background), resume!)}"
                 : profile.Background;
             warnings = await verifier.VerifyAsync(userId, sourceMaterial, finalText);
         }
@@ -1883,18 +1897,20 @@ static string BuildDownloadFilename(string? applicantName, string? company, stri
     return $"{safe}.{ext}";
 }
 
-// Every user's CvBase is seeded in the same format (see parse_resume_intake.md /
-// skills/context/cv_base.md), starting with "# {Full Name}" as its first line.
-static string? ExtractApplicantName(string? cvBase)
+// Reads straight from Background now, not CvBase's first markdown line — BackgroundYamlParser.
+// Parse never throws (see its own doc comment), so a blank/null name just falls through to null,
+// same as the old "no CvBase yet" case for a brand new user mid-onboarding.
+static string? ExtractApplicantName(string? backgroundYaml)
 {
-    var firstLine = cvBase?.ReplaceLineEndings("\n").Split('\n').FirstOrDefault()?.Trim();
-    return firstLine is not null && firstLine.StartsWith("# ") ? firstLine[2..].Trim() : null;
+    if (string.IsNullOrWhiteSpace(backgroundYaml)) return null;
+    var name = BackgroundYamlParser.Parse(backgroundYaml).Personal.Name;
+    return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
 }
 
 static async Task<string?> GetApplicantNameAsync(AppDbContext db, int userId)
 {
     var profile = await db.UserProfiles.FindAsync(userId);
-    return ExtractApplicantName(profile?.CvBase);
+    return ExtractApplicantName(profile?.Background);
 }
 
 // GET /api/v1/threads/{id}/pdf — renders a completed CV or cover-letter thread as a PDF
@@ -1979,6 +1995,19 @@ app.MapPost("/api/v1/telegram/webhook", async (
     var ownerBackground = ownerProfileEntity.Background;
     var ownerCvBase = ownerProfileEntity.CvBase;
     var ownerJobCriteria = ownerProfileEntity.JobCriteria;
+
+    // Same detached-string-capture reasoning as above. Unlike UserProfile, not guaranteed to
+    // exist for every user in general — but the owner's own account is confirmed migrated
+    // (Deploy A's backfill already ran for it), so failing loud here is correct: this should
+    // never actually happen, and if it somehow does, it's a real bug worth a crash + log, not a
+    // silently degraded Telegram bot for an internal, owner-only surface.
+    var ownerResumeEntity = await db.UserResumes.FindAsync(ownerUserId)
+        ?? throw new InvalidOperationException("Owner UserResume not migrated — run the admin backfill for this account.");
+    var ownerSummary = ownerResumeEntity.Summary;
+    var ownerSectionConfigJson = ownerResumeEntity.SectionConfigJson;
+    var ownerExperienceOverridesJson = ownerResumeEntity.ExperienceOverridesJson;
+    var ownerSkillsSectionJson = ownerResumeEntity.SkillsSectionJson;
+    var ownerProjectOverridesJson = ownerResumeEntity.ProjectOverridesJson;
 
     JsonElement update;
     try
@@ -2141,6 +2170,12 @@ app.MapPost("/api/v1/telegram/webhook", async (
         {
             UserId = ownerUserId, Background = ownerBackground, CvBase = ownerCvBase, JobCriteria = ownerJobCriteria,
         };
+        var ownerResume = new UserResume
+        {
+            UserId = ownerUserId, Summary = ownerSummary, SectionConfigJson = ownerSectionConfigJson,
+            ExperienceOverridesJson = ownerExperienceOverridesJson, SkillsSectionJson = ownerSkillsSectionJson,
+            ProjectOverridesJson = ownerProjectOverridesJson,
+        };
 
         try
         {
@@ -2177,7 +2212,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
 
                 if (threadType == AgentThreadType.Cv)
                 {
-                    var revisedCv = await cvAgent.ReviseAsync(ownerProfile, history);
+                    var revisedCv = await cvAgent.ReviseAsync(ownerProfile, ownerResume, history);
                     history.Add(new AgentThreadTurn("assistant", revisedCv));
                     var pdf = JobSearch.Api.Services.PdfRenderer.RenderCv(revisedCv);
                     var sentId = await telegram.SendDocumentAsync(pdf, "Kavin_Abeysinghe_CV.pdf");
@@ -2304,7 +2339,7 @@ app.MapPost("/api/v1/telegram/webhook", async (
 
                 if (command == "/cv")
                 {
-                    var cvText = await cvAgent.GenerateAsync(ownerProfile, postingText, evalJson);
+                    var cvText = await cvAgent.GenerateAsync(ownerProfile, ownerResume, postingText, evalJson);
                     var pdf = JobSearch.Api.Services.PdfRenderer.RenderCv(cvText);
                     var sentId = await telegram.SendDocumentAsync(pdf, "Kavin_Abeysinghe_CV.pdf");
                     await SaveThreadAsync(null, AgentThreadType.Cv,

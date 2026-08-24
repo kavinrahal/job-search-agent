@@ -15,6 +15,8 @@ public record ResumeBackfillResult(
 // user at a time (see Program.cs's admin backfill endpoint). Four separate parallel tool-use
 // calls, same reasoning as ResumeIntakeAgent's split: each field gets its own full token budget
 // rather than competing for one, avoiding the truncation failure that pattern was built to fix.
+// Schema/parsing logic lives in ResumeOverrideSchema, shared with CvTailorAgent's per-application
+// tailoring calls — same override shapes, different judgment rules populating them.
 public class ResumeBackfillAgent
 {
     private readonly AnthropicClient _client;
@@ -27,6 +29,8 @@ public class ResumeBackfillAgent
     private readonly Tool _experienceTool;
     private readonly Tool _skillsTool;
     private readonly Tool _projectsTool;
+
+    private const string DivergenceNote = "Only where the wording differs from BACKGROUND, or is absent — omit ones that match as-is.";
 
     public ResumeBackfillAgent(string apiKey, ClaudeUsageLogger? usageLogger = null)
     {
@@ -42,8 +46,8 @@ public class ResumeBackfillAgent
             {
                 Properties = new Dictionary<string, JsonElement>
                 {
-                    ["summary"] = Prop("string", "CV_BASE's Summary section text, or empty string if it's only the placeholder."),
-                    ["section_config"] = PropSectionConfigArray(),
+                    ["summary"] = ResumeOverrideSchema.Prop("string", "CV_BASE's Summary section text, or empty string if it's only the placeholder."),
+                    ["section_config"] = ResumeOverrideSchema.PropSectionConfigArray(),
                 },
                 Required = ["summary", "section_config"],
             },
@@ -58,7 +62,7 @@ public class ResumeBackfillAgent
             {
                 Properties = new Dictionary<string, JsonElement>
                 {
-                    ["experience_overrides"] = PropExperienceOverrideArray(),
+                    ["experience_overrides"] = ResumeOverrideSchema.PropExperienceOverrideArray(DivergenceNote),
                 },
                 Required = ["experience_overrides"],
             },
@@ -73,7 +77,7 @@ public class ResumeBackfillAgent
             {
                 Properties = new Dictionary<string, JsonElement>
                 {
-                    ["skills_section"] = PropSkillsSectionArray(),
+                    ["skills_section"] = ResumeOverrideSchema.PropSkillsSectionArray(),
                 },
                 Required = ["skills_section"],
             },
@@ -88,7 +92,7 @@ public class ResumeBackfillAgent
             {
                 Properties = new Dictionary<string, JsonElement>
                 {
-                    ["project_overrides"] = PropProjectOverrideArray(),
+                    ["project_overrides"] = ResumeOverrideSchema.PropProjectOverrideArray(DivergenceNote),
                 },
                 Required = ["project_overrides"],
             },
@@ -117,10 +121,10 @@ public class ResumeBackfillAgent
         var summaryConfigInput = summaryConfigTask.Result;
         return new ResumeBackfillResult(
             Summary: summaryConfigInput.TryGetValue("summary", out var s) ? s.GetString() ?? "" : "",
-            SectionConfig: ExtractSectionConfig(summaryConfigInput, "section_config"),
-            ExperienceOverrides: ExtractExperienceOverrides(experienceTask.Result, "experience_overrides"),
-            SkillsSection: ExtractSkillsSection(skillsTask.Result, "skills_section"),
-            ProjectOverrides: ExtractProjectOverrides(projectsTask.Result, "project_overrides"));
+            SectionConfig: ResumeOverrideSchema.ExtractSectionConfig(summaryConfigInput, "section_config"),
+            ExperienceOverrides: ResumeOverrideSchema.ExtractExperienceOverrides(experienceTask.Result, "experience_overrides"),
+            SkillsSection: ResumeOverrideSchema.ExtractSkillsSection(skillsTask.Result, "skills_section"),
+            ProjectOverrides: ResumeOverrideSchema.ExtractProjectOverrides(projectsTask.Result, "project_overrides"));
     }
 
     private async Task<IReadOnlyDictionary<string, JsonElement>> CallAsync(int userId, string userContent, Tool tool)
@@ -147,163 +151,4 @@ public class ResumeBackfillAgent
 
         throw new InvalidOperationException($"Resume backfill did not return a tool use block for \"{tool.Name}\".");
     }
-
-    // Extraction methods split out and made static/testable, same principle as
-    // ResumeIntakeAgent.ExtractField — verifiable without a live API call.
-
-    public static List<SectionConfigEntry> ExtractSectionConfig(IReadOnlyDictionary<string, JsonElement> input, string key)
-    {
-        if (!input.TryGetValue(key, out var el) || el.ValueKind != JsonValueKind.Array) return [];
-        return [.. el.EnumerateArray().Select(e => new SectionConfigEntry(
-            GetString(e, "section_key") ?? "",
-            GetBool(e, "included")))];
-    }
-
-    public static List<ExperienceOverride> ExtractExperienceOverrides(IReadOnlyDictionary<string, JsonElement> input, string key)
-    {
-        if (!input.TryGetValue(key, out var el) || el.ValueKind != JsonValueKind.Array) return [];
-        return [.. el.EnumerateArray().Select(e => new ExperienceOverride(
-            ExperienceIndex: GetInt(e, "experience_index"),
-            Included: GetBool(e, "included", defaultValue: true),
-            CompanyDescriptionOverride: GetString(e, "company_description_override"),
-            Achievements: ExtractItemOverrides(e, "achievements"),
-            ExtraAchievements: GetStringArray(e, "extra_achievements"),
-            Notes: GetString(e, "notes")))];
-    }
-
-    // Shared by experience achievements and project highlights — same override shape.
-    private static List<ItemOverride> ExtractItemOverrides(JsonElement parent, string key)
-    {
-        if (!parent.TryGetProperty(key, out var el) || el.ValueKind != JsonValueKind.Array) return [];
-        return [.. el.EnumerateArray().Select(e => new ItemOverride(
-            GetInt(e, "index"),
-            GetBool(e, "included", defaultValue: true),
-            GetString(e, "text_override")))];
-    }
-
-    public static List<SkillsSectionEntry> ExtractSkillsSection(IReadOnlyDictionary<string, JsonElement> input, string key)
-    {
-        if (!input.TryGetValue(key, out var el) || el.ValueKind != JsonValueKind.Array) return [];
-        return [.. el.EnumerateArray().Select(e => new SkillsSectionEntry(
-            GetString(e, "label") ?? "",
-            GetStringArray(e, "items")))];
-    }
-
-    public static List<ProjectOverride> ExtractProjectOverrides(IReadOnlyDictionary<string, JsonElement> input, string key)
-    {
-        if (!input.TryGetValue(key, out var el) || el.ValueKind != JsonValueKind.Array) return [];
-        return [.. el.EnumerateArray().Select(e => new ProjectOverride(
-            ProjectIndex: GetInt(e, "project_index"),
-            Included: GetBool(e, "included", defaultValue: true),
-            DescriptionOverride: GetString(e, "description_override"),
-            Highlights: ExtractItemOverrides(e, "highlights"),
-            ExtraHighlights: GetStringArray(e, "extra_highlights")))];
-    }
-
-    private static string? GetString(JsonElement e, string prop) =>
-        e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-
-    private static bool GetBool(JsonElement e, string prop, bool defaultValue = false) =>
-        e.TryGetProperty(prop, out var v) && (v.ValueKind == JsonValueKind.True || v.ValueKind == JsonValueKind.False) ? v.GetBoolean() : defaultValue;
-
-    private static int GetInt(JsonElement e, string prop) =>
-        e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : -1;
-
-    private static List<string> GetStringArray(JsonElement e, string prop)
-    {
-        if (!e.TryGetProperty(prop, out var v) || v.ValueKind != JsonValueKind.Array) return [];
-        return [.. v.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => x.Length > 0)];
-    }
-
-    private static JsonElement Prop(string type, string description) =>
-        JsonSerializer.SerializeToElement(new { type, description });
-
-    private static JsonElement PropSectionConfigArray() => JsonSerializer.SerializeToElement(new
-    {
-        type = "array",
-        description = "One entry per section key, in CV_BASE's actual order — every key listed even if included is false.",
-        items = new
-        {
-            type = "object",
-            properties = new
-            {
-                section_key = new { type = "string", @enum = new[] { "experience", "education", "skills", "credentials", "publications", "volunteering", "projects" } },
-                included = new { type = "boolean" },
-            },
-            required = new[] { "section_key", "included" },
-        },
-    });
-
-    // Shared by experience achievements and project highlights — same override shape, on the
-    // schema side too.
-    private static JsonElement PropItemOverrideArray(string description) => JsonSerializer.SerializeToElement(new
-    {
-        type = "array",
-        description,
-        items = new
-        {
-            type = "object",
-            properties = new
-            {
-                index = new { type = "integer" },
-                included = new { type = "boolean" },
-                text_override = new { type = "string" },
-            },
-            required = new[] { "index", "included" },
-        },
-    });
-
-    private static JsonElement PropExperienceOverrideArray() => JsonSerializer.SerializeToElement(new
-    {
-        type = "array",
-        description = "One entry per BACKGROUND experience index, in order.",
-        items = new
-        {
-            type = "object",
-            properties = new
-            {
-                experience_index = new { type = "integer" },
-                included = new { type = "boolean" },
-                company_description_override = new { type = "string", description = "Only if CV_BASE's wording differs from BACKGROUND's; omit/null otherwise." },
-                achievements = PropItemOverrideArray("Only achievements whose CV_BASE wording differs, or that are absent — omit ones that match as-is."),
-                extra_achievements = new { type = "array", items = new { type = "string" }, description = "CV_BASE bullets for this role with no BACKGROUND source." },
-                notes = new { type = "string" },
-            },
-            required = new[] { "experience_index", "included", "achievements", "extra_achievements" },
-        },
-    });
-
-    private static JsonElement PropSkillsSectionArray() => JsonSerializer.SerializeToElement(new
-    {
-        type = "array",
-        items = new
-        {
-            type = "object",
-            properties = new
-            {
-                label = new { type = "string" },
-                items = new { type = "array", items = new { type = "string" } },
-            },
-            required = new[] { "label", "items" },
-        },
-    });
-
-    private static JsonElement PropProjectOverrideArray() => JsonSerializer.SerializeToElement(new
-    {
-        type = "array",
-        description = "One entry per BACKGROUND project index, in order.",
-        items = new
-        {
-            type = "object",
-            properties = new
-            {
-                project_index = new { type = "integer" },
-                included = new { type = "boolean" },
-                description_override = new { type = "string" },
-                highlights = PropItemOverrideArray("Only highlights whose CV_BASE wording differs, or that are absent — omit ones that match as-is."),
-                extra_highlights = new { type = "array", items = new { type = "string" } },
-            },
-            required = new[] { "project_index", "included", "highlights", "extra_highlights" },
-        },
-    });
 }

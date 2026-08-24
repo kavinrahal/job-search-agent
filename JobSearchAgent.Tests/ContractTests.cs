@@ -127,7 +127,7 @@ public class ContractTests
             role_type_match = "preferred",
         });
 
-        var result = await agent.GenerateAsync(Make.OwnerProfile(), SamplePosting, evalJson);
+        var result = await agent.GenerateAsync(Make.OwnerProfile(), Make.OwnerResume(), SamplePosting, evalJson);
 
         Assert.False(string.IsNullOrWhiteSpace(result));
         Assert.True(result.Length >= 200, $"Expected ≥200 chars, got {result.Length}");
@@ -143,7 +143,8 @@ public class ContractTests
         var agent = new CvTailorAgent(ApiKey);
         var evalJson = JsonSerializer.Serialize(new { recommendation = "good_match", backend_match = "strong" });
         var profile = Make.OwnerProfile();
-        var original = await agent.GenerateAsync(profile, SamplePosting, evalJson);
+        var resume = Make.OwnerResume();
+        var original = await agent.GenerateAsync(profile, resume, SamplePosting, evalJson);
 
         var history = new List<AgentThreadTurn>
         {
@@ -151,7 +152,7 @@ public class ContractTests
             new("assistant", original),
             new("user", "Please revise the previous draft with this feedback: mention Docker experience in the summary."),
         };
-        var revised = await agent.ReviseAsync(profile, history);
+        var revised = await agent.ReviseAsync(profile, resume, history);
 
         Assert.False(string.IsNullOrWhiteSpace(revised));
         Assert.NotEqual(original, revised);
