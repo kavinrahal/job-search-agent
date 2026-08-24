@@ -19,7 +19,6 @@ public class Application
     public string? CompanyDomain { get; set; }
 
     public List<ApplicationEvent> Events { get; set; } = [];
-    public List<Notification> Notifications { get; set; } = [];
 }
 
 // Status values for Application.Status — stored as strings so the DB is readable.

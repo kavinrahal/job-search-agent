@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace JobSearchAgent.Agents;
 
-public record TrackingResult(int Created, int Updated, int NotificationsQueued);
+public record TrackingResult(int Created, int Updated);
 
 public static class ApplicationTracker
 {
@@ -39,7 +39,7 @@ public static class ApplicationTracker
         IEnumerable<(RawEmail Email, EmailClassification Classification)> results)
     {
         var now = DateTime.UtcNow;
-        int created = 0, updated = 0, notifications = 0;
+        int created = 0, updated = 0;
 
         foreach (var (email, clf) in results.Where(r => r.Classification.IsJobRelated))
         {
@@ -92,25 +92,10 @@ public static class ApplicationTracker
                     OccurredAt = email.ReceivedAt.UtcDateTime,
                 });
             }
-
-            // Queue a Telegram notification for high-priority categories
-            var notifType = GetNotificationType(clf.Category);
-            if (notifType is not null)
-            {
-                db.Notifications.Add(new Notification
-                {
-                    UserId = db.CurrentUserId!.Value,
-                    Type = notifType,
-                    Message = BuildMessage(clf, email),
-                    ApplicationId = app.Id,
-                    CreatedAt = now,
-                });
-                notifications++;
-            }
         }
 
         await db.SaveChangesAsync();
-        return new TrackingResult(created, updated, notifications);
+        return new TrackingResult(created, updated);
     }
 
     private static async Task<(Application? app, bool wasCreated)> FindOrCreateAsync(
@@ -197,29 +182,6 @@ public static class ApplicationTracker
             "rejection" => (ApplicationStatus.Rejected, $"Rejected by {co}{ro}"),
 
             _ => (current, $"Email received from {co}{ro}"),
-        };
-    }
-
-    private static string? GetNotificationType(string category) => category switch
-    {
-        "interview_invitation" => NotificationType.InterviewInvite,
-        "offer"                => NotificationType.Offer,
-        "follow_up_needed"     => NotificationType.ActionNeeded,
-        "rejection"            => NotificationType.Rejection,
-        _                      => null,
-    };
-
-    private static string BuildMessage(EmailClassification clf, RawEmail email)
-    {
-        string ro = clf.RoleTitle.Length > 0 ? $" - {clf.RoleTitle}" : "";
-        string subj = email.Subject.Length > 100 ? email.Subject[..100] : email.Subject;
-        return clf.Category switch
-        {
-            "interview_invitation" => $"Interview invite: {clf.Company}{ro}\n{subj}",
-            "offer"                => $"Offer: {clf.Company}{ro}\n{subj}",
-            "follow_up_needed"     => $"Action needed: {clf.Company}{ro}\n{subj}",
-            "rejection"            => $"Rejection: {clf.Company}{ro}\n{subj}",
-            _                      => $"{clf.Company}{ro}: {subj}",
         };
     }
 

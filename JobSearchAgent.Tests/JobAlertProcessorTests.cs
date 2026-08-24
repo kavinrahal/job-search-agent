@@ -1,5 +1,4 @@
 using JobSearch.Data;
-using JobSearchAgent.Integrations;
 using JobSearchAgent.Workers;
 
 namespace JobSearchAgent.Tests;
@@ -276,47 +275,51 @@ public class JobAlertProcessorTests
         Assert.Equal("error", record.Recommendation);
     }
 
-    // TC-P7 — strong_match + telegram returns true → NotificationSent=true, notified=1
-    // Silent failure: broken notification flag means the same posting could be re-notified
+    // TC-P7 — strong_match with an emailer configured → EmailNotificationSent=true, notified=1
+    // Silent failure: a broken notification flag means the same posting could be re-notified
     // on the next run if the record is ever reset.
     [Fact]
-    public async Task ProcessAsync_StrongMatchWithTelegram_NotificationSentAndCounted()
+    public async Task ProcessAsync_StrongMatchWithEmailer_EmailNotificationSentAndCounted()
     {
         var db = Db.Fresh();
+        db.Users.Add(new User { Id = Db.TestUserId, Email = "owner@test.com" });
+        db.SaveChanges();
         var url = "https://au.seek.com/job/60000006";
-        var telegram = new FakeTelegram(returns: true);
+        var handler = new FakeEmailHandler();
         var processor = MakeProcessor(db,
             evaluator: new FakeEvaluator(_ => StubEval("strong_match")),
-            telegram: telegram);
+            emailer: Emailer.Make(handler));
         var email = Make.Email(bodyText: $"Job: {url}");
 
         var (_, _, notified) = await processor.ProcessAsync([email]);
 
         var record = db.DiscoveredPostings.Single(d => d.Url == url);
-        Assert.True(record.NotificationSent);
+        Assert.True(record.EmailNotificationSent);
         Assert.Equal(1, notified);
-        Assert.Equal(1, telegram.CallCount);
+        Assert.Equal(1, handler.CallCount);
     }
 
-    // TC-P8 — discard recommendation → no Telegram send even when telegram is provided
+    // TC-P8 — discard recommendation → no email send even when an emailer is provided
     [Fact]
-    public async Task ProcessAsync_DiscardWithTelegram_NotificationNotSent()
+    public async Task ProcessAsync_DiscardWithEmailer_EmailNotificationNotSent()
     {
         var db = Db.Fresh();
+        db.Users.Add(new User { Id = Db.TestUserId, Email = "owner@test.com" });
+        db.SaveChanges();
         var url = "https://au.seek.com/job/70000007";
-        var telegram = new FakeTelegram(returns: true);
+        var handler = new FakeEmailHandler();
         var processor = MakeProcessor(db,
             evaluator: new FakeEvaluator(_ => StubEval("discard")),
-            telegram: telegram);
+            emailer: Emailer.Make(handler));
         var email = Make.Email(bodyText: $"Job: {url}");
 
         var (_, _, notified) = await processor.ProcessAsync([email]);
 
         Assert.Equal(0, notified);
-        Assert.Equal(0, telegram.CallCount);
+        Assert.Equal(0, handler.CallCount);
     }
 
-    // TC-P9 — Two new URLs: Found=2, Evaluated=2, Notified=0 (both weak_match, no telegram)
+    // TC-P9 — Two new URLs: Found=2, Evaluated=2, Notified=0 (both weak_match, no emailer configured)
     [Fact]
     public async Task ProcessAsync_TwoNewUrls_CountsTupleCorrect()
     {
@@ -427,17 +430,17 @@ public class JobAlertProcessorTests
         AppDbContext db,
         JobPostingFetcher? fetcher = null,
         PostingEvaluator? evaluator = null,
-        TelegramNotifier? telegram = null,
         JoraFetcher? joraFetcher = null,
         AdzunaFetcher? adzunaFetcher = null,
-        PostingMatcherAgent? matcher = null) =>
+        PostingMatcherAgent? matcher = null,
+        SendGridEmailService? emailer = null) =>
         new(db,
             fetcher   ?? new FakeFetcher(_ => Task.FromResult<string>("job description text")),
             evaluator ?? new FakeEvaluator(_ => StubEval("weak_match")),
-            telegram,
             joraFetcher ?? new FakeJoraFetcher(_ => []),
             adzunaFetcher,
-            matcher ?? new FakeMatcher((_, _) => null));
+            matcher ?? new FakeMatcher((_, _) => null),
+            emailer);
 
     private static PostingEvaluation StubEval(string recommendation, string company = "ACME") => new()
     {
@@ -470,18 +473,6 @@ public class JobAlertProcessorTests
         public FakeEvaluator(Func<string, PostingEvaluation> fn) : base() => _fn = fn;
         public override Task<PostingEvaluation> EvaluateAsync(UserProfile profile, string postingText, string? sourceUrl = null)
             => Task.FromResult(_fn(postingText));
-    }
-
-    private sealed class FakeTelegram : TelegramNotifier
-    {
-        private readonly bool _returns;
-        public int CallCount { get; private set; }
-        public FakeTelegram(bool returns = true) : base("x", "y") => _returns = returns;
-        public override Task<bool> SendAsync(string message, string? parseMode = null)
-        {
-            CallCount++;
-            return Task.FromResult(_returns);
-        }
     }
 
     private sealed class FakeJoraFetcher : JoraFetcher

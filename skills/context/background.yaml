@@ -294,13 +294,13 @@ projects:
       tailored CVs and cover letters on demand. Agent behaviour is defined through a
       versioned skills system of markdown skill files and YAML context loaded at
       runtime, so evaluation criteria, CV tailoring rules, and cover letter guidelines
-      change without touching application code. Features a React dashboard and
-      Telegram bot as interfaces to the agent.
+      change without touching application code. Features a React dashboard as the
+      interface to the agent.
     tech_stack:
       backend: [C#, ASP.NET Core, PostgreSQL, Npgsql, EF Core, QuestPDF]
       frontend: [React, TypeScript, Vite, Tailwind CSS]
       ai: [Claude (claude-opus-4-8), Anthropic SDK]
-      integrations: [Gmail API, Telegram Bot API]
+      integrations: [Gmail API]
       auth: [Google OAuth 2.0, hardened cookie sessions]
       deployment: [Railway, Docker]
     highlights:

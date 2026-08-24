@@ -18,7 +18,6 @@ public class ApplicationTrackerTests
 
         Assert.Equal(0, result.Created);
         Assert.Equal(0, result.Updated);
-        Assert.Equal(0, result.NotificationsQueued);
         Assert.Empty(db.Applications.ToList());
     }
 
@@ -73,7 +72,7 @@ public class ApplicationTrackerTests
 
     // TC05
     [Fact]
-    public async Task FollowUpNeeded_NoExistingApp_CreatesNoApplicationAndQueuesNoNotification()
+    public async Task FollowUpNeeded_NoExistingApp_CreatesNoApplication()
     {
         var db = Db.Fresh();
         var email = Make.Email();
@@ -82,7 +81,6 @@ public class ApplicationTrackerTests
         var result = await ApplicationTracker.ProcessClassificationsAsync(db, [Fixtures.Pair(email, clf)]);
 
         Assert.Equal(0, result.Created);
-        Assert.Equal(0, result.NotificationsQueued);
         Assert.Empty(db.Applications.ToList());
     }
 
@@ -187,21 +185,6 @@ public class ApplicationTrackerTests
         Assert.Equal(0, result.Updated);
     }
 
-    // TC12
-    [Fact]
-    public async Task SubjectOver100Chars_BuildMessage_TruncatesToExactly100()
-    {
-        var db = Db.Fresh();
-        var email = Make.Email(subject: new string('a', 150));
-        var clf = Make.Classification(category: "interview_invitation", company: "Acme");
-
-        await ApplicationTracker.ProcessClassificationsAsync(db, [Fixtures.Pair(email, clf)]);
-
-        var notification = db.Notifications.First();
-        var subjectLine = notification.Message.Split('\n').Last();
-        Assert.Equal(100, subjectLine.Length);
-    }
-
     // TC13
     [Fact]
     public async Task ApplicationConfirmation_ExistingAppNotAtApplied_ProducesEmailReceivedNotStatusChange()
@@ -246,32 +229,6 @@ public class ApplicationTrackerTests
         Assert.Equal(ApplicationEventType.EmailReceived, newEvent.EventType);
     }
 
-    // TC15
-    [Fact]
-    public async Task InterviewInvitation_NoExistingApp_QueuesNotification()
-    {
-        var db = Db.Fresh();
-        var email = Make.Email();
-        var clf = Make.Classification(category: "interview_invitation");
-
-        var result = await ApplicationTracker.ProcessClassificationsAsync(db, [Fixtures.Pair(email, clf)]);
-
-        Assert.Equal(1, result.NotificationsQueued);
-    }
-
-    // TC16
-    [Fact]
-    public async Task ApplicationConfirmation_NoExistingApp_DoesNotQueueNotification()
-    {
-        var db = Db.Fresh();
-        var email = Make.Email();
-        var clf = Make.Classification(category: "application_confirmation");
-
-        var result = await ApplicationTracker.ProcessClassificationsAsync(db, [Fixtures.Pair(email, clf)]);
-
-        Assert.Equal(0, result.NotificationsQueued);
-    }
-
     // TC17
     // application_confirmation on a new app writes exactly two StatusChanged events:
     // (null→Applied) from FindOrCreate, then (Applied→Acknowledged) from ProcessClassifications.
@@ -292,7 +249,7 @@ public class ApplicationTrackerTests
 
     // TC18
     [Fact]
-    public async Task OfferOnTerminalRejectedApp_StatusUnchangedAndNotificationStillQueued()
+    public async Task OfferOnTerminalRejectedApp_StatusUnchanged()
     {
         var db = Db.Fresh();
         Seed.Application(db, company: "Acme", status: ApplicationStatus.Rejected);
@@ -300,11 +257,10 @@ public class ApplicationTrackerTests
         var email = Make.Email();
         var clf = Make.Classification(category: "offer", company: "Acme");
 
-        var result = await ApplicationTracker.ProcessClassificationsAsync(db, [Fixtures.Pair(email, clf)]);
+        await ApplicationTracker.ProcessClassificationsAsync(db, [Fixtures.Pair(email, clf)]);
 
         var app = db.Applications.First();
         Assert.Equal(ApplicationStatus.Rejected, app.Status);
-        Assert.Equal(1, result.NotificationsQueued);
     }
 
     // TC19 — The dedup gap this closes: realistic LLM classification variance ("Acme Corp"

@@ -1,6 +1,6 @@
 # Job Search Agent
 
-An always-on, agentic job search management system. Monitors Gmail for job-related emails, discovers and evaluates job postings, generates tailored CVs and cover letters, and surfaces everything via a Telegram bot and a React dashboard.
+An always-on, agentic job search management system. Monitors Gmail for job-related emails, discovers and evaluates job postings, generates tailored CVs and cover letters, and surfaces everything via a React dashboard.
 
 ## Architecture
 
@@ -12,16 +12,12 @@ Gmail API ──────────────────────┐
                        ├── Job discovery & evaluation (Claude)
                        └── PostgreSQL (shared with API)
 
-Telegram webhook ──────────────┐
-                                ▼
                        JobSearch.Api (ASP.NET Core)
                        ├── GET /api/v1/... — dashboard data
-                       └── POST /api/v1/telegram/webhook
-                           ├── URL evaluation (Claude)
-                           ├── /cv — tailored CV → PDF
-                           ├── /letter — cover letter
-                           ├── /answer — conversational application Q&A
-                           └── /edit — revise a previous CV, letter, or answer
+                       ├── POST /api/v1/cv — tailored CV → PDF
+                       ├── POST /api/v1/letter — cover letter
+                       ├── POST /api/v1/answer — conversational application Q&A
+                       └── POST /api/v1/threads/{id}/edit — revise a previous CV, letter, or answer
 
                        JobSearch.Web (React SPA, nginx)
                        └── separate deployment, calls JobSearch.Api cross-origin
@@ -42,17 +38,9 @@ on the API to the frontend's URL.
 - Tracks application lifecycle — applied, screening, interviewing, offer, rejected, etc.
 
 ### Job posting evaluation
-- Send any job URL to the Telegram bot to get a structured evaluation
+- Discovered and alert-sourced postings are evaluated automatically; a URL, or pasted posting text, can also be submitted directly from the dashboard
 - Claude evaluates against configurable criteria defined in `skills/context/job_criteria.yaml` — location, stack, salary, experience level, company type, and hard disqualifiers
 - Output: structured breakdown with recommendation (strong/good/weak match or discard) and orange flags
-
-### Telegram bot commands
-- **Send a URL** — evaluate the posting, get a structured breakdown
-- **`/cv <url>`** — generate a tailored CV as a PDF download
-- **`/letter <url>`** — generate a tailored cover letter
-- **`/answer <question>`** — get a human-sounding answer to an application question, grounded in the candidate's real background
-- **`/edit <feedback>`** — reply to a CV, cover letter, or answer to get a revised version
-- `/cv`, `/letter`, and `/answer` all work by replying to a job notification for context; `/edit` always works by replying to whatever it should revise
 
 ### CV generation
 - Starts from a full base CV (`skills/context/cv_base.md`) and makes only targeted keyword/phrase additions for the specific role — preserving all existing content rather than regenerating from scratch
@@ -65,9 +53,9 @@ on the API to the frontend's URL.
 - Writing rules (tone, structure, length, banned phrases) are defined in `skills/write_cover_letter.md`
 
 ### Conversational application Q&A and revisions
-- `/answer <question>` answers free-text application questions ("What made you want to apply for this role?") in the candidate's voice — grounded in `skills/context/background.yaml`, never generic. If there isn't enough context to answer honestly, the bot asks one clarifying question back instead of guessing, and the conversation continues over Telegram replies.
-- `/edit <feedback>`, sent as a reply to any CV, cover letter, or answer the bot has produced, regenerates it with that feedback applied rather than starting over.
-- Both are backed by `AgentThread` (`JobSearch.Data/AgentThread.cs`), which tracks a conversation's turn history against the Telegram message id of the bot's latest reply, so a follow-up reply can always find its way back to the right thread — including replies to a CV, which arrives as a PDF document rather than text.
+- Answers free-text application questions ("What made you want to apply for this role?") in the candidate's voice — grounded in `skills/context/background.yaml`, never generic. If there isn't enough context to answer honestly, it asks one clarifying question back instead of guessing, and the conversation continues in the dashboard.
+- A revision request against any CV, cover letter, or answer regenerates it with that feedback applied rather than starting over.
+- Both are backed by `AgentThread` (`JobSearch.Data/AgentThread.cs`), which tracks a conversation's turn history by its own id, so a follow-up request always addresses the right thread.
 - Writing rules and the ask-vs-answer decision logic are defined in `skills/answer_application_question.md`.
 
 ### React dashboard
@@ -110,7 +98,7 @@ skills/
 | Auth | Google OAuth 2.0 + secure cookie sessions |
 | Deployment | Railway, Docker |
 | Email | Gmail API |
-| Notifications | Telegram Bot API (webhook) |
+| Notifications | Email (SendGrid) |
 
 ---
 
@@ -121,16 +109,15 @@ job-search/
 ├── skills/                   # Shared agent skill files (used by API + worker)
 │   └── context/              # Candidate data, CV base, job criteria
 ├── JobSearch.Api/            # ASP.NET Core API + React SPA host
-│   ├── Program.cs            # All routes + Telegram webhook handler
+│   ├── Program.cs            # All routes
 │   └── Services/
-│       ├── TelegramService.cs
 │       └── PdfRenderer.cs    # Markdown → PDF via QuestPDF
 ├── JobSearch.Data/           # Shared data layer (EF Core, agents)
 │   ├── AppDbContext.cs
 │   ├── CvTailorAgent.cs
 │   ├── CoverLetterAgent.cs
 │   ├── AnswerAgent.cs        # Conversational application Q&A
-│   ├── AgentThread.cs        # Tracks multi-turn Q&A / edit threads by Telegram message id
+│   ├── AgentThread.cs        # Tracks multi-turn Q&A / edit thread history by thread id
 │   ├── PostingEvaluator.cs
 │   ├── SkillLoader.cs        # Loads skill files from skills/ directory
 │   └── Migrations/
@@ -151,9 +138,6 @@ Set these in Railway (production) or `dotnet user-secrets` / `.env` (local).
 | `DATABASE_URL` | PostgreSQL connection string |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token from BotFather |
-| `TELEGRAM_WEBHOOK_SECRET` | Alphanumeric secret for webhook verification |
-| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
 | `ALLOWED_EMAIL` | Google account seeded as the owner's permanent Tier 1 + Tier 2 account at startup (sign-in itself is open to any Google account, which creates its own `Users` row) |
 | `GMAIL_CLIENT_ID` | Gmail API OAuth client ID (worker only) |
 | `GMAIL_CLIENT_SECRET` | Gmail API OAuth client secret (worker only) |
@@ -167,7 +151,6 @@ Set these in Railway (production) or `dotnet user-secrets` / `.env` (local).
 - .NET 10 SDK
 - Node.js 18+
 - PostgreSQL (or a Railway dev database)
-- Telegram bot registered via BotFather
 
 ### Start everything
 
@@ -185,26 +168,12 @@ This starts three processes:
 | `[WEB]` | Vite dev server on `http://localhost:5173` |
 | `[AGENT]` | Runs the Gmail worker once, then exits |
 
-### Register the Telegram webhook
-
-After deploying (or when your Railway URL changes):
-
-```
-https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<your-railway-url>/api/v1/telegram/webhook&secret_token=<WEBHOOK_SECRET>
-```
-
-Verify with:
-
-```
-https://api.telegram.org/bot<TOKEN>/getWebhookInfo
-```
-
 ---
 
 ## Security
 
 - Google OAuth restricts dashboard access to a single configured email address
-- Telegram webhook is verified with a secret token on every request
+- Public webhooks (SendGrid inbound, Sentry) are verified with a shared secret on every request
 - `__Host-` cookie prefix with `HttpOnly`, `Secure`, `SameSite=Strict` in production
 - HSTS, CSP, and standard security headers on all responses
 - No secrets in source — all via environment variables or `dotnet user-secrets`
