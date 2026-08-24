@@ -24,6 +24,7 @@ public static class ClaudeAgentName
     public const string AnswerAgent = "AnswerAgent";
     public const string EmailClassifier = "EmailClassifier";
     public const string ResumeIntakeAgent = "ResumeIntakeAgent";
+    public const string ResumeBackfillAgent = "ResumeBackfillAgent";
     public const string PostingMatcherAgent = "PostingMatcherAgent";
     public const string CompanyExtractorAgent = "CompanyExtractorAgent";
     public const string AccuracyVerifierAgent = "AccuracyVerifierAgent";

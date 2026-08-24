@@ -269,6 +269,7 @@ builder.Services.AddSingleton(sp => new CoverLetterAgent(anthropicApiKey, sp.Get
 builder.Services.AddSingleton(sp => new CvTailorAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new AnswerAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new ResumeIntakeAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(sp => new ResumeBackfillAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new PostingMatcherAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new CompanyExtractorAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new AccuracyVerifierAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
@@ -1006,7 +1007,7 @@ api.MapPost("/profile/resume-pdf", async (HttpRequest request, HttpContext ctx, 
 }).RequireRateLimiting("generation");
 
 // PUT /api/v1/profile — partial update: only provided fields change.
-api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbContext db) =>
+api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbContext db, ResumeBackfillAgent backfillAgent) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     var profile = await db.UserProfiles.FindAsync(userId);
@@ -1017,6 +1018,29 @@ api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbC
     if (body.JobCriteria is not null) profile.JobCriteria = body.JobCriteria;
     profile.UpdatedAt = DateTime.UtcNow;
     await db.SaveChangesAsync();
+
+    // A fresh CvBase means this save is a resume intake/replace event (it's the only way CvBase
+    // ever gets set — see ResumeIntakePage.tsx/SettingsPage.tsx, there's no direct text editor
+    // for it). Reuses the exact same reconciliation the admin backfill endpoint uses, so a
+    // brand-new signup during the Deploy A/B rollout window still ends up with a UserResume row
+    // by the time Deploy B makes one required — same call, not a separate mechanism. Best-effort:
+    // a transient failure here must not fail the profile save itself (Background/CvBase already
+    // committed above); the owner can retry via POST /admin/users/{id}/backfill-resume, same as
+    // any other not-yet-migrated account.
+    if (body.CvBase is not null)
+    {
+        try
+        {
+            db.UserResumes.RemoveRange(db.UserResumes.Where(r => r.UserId == userId));
+            var result = await backfillAgent.BackfillAsync(userId, profile.Background, profile.CvBase);
+            db.UserResumes.Add(BuildUserResume(userId, result));
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            await Console.Error.WriteLineAsync($"UserResume seeding failed for user {userId}, will need a manual admin backfill: {ex}");
+        }
+    }
 
     return Results.Ok(new { profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt });
 });
@@ -1281,6 +1305,44 @@ api.MapPost("/admin/invite", async (HttpContext ctx, InviteRequest body, AppDbCo
     return Results.Ok(new { email, emailSent });
 });
 
+// POST /api/v1/admin/users/{id}/backfill-resume — owner only. One-time, per-user migration from
+// the old free-text CvBase to the new structured UserResume (resume-builder Phase 1). Idempotent:
+// a UserResume row already existing for this user IS the "already migrated" signal, no separate
+// flag needed (see UserResume.cs). Doesn't touch CvBase/Background — additive only, so a failed
+// or skipped migration never regresses the still-live legacy generation path.
+//
+// Warnings, not a hard failure: real content loss is possible if the old CvBase has a section
+// with no clean structured equivalent (confirmed against real data during Phase 1 planning — see
+// the Phase 1 plan's note on Skills/Projects needing override fields at all). Rather than trying
+// to detect every such case inside the agent, this diffs the old CvBase's actual `##` headings
+// against what the freshly-migrated data renders — any heading that would silently vanish is
+// surfaced here for manual review before Deploy B, not silently dropped.
+api.MapPost("/admin/users/{id:int}/backfill-resume", async (int id, HttpContext ctx, AppDbContext db, ResumeBackfillAgent backfillAgent) =>
+{
+    var (_, error) = await RequireOwnerAsync(db, CurrentUserId(ctx, UserIdClaimType));
+    if (error is not null) return error;
+
+    var profile = await db.UserProfiles.FindAsync(id);
+    if (profile is null) return Results.NotFound();
+
+    if (await db.UserResumes.FindAsync(id) is not null)
+        return Results.Ok(new { userId = id, alreadyMigrated = true });
+
+    var result = await backfillAgent.BackfillAsync(id, profile.Background, profile.CvBase);
+    var resume = BuildUserResume(id, result);
+
+    var background = BackgroundYamlParser.Parse(profile.Background);
+    var rendered = ResumeRenderer.Render(background, resume);
+    var warnings = MarkdownHeadings(profile.CvBase).Except(MarkdownHeadings(rendered), StringComparer.OrdinalIgnoreCase)
+        .Select(h => $"CvBase had a \"{h}\" section that the migrated data doesn't render — check manually.")
+        .ToList();
+
+    db.UserResumes.Add(resume);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new { userId = id, alreadyMigrated = false, warnings });
+});
+
 // POST /api/v1/account/cancel — body: { deleteData: bool }. Soft-deactivates the account
 // (blocks future login) and signs out the current session immediately. Doesn't revoke any
 // other active session for this account elsewhere — there's no server-side session store to
@@ -1503,6 +1565,28 @@ async Task<(User? User, IResult? Error)> RequireOwnerAsync(AppDbContext db, int 
         return (null, Results.Json(new { error = "Owner only" }, statusCode: StatusCodes.Status403Forbidden));
     return (user, null);
 }
+
+// The resume backfill's content-loss safety net — see its endpoint comment. Deliberately just
+// "## " lines, not full markdown parsing: PdfRenderer's own supported subset is the same small
+// set (#/##/###/bullets/bold/---), so a `##` heading is exactly the granularity a whole missing
+// "section" would show up at.
+static HashSet<string> MarkdownHeadings(string markdown) =>
+    [.. markdown.ReplaceLineEndings("\n").Split('\n')
+        .Where(l => l.StartsWith("## "))
+        .Select(l => l[3..].Trim())];
+
+// Shared by the admin backfill endpoint and PUT /profile's new-intake seeding — same mapping
+// from a ResumeBackfillResult to the row that gets saved.
+static UserResume BuildUserResume(int userId, ResumeBackfillResult result) => new()
+{
+    UserId = userId,
+    Summary = result.Summary,
+    SectionConfigJson = JsonSerializer.Serialize(result.SectionConfig),
+    ExperienceOverridesJson = JsonSerializer.Serialize(result.ExperienceOverrides),
+    SkillsSectionJson = JsonSerializer.Serialize(result.SkillsSection),
+    ProjectOverridesJson = JsonSerializer.Serialize(result.ProjectOverrides),
+    UpdatedAt = DateTime.UtcNow,
+};
 
 // Shared by /cv and /letter — identical shape (resolve posting → generate → save a Complete
 // thread → spend a credit → return { threadId, text }), differing only in which agent
