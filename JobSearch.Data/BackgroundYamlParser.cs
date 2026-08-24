@@ -16,14 +16,25 @@ public static class BackgroundYamlParser
         .IgnoreUnmatchedProperties()
         .Build();
 
-    // Never throws on a genuinely malformed document — the migration/backfill path (which is
-    // where "existing user's YAML doesn't quite parse" would actually surface) treats a parse
-    // failure as "nothing extractable" and falls through to defaults, not a hard error, since
-    // background.yaml was hand-authored/AI-authored prose-adjacent text, not a strict API
-    // contract before this parser existed.
+    // Never throws on a genuinely malformed document. This matters beyond the original
+    // migration/backfill use case now: GET /auth/me calls this on nearly every authenticated
+    // page load (for the dashboard's firstName greeting), so a parse exception here would be a
+    // hot-path outage, not a one-time admin-tool failure. background.yaml was hand-authored/
+    // AI-authored prose-adjacent text, not a strict API contract before this parser existed —
+    // production data has already surfaced real shape mismatches (Stack/TechStack/Anchors,
+    // fixed by dropping those fields from BackgroundData), and there's no guarantee every field
+    // still in the schema is safe for every user's document. A parse failure falls through to
+    // "nothing extractable" (empty BackgroundData), not a hard error.
     public static BackgroundData Parse(string yamlText)
     {
         if (string.IsNullOrWhiteSpace(yamlText)) return new BackgroundData();
-        return Deserializer.Deserialize<BackgroundData>(yamlText) ?? new BackgroundData();
+        try
+        {
+            return Deserializer.Deserialize<BackgroundData>(yamlText) ?? new BackgroundData();
+        }
+        catch
+        {
+            return new BackgroundData();
+        }
     }
 }

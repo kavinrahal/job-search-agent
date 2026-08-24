@@ -115,6 +115,21 @@ public class BackgroundYamlParserTests
     }
 
     [Fact]
+    public void Parse_GenuinelyInvalidYamlSyntax_ReturnsDefaultInsteadOfThrowing()
+    {
+        // Deploy B calls this on GET /auth/me — nearly every authenticated page load — so a
+        // parse exception here is a hot-path outage, not a one-time admin-tool failure. This is
+        // not a shape mismatch (like the Stack test above); it's YAML that doesn't parse as YAML
+        // at all, the kind of failure the deserializer call itself can throw on.
+        const string malformed = "personal:\n  name: [unterminated flow sequence\nexperience: - not: valid: nesting: at: all";
+
+        var data = BackgroundYamlParser.Parse(malformed);
+
+        Assert.Equal("", data.Personal.Name);
+        Assert.Empty(data.Experience);
+    }
+
+    [Fact]
     public void Parse_NewOptionalSections_RoundTripWhenPresent()
     {
         const string yaml = """

@@ -113,6 +113,44 @@ public class ResumeRendererTests
     }
 
     [Fact]
+    public void Render_AchievementOrder_MovesItemAheadOfUntouchedOnes()
+    {
+        // Feature C (index 2) moved to lead the list via Order=0; A and B keep their natural
+        // relative order (indices 0, 1) among the untouched items.
+        var resume = EmptyResume();
+        resume.ExperienceOverridesJson = JsonSerializer.Serialize(new List<ExperienceOverride>
+        {
+            new(0, true, null, [new ItemOverride(2, true, null, Order: 0)], [], null),
+        });
+
+        var output = ResumeRenderer.Render(BackgroundWithOneRole(), resume);
+
+        Assert.Contains("- Shipped feature C.\n- Shipped feature A.\n- Shipped feature B.", output);
+    }
+
+    [Fact]
+    public void Render_NoOrderSet_KeepsNaturalIndexOrder()
+    {
+        var output = ResumeRenderer.Render(BackgroundWithOneRole(), EmptyResume());
+
+        Assert.Contains("- Shipped feature A.\n- Shipped feature B.\n- Shipped feature C.", output);
+    }
+
+    [Fact]
+    public void Render_ExtraAchievements_AlwaysAppendAfterOrderedSurvivors()
+    {
+        var resume = EmptyResume();
+        resume.ExperienceOverridesJson = JsonSerializer.Serialize(new List<ExperienceOverride>
+        {
+            new(0, true, null, [new ItemOverride(2, true, null, Order: 0)], ["Synthesized extra."], null),
+        });
+
+        var output = ResumeRenderer.Render(BackgroundWithOneRole(), resume);
+
+        Assert.Contains("- Shipped feature C.\n- Shipped feature A.\n- Shipped feature B.\n- Synthesized extra.", output);
+    }
+
+    [Fact]
     public void Render_ExtraAchievement_AppendsSynthesizedBulletWithNoBackgroundSource()
     {
         // Confirmed necessary against real data: cv_base.md's real Willow entry has bullets with

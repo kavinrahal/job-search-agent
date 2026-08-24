@@ -64,6 +64,19 @@ public static class Make
         JobCriteria = SkillLoader.Load("context/job_criteria.yaml"),
     };
 
+    // Empty/default UserResume — CvTailorAgent's system prompt still gets the full real
+    // background.yaml content regardless (see OwnerProfile above), so contract tests exercising
+    // the real API don't need a curated base resume to produce realistic, non-empty output.
+    public static UserResume OwnerResume() => new()
+    {
+        UserId = Db.TestUserId,
+        Summary = "",
+        SectionConfigJson = "[]",
+        ExperienceOverridesJson = "[]",
+        SkillsSectionJson = "[]",
+        ProjectOverridesJson = "[]",
+    };
+
     public static RawEmail Email(
         string messageId = "msg-1",
         string subject = "Test subject",

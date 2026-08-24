@@ -125,16 +125,30 @@ public static class ResumeRenderer
     }
 
     // Shared by Experience achievements and Project highlights — same override shape (ItemOverride),
-    // same rule: indexed override (text swap or exclude) applied over the base list, then extras
-    // (bullets with no Background source at all) appended.
+    // same rule: indexed override (text swap, exclude, or reorder) applied over the base list,
+    // then extras (bullets with no Background source at all) appended last.
+    //
+    // Sort key is a (group, key) pair, not a single number — explicitly-ordered items always
+    // sort as group 0 (by their Order value), untouched items as group 1 (by natural index).
+    // A single shared "Order ?? naturalIndex" number looks simpler but is wrong: an untouched
+    // item's natural index can numerically collide with another item's explicit Order (e.g. the
+    // first untouched item is naturally at 0, and a moved item is also given Order=0), and a
+    // stable sort resolves that tie by original list position — silently losing the "move to
+    // front" the override asked for. The two-group split makes an explicit Order unconditionally
+    // win, with natural order preserved as a stable tie-break within each group.
     private static void RenderBulletList(StringBuilder sb, List<string> baseItems, List<ItemOverride> overrides, List<string> extras)
     {
+        var survivors = new List<(int group, int key, string text)>();
         for (var i = 0; i < baseItems.Count; i++)
         {
             var over = overrides.FirstOrDefault(x => x.Index == i);
             if (over is { Included: false }) continue;
-            sb.Append("- ").Append((over?.TextOverride ?? baseItems[i]).Trim()).Append('\n');
+            var group = over?.Order is not null ? 0 : 1;
+            var key = over?.Order ?? i;
+            survivors.Add((group, key, (over?.TextOverride ?? baseItems[i]).Trim()));
         }
+        foreach (var (_, _, text) in survivors.OrderBy(s => s.group).ThenBy(s => s.key))
+            sb.Append("- ").Append(text).Append('\n');
         foreach (var extra in extras)
             sb.Append("- ").Append(extra.Trim()).Append('\n');
     }

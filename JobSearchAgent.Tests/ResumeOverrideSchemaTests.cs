@@ -5,8 +5,10 @@ namespace JobSearchAgent.Tests;
 
 // Extraction-only tests, same principle as ResumeIntakeAgentTests — verifies the tool-response
 // parsing logic without a live API call, using JsonDocument to build inputs shaped exactly like
-// what Anthropic's tool_use.input would contain.
-public class ResumeBackfillAgentTests
+// what Anthropic's tool_use.input would contain. Covers ResumeOverrideSchema, shared by
+// ResumeBackfillAgent (Deploy A, one-time migration) and CvTailorAgent (Deploy B, per-application
+// tailoring) — both populate the same shapes via different judgment rules.
+public class ResumeOverrideSchemaTests
 {
     private static IReadOnlyDictionary<string, JsonElement> Input(string json)
     {
@@ -19,7 +21,7 @@ public class ResumeBackfillAgentTests
     {
         var input = Input("""{"section_config": [{"section_key": "experience", "included": true}, {"section_key": "skills", "included": false}]}""");
 
-        var result = ResumeBackfillAgent.ExtractSectionConfig(input, "section_config");
+        var result = ResumeOverrideSchema.ExtractSectionConfig(input, "section_config");
 
         Assert.Equal(2, result.Count);
         Assert.Equal(new SectionConfigEntry("experience", true), result[0]);
@@ -29,7 +31,7 @@ public class ResumeBackfillAgentTests
     [Fact]
     public void ExtractSectionConfig_MissingKey_ReturnsEmpty()
     {
-        var result = ResumeBackfillAgent.ExtractSectionConfig(Input("{}"), "section_config");
+        var result = ResumeOverrideSchema.ExtractSectionConfig(Input("{}"), "section_config");
 
         Assert.Empty(result);
     }
@@ -59,7 +61,7 @@ public class ResumeBackfillAgentTests
             }
             """);
 
-        var result = ResumeBackfillAgent.ExtractExperienceOverrides(input, "experience_overrides");
+        var result = ResumeOverrideSchema.ExtractExperienceOverrides(input, "experience_overrides");
 
         Assert.Equal(2, result.Count);
         Assert.Equal(0, result[0].ExperienceIndex);
@@ -76,6 +78,32 @@ public class ResumeBackfillAgentTests
     }
 
     [Fact]
+    public void ExtractItemOverrides_ParsesOrderWhenPresent_NullWhenOmitted()
+    {
+        var input = Input("""
+            {
+              "experience_overrides": [
+                {
+                  "experience_index": 0,
+                  "included": true,
+                  "achievements": [
+                    {"index": 2, "included": true, "order": 0},
+                    {"index": 0, "included": true}
+                  ],
+                  "extra_achievements": []
+                }
+              ]
+            }
+            """);
+
+        var result = ResumeOverrideSchema.ExtractExperienceOverrides(input, "experience_overrides");
+
+        var achievements = result[0].Achievements;
+        Assert.Equal(0, achievements[0].Order);
+        Assert.Null(achievements[1].Order);
+    }
+
+    [Fact]
     public void ExtractSkillsSection_TranscribesLabelsAndItemsVerbatim()
     {
         var input = Input("""
@@ -85,7 +113,7 @@ public class ResumeBackfillAgentTests
             ]}
             """);
 
-        var result = ResumeBackfillAgent.ExtractSkillsSection(input, "skills_section");
+        var result = ResumeOverrideSchema.ExtractSkillsSection(input, "skills_section");
 
         Assert.Equal(2, result.Count);
         Assert.Equal("Languages", result[0].Label);
@@ -110,7 +138,7 @@ public class ResumeBackfillAgentTests
             }
             """);
 
-        var result = ResumeBackfillAgent.ExtractProjectOverrides(input, "project_overrides");
+        var result = ResumeOverrideSchema.ExtractProjectOverrides(input, "project_overrides");
 
         var project = Assert.Single(result);
         Assert.Equal("Short tailored description.", project.DescriptionOverride);
@@ -128,7 +156,7 @@ public class ResumeBackfillAgentTests
             {"experience_overrides": [{"experience_index": 0, "achievements": [], "extra_achievements": []}]}
             """);
 
-        var result = ResumeBackfillAgent.ExtractExperienceOverrides(input, "experience_overrides");
+        var result = ResumeOverrideSchema.ExtractExperienceOverrides(input, "experience_overrides");
 
         Assert.True(Assert.Single(result).Included);
     }
