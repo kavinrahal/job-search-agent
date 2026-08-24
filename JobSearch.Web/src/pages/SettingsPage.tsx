@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useProfile, useUpdateProfile, useParseResumePdf, useUploadResumePdf } from "../hooks/useProfile";
 import { useMe, useCancelAccount, useUpgradeToTier2, useInviteToTier2 } from "../hooks/useAuth";
+import { useSyncedState } from "../hooks/useSyncedState";
 import { resumePdfUrl } from "../api";
 import { BackgroundEditor } from "../components/BackgroundEditor";
 import { JobCriteriaEditor } from "../components/JobCriteriaEditor";
@@ -9,18 +10,22 @@ import { parseBackgroundYaml, serializeBackgroundYaml, type BackgroundParseResul
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
 import { PageTagline } from "../components/PageTagline";
 import { CARD, PRIMARY_BUTTON } from "../lib/styles";
+import type { Profile } from "../types";
 
 export function SettingsPage() {
   const { data: profile, loading: loadingProfile } = useProfile();
-  const [background, setBackground] = useState<BackgroundParseResult | null>(null);
-  const [jobCriteria, setJobCriteria] = useState<JobCriteriaData | null>(null);
-  const [cvBase, setCvBase] = useState("");
-  const [hasResumePdf, setHasResumePdf] = useState(false);
+  // Each of these five fields hydrates from the same `profile` load, then edits locally from
+  // there — same idiom as JobCriteriaPage/CriteriaWizard/ResumeBuilderPage, just fanned out
+  // across more than one piece of local state.
+  const [background, setBackground] = useSyncedState<Profile, BackgroundParseResult | null>(profile, null, p => parseBackgroundYaml(p.background));
+  const [jobCriteria, setJobCriteria] = useSyncedState<Profile, JobCriteriaData | null>(profile, null, p => parseJobCriteriaYaml(p.jobCriteria));
+  const [cvBase, setCvBase] = useSyncedState<Profile, string>(profile, "", p => p.cvBase);
+  const [hasResumePdf] = useSyncedState<Profile, boolean>(profile, false, p => p.hasResumePdf);
+  const [updatedAt] = useSyncedState<Profile, string | null>(profile, null, p => p.updatedAt);
   // A picked-but-not-yet-saved replacement — previewed locally, only persisted on Save
   // (same reasoning as ResumeIntakePage: keep the stored PDF and stored CV text consistent
   // with each other rather than one landing ahead of the other).
   const [newResumeFile, setNewResumeFile] = useState<File | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteResult, setInviteResult] = useState<{ email: string; emailSent: boolean } | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -36,15 +41,6 @@ export function SettingsPage() {
   const invite = useInviteToTier2();
   const parsePdf = useParseResumePdf();
   const uploadPdf = useUploadResumePdf();
-
-  useEffect(() => {
-    if (!profile) return;
-    setBackground(parseBackgroundYaml(profile.background));
-    setJobCriteria(parseJobCriteriaYaml(profile.jobCriteria));
-    setCvBase(profile.cvBase);
-    setHasResumePdf(profile.hasResumePdf);
-    setUpdatedAt(profile.updatedAt);
-  }, [profile]);
 
   // Replacing the PDF only ever updates the CV text and file — it deliberately leaves
   // Background untouched. Background can carry hand-added detail (project write-ups, extra

@@ -1,5 +1,6 @@
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
 import { useProfile, useUpdateProfile } from "../hooks/useProfile";
+import { useSyncedState } from "../hooks/useSyncedState";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
 import { COUNTRIES, COUNTRY_TO_CURRENCY } from "../lib/regionData";
 import { Field, INPUT } from "./CardEditor";
@@ -162,9 +163,17 @@ function LocationStep({ data, onNext, ...nav }: StepProps) {
   ]);
 
   function commit() {
+    // country's initial value comes from data.countries, which can carry an arbitrary string
+    // typed into the full editor's raw-YAML Advanced box (parseJobCriteriaYaml doesn't validate
+    // it against COUNTRIES) — a plain `COUNTRY_TO_CURRENCY[country]` read would resolve an
+    // inherited key like "constructor" from Object.prototype instead of falling through to
+    // data.currency, since the result is a truthy function rather than undefined. hasOwnProperty
+    // makes this an own-key-only lookup so an unmapped/unexpected country always falls back.
+    const hasCurrency = Object.prototype.hasOwnProperty.call(COUNTRY_TO_CURRENCY, country);
     onNext({
       countries: country,
-      currency: country ? (COUNTRY_TO_CURRENCY[country] ?? data.currency) : data.currency,
+      // eslint-disable-next-line security/detect-object-injection -- guarded by hasOwnProperty above
+      currency: hasCurrency ? COUNTRY_TO_CURRENCY[country] : data.currency,
       remoteAccepted: arrangements.includes("remote"),
       hybridAccepted: arrangements.includes("hybrid"),
       onsiteAccepted: arrangements.includes("onsite"),
@@ -326,17 +335,13 @@ const STEP_COMPONENTS: Record<StepId, ComponentType<StepProps>> = {
 export function CriteriaWizard({ tier, onSaved }: { tier: string; onSaved: () => void }) {
   const { data: profile, loading: loadingProfile } = useProfile();
   const { execute } = useUpdateProfile();
-  const [data, setData] = useState<JobCriteriaData>(EMPTY);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
   // Reflects whatever's already saved rather than always starting blank — re-entering the
   // wizard (or a returning user who filled some of this in via the full editor) sees their
   // real answers pre-filled, not a fresh start. Only Tier2 needs Target job titles: it drives
   // automatic discovery, not fit-scoring, and doesn't apply to Tier1 at all.
-  useEffect(() => {
-    if (profile) setData(parseJobCriteriaYaml(profile.jobCriteria));
-  }, [profile]);
+  const [data, setData] = useSyncedState(profile, EMPTY, p => parseJobCriteriaYaml(p.jobCriteria));
+  const [stepIndex, setStepIndex] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const steps: StepId[] = tier === "Tier2"
     ? ["titles", "experience", "skills", "employment", "location", "salary", "sponsorship", "disqualifiers"]
@@ -370,7 +375,11 @@ export function CriteriaWizard({ tier, onSaved }: { tier: string; onSaved: () =>
     return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
   }
 
+  // stepIndex is clamped to [0, steps.length - 1] by commit() above, and stepId is always a
+  // StepId so STEP_COMPONENTS (a Record<StepId, ...>) is a fully typed, closed lookup.
+  // eslint-disable-next-line security/detect-object-injection
   const stepId = steps[stepIndex];
+  // eslint-disable-next-line security/detect-object-injection
   const StepComponent = STEP_COMPONENTS[stepId];
 
   return (

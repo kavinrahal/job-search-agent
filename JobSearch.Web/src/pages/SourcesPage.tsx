@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useSources, useUpdateSources, useUpdateGmailTrackingMode, useGmailForwardingStatus } from "../hooks/useSources";
+import { useSyncedState } from "../hooks/useSyncedState";
 import { gmailOAuthStartUrl } from "../api";
 import type { SourcesResponse } from "../types";
 import { InfoTooltip } from "../components/InfoTooltip";
@@ -182,15 +183,11 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
 
 export function SourcesPage({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const { data, loading: loadingSources } = useSources();
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useSyncedState<SourcesResponse, string[]>(data, [], d => d.enabled);
   const [saved, setSaved] = useState(false);
   const { execute, loading: saving, error } = useUpdateSources();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (data) setSelected(data.enabled);
-  }, [data]);
 
   function toggle(key: string) {
     setSelected(s => (s.includes(key) ? s.filter(k => k !== key) : [...s, key]));

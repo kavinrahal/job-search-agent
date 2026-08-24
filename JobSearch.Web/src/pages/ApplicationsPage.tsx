@@ -37,6 +37,9 @@ function StatusSelect({ status, onChange }: { status: string; onChange: (next: s
       value={status}
       onClick={e => e.stopPropagation()}
       onChange={e => onChange(e.target.value)}
+      // status is a backend application-status enum value, and the ?? fallback already covers
+      // anything outside the known set (same call as Tier2Dashboard/DiscoveriesPage's lookups).
+      // eslint-disable-next-line security/detect-object-injection
       className={`rounded-full border-0 px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[status] ?? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}
     >
       {APPLICATION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}

@@ -163,8 +163,7 @@ function SkillsSection({ value, onChange }: { value: Record<string, string[]>; o
     onChange({ ...value, [category]: text.split(",").map(s => s.trim()).filter(Boolean) });
   }
   function removeCategory(category: string) {
-    const { [category]: _removed, ...rest } = value;
-    onChange(rest);
+    onChange(Object.fromEntries(Object.entries(value).filter(([key]) => key !== category)));
   }
   function addCategory() {
     let name = "new category", n = 1;
@@ -188,6 +187,8 @@ function SkillsSection({ value, onChange }: { value: Record<string, string[]>; o
               <input
                 className={INPUT}
                 placeholder="Comma-separated"
+                // category is always one of value's own keys (from categories = Object.keys(value) above), not external input.
+                // eslint-disable-next-line security/detect-object-injection
                 defaultValue={value[category].join(", ")}
                 onBlur={e => setItems(category, e.target.value)}
               />

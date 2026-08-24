@@ -53,13 +53,18 @@ const SOURCE_STYLES: Record<string, string> = {
   adzuna:         "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
 };
 
+// source is a backend Source enum value (see the fetcher comment above SOURCE_LABELS), and the
+// ?? fallback already covers any value outside the known set — same call across this file's
+// other Record lookups (REC_STYLES/REC_LABELS/MATCH_STYLES below).
 function sourceLabel(source: string): string {
+  // eslint-disable-next-line security/detect-object-injection
   return SOURCE_LABELS[source] ?? source.replace(/_alert$/, "").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function SourceBadge({ source }: { source: string }) {
   if (!source) return null;
   return (
+    // eslint-disable-next-line security/detect-object-injection
     <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${SOURCE_STYLES[source] ?? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
       {sourceLabel(source)}
     </span>
@@ -80,8 +85,10 @@ const MATCH_STYLES: Record<string, string> = {
   flagged_high:    "text-amber-600 dark:text-amber-400",
 };
 
+// value is a backend match-tier enum value; ?? fallback covers anything unrecognized.
 function matchStyle(value: string | null): string {
   if (!value) return "text-gray-400 dark:text-gray-500";
+  // eslint-disable-next-line security/detect-object-injection
   return MATCH_STYLES[value] ?? "text-gray-600 dark:text-gray-400";
 }
 
@@ -103,10 +110,14 @@ function discoveredLabel(iso: string): string {
 // ---------------------------------------------------------------------------
 // Recommendation badge
 // ---------------------------------------------------------------------------
+// rec is a backend recommendation enum value (strong_match/good_match/weak_match/discard);
+// both lookups below fall back gracefully for anything else.
 function RecBadge({ rec }: { rec: string | null }) {
   if (!rec) return null;
   return (
+    // eslint-disable-next-line security/detect-object-injection
     <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${REC_STYLES[rec] ?? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
+      {/* eslint-disable-next-line security/detect-object-injection */}
       {REC_LABELS[rec] ?? rec}
     </span>
   );
@@ -356,6 +367,8 @@ export function DiscoveriesPage() {
             ? "No postings found yet. The agent will notify you when it finds one."
             : activeTab === "strong_match"
             ? "No strong matches yet. The agent will notify you when it finds one."
+            // activeTab only ever comes from clicking one of the four hardcoded REC_TABS values.
+            // eslint-disable-next-line security/detect-object-injection
             : `No ${REC_LABELS[activeTab] ?? activeTab.replace("_", " ")} postings found.`}
         </div>
       ) : (
