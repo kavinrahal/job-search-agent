@@ -34,7 +34,7 @@ public class EvalFormatterTests
     // -------------------------------------------------------------------------
 
     // TC09 — "strong_match" recommendation maps to human-readable label
-    // Silent failure: a typo in the switch branch silently shows raw enum string in Telegram.
+    // Silent failure: a typo in the switch branch silently shows the raw enum string to the user.
     [Fact]
     public void Format_StrongMatch_ShowsStrongMatchLabel()
     {
@@ -67,8 +67,7 @@ public class EvalFormatterTests
         Assert.DoesNotContain("• ", output);
     }
 
-    // TC12 — Non-null SourceUrl: raw URL appears in output (plain text, Telegram auto-links it)
-    // Raw URL (not anchor) is required so reply_to_message.text contains it for /cv and /letter commands.
+    // TC12 — Non-null SourceUrl: raw URL appears in output as plain text, not an HTML anchor.
     [Fact]
     public void Format_WithSourceUrl_RawUrlInOutput()
     {

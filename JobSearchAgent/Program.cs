@@ -90,18 +90,13 @@ var gmailSettingsClient = clientId is not null && clientSecret is not null
     : null;
 var sendGridInboundDomain = config["SENDGRID_INBOUND_DOMAIN"];
 
-// Telegram stays personal-use-only, never extended per-user (see the Telegram retirement
-// decision) — only the owner's iteration below actually sends via it.
-var botToken = config["TELEGRAM_BOT_TOKEN"];
-var chatId   = config["TELEGRAM_CHAT_ID"];
-
 var adzunaAppId  = config["ADZUNA_APP_ID"];
 var adzunaAppKey = config["ADZUNA_APP_KEY"];
 
-// Unlike Telegram, email notifications aren't owner-only — every user has an email from
-// their Google login, so this goes to any Tier2 user a match is found for. Same
-// SENDGRID_API_KEY/SENDGRID_FROM_EMAIL config the beta-invite email already uses (Mail
-// Send permission — separate from SENDGRID_INBOUND_SECRET, which only ever receives).
+// Every user has an email from their Google login, so this goes to any Tier2 user a match
+// is found for. Same SENDGRID_API_KEY/SENDGRID_FROM_EMAIL config the beta-invite email
+// already uses (Mail Send permission — separate from SENDGRID_INBOUND_SECRET, which only
+// ever receives).
 var sendGridApiKey = config["SENDGRID_API_KEY"];
 var sendGridFromEmail = config["SENDGRID_FROM_EMAIL"];
 var emailer = sendGridApiKey is not null && sendGridFromEmail is not null
@@ -307,8 +302,6 @@ await WorkerLockService.ReleaseAsync(db);
 // moment they're Tier 2, no OAuth prerequisite. Fresh AppDbContext per user, same reasoning
 // as ProcessUserAsync below.
 // ---------------------------------------------------------------------------
-bool IsOwnerWithTelegram(User user) => user.Id == owner.Id && botToken is not null && chatId is not null;
-
 async Task<(int Discovered, int Evaluated, int Notified)> RunDiscoveryForUserAsync(User user)
 {
     await using var userDb = new AppDbContext(dbOptions) { CurrentUserId = user.Id };
@@ -327,10 +320,8 @@ async Task<(int Discovered, int Evaluated, int Notified)> RunDiscoveryForUserAsy
         return (0, 0, 0);
     }
 
-    bool sendTelegram = IsOwnerWithTelegram(user);
-    using var discoveryTelegram = sendTelegram ? new TelegramNotifier(botToken!, chatId!) : null;
     var discovery = new JobDiscoveryWorker(
-        userDb, fetchers, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), discoveryTelegram, emailer);
+        userDb, fetchers, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), emailer);
     return await discovery.RunAsync();
 }
 
@@ -342,7 +333,6 @@ async Task<(int Discovered, int Evaluated, int Notified)> RunDiscoveryForUserAsy
 async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> ProcessUserAsync(User user)
 {
     await using var userDb = new AppDbContext(dbOptions) { CurrentUserId = user.Id };
-    bool sendTelegram = IsOwnerWithTelegram(user);
 
     var refreshToken = await userSecrets.GetAsync(userDb, user.Id, UserSecretKey.GmailRefreshToken);
     if (refreshToken is null || clientId is null || clientSecret is null)
@@ -426,7 +416,7 @@ async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> Proce
     {
         Console.WriteLine("Nothing to classify.");
         if (!testMode)
-            await RunAlertProcessingAsync(userDb, sendTelegram);
+            await RunAlertProcessingAsync(userDb);
         return (emails.Count, 0, 0);
     }
 
@@ -441,28 +431,7 @@ async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> Proce
     // Process job alert emails — query all stored alerts so previously-classified
     // ones are retried each run (dedup in JobAlertProcessor handles already-done URLs).
     if (!testMode)
-        await RunAlertProcessingAsync(userDb, sendTelegram);
-
-    if (sendTelegram)
-    {
-        var pending = await userDb.Notifications.Where(n => n.SentAt == null).ToListAsync();
-        if (pending.Count > 0)
-        {
-            using var telegram = new TelegramNotifier(botToken!, chatId!);
-            var sentAt = DateTime.UtcNow;
-            int sent = 0;
-            foreach (var notification in pending)
-            {
-                if (await telegram.SendAsync(notification.Message))
-                {
-                    notification.SentAt = sentAt;
-                    sent++;
-                }
-            }
-            await userDb.SaveChangesAsync();
-            Console.WriteLine($"Telegram: {sent}/{pending.Count} notification(s) sent.");
-        }
-    }
+        await RunAlertProcessingAsync(userDb);
 
     if (jobRelated.Count > 0)
     {
@@ -544,8 +513,8 @@ async Task<(List<(RawEmail Email, EmailClassification Classification)> Results, 
     await userDb.SaveChangesAsync();
 
     var tracking = await ApplicationTracker.ProcessClassificationsAsync(userDb, results);
-    if (tracking.Created > 0 || tracking.Updated > 0 || tracking.NotificationsQueued > 0)
-        Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated, {tracking.NotificationsQueued} notifications queued.");
+    if (tracking.Created > 0 || tracking.Updated > 0)
+        Console.WriteLine($"Applications: {tracking.Created} created, {tracking.Updated} updated.");
 
     await AutoCaptureAcknowledgmentDomainsAsync(userDb, user, results);
 
@@ -600,7 +569,7 @@ async Task AutoCaptureAcknowledgmentDomainsAsync(
 // ---------------------------------------------------------------------------
 // Load all stored job_alert emails from DB and run the alert processor.
 // ---------------------------------------------------------------------------
-async Task RunAlertProcessingAsync(AppDbContext userDb, bool sendTelegram)
+async Task RunAlertProcessingAsync(AppDbContext userDb)
 {
     var alertMessageIds = await userDb.Classifications
         .Where(c => c.Category == "job_alert" && c.IsJobRelated)
@@ -617,12 +586,11 @@ async Task RunAlertProcessingAsync(AppDbContext userDb, bool sendTelegram)
         .ToList();
 
     Console.WriteLine();
-    using var alertTelegram = sendTelegram ? new TelegramNotifier(botToken!, chatId!) : null;
     var adzunaCrossCheckFetcher = adzunaAppId is not null && adzunaAppKey is not null
         ? new AdzunaFetcher(adzunaAppId, adzunaAppKey)
         : null;
     var alertProcessor = new JobAlertProcessor(
-        userDb, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), alertTelegram,
+        userDb, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger),
         new JoraFetcher(), adzunaCrossCheckFetcher, new PostingMatcherAgent(apiKey, usageLogger), emailer);
     var (found, evaluated, notified) = await alertProcessor.ProcessAsync(allAlertEmails);
     Console.WriteLine($"Job alerts: {found} URLs found, {evaluated} evaluated, {notified} notified.");

@@ -26,7 +26,6 @@ public class JobAlertProcessor
     private readonly AppDbContext _db;
     private readonly JobPostingFetcher _fetcher;
     private readonly PostingEvaluator _evaluator;
-    private readonly TelegramNotifier? _telegram;
     private readonly JoraFetcher _joraFetcher;
     private readonly AdzunaFetcher? _adzunaFetcher;
     private readonly PostingMatcherAgent _matcher;
@@ -36,7 +35,6 @@ public class JobAlertProcessor
         AppDbContext db,
         JobPostingFetcher fetcher,
         PostingEvaluator evaluator,
-        TelegramNotifier? telegram,
         JoraFetcher joraFetcher,
         AdzunaFetcher? adzunaFetcher,
         PostingMatcherAgent matcher,
@@ -45,7 +43,6 @@ public class JobAlertProcessor
         _db = db;
         _fetcher = fetcher;
         _evaluator = evaluator;
-        _telegram = telegram;
         _joraFetcher = joraFetcher;
         _adzunaFetcher = adzunaFetcher;
         _matcher = matcher;
@@ -159,20 +156,13 @@ public class JobAlertProcessor
 
                 bool isMatch = eval.Recommendation is "strong_match" or "good_match";
 
-                if (_telegram is not null && isMatch &&
-                    await _telegram.SendAsync(EvalFormatter.Format(eval, "via job alert"), "HTML"))
-                {
-                    record.NotificationSent = true;
-                    await _db.SaveChangesAsync();
-                    notified++;
-                }
-
                 if (_emailer is not null && user is not null && isMatch && !record.EmailNotificationSent)
                 {
                     var (subject, body) = EvalFormatter.FormatPlainTextEmail(eval, "via job alert");
                     await _emailer.SendAsync(user.Email, subject, body);
                     record.EmailNotificationSent = true;
                     await _db.SaveChangesAsync();
+                    notified++;
                 }
             }
             catch (Exception ex)

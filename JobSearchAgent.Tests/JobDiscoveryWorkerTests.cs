@@ -1,5 +1,4 @@
 using JobSearch.Data;
-using JobSearchAgent.Integrations;
 using JobSearchAgent.Workers;
 
 namespace JobSearchAgent.Tests;
@@ -194,23 +193,25 @@ public class JobDiscoveryWorkerTests
         Assert.Equal("error", record.Recommendation);
     }
 
-    // TC10 — strong_match + telegram → NotificationSent=true, notified=1
+    // TC10 — strong_match with an emailer configured → EmailNotificationSent=true, notified=1
     [Fact]
-    public async Task RunAsync_StrongMatchWithTelegram_NotificationSent()
+    public async Task RunAsync_StrongMatchWithEmailer_EmailNotificationSent()
     {
         var db = Db.Fresh();
-        var telegram = new FakeTelegram(returns: true);
+        db.Users.Add(new User { Id = Db.TestUserId, Email = "owner@test.com" });
+        db.SaveChanges();
+        var handler = new FakeEmailHandler();
         var worker = MakeWorker(db,
             fetchers: [new FakeFetcher([FeedItem()])],
             evaluator: new FakeEval(_ => StubEval("strong_match")),
-            telegram: telegram);
+            emailer: Emailer.Make(handler));
 
         var (_, _, notified) = await worker.RunAsync();
 
         var record = db.DiscoveredPostings.Single();
-        Assert.True(record.NotificationSent);
+        Assert.True(record.EmailNotificationSent);
         Assert.Equal(1, notified);
-        Assert.Equal(1, telegram.CallCount);
+        Assert.Equal(1, handler.CallCount);
     }
 
     // =========================================================================
@@ -250,12 +251,12 @@ public class JobDiscoveryWorkerTests
         IEnumerable<IJobFetcher>? fetchers = null,
         JobPostingFetcher? pageFetcher = null,
         PostingEvaluator? evaluator = null,
-        TelegramNotifier? telegram = null) =>
+        SendGridEmailService? emailer = null) =>
         new(db,
             fetchers   ?? [],
             pageFetcher ?? new FakePageFetcher(_ => "page text"),
             evaluator  ?? new FakeEval(_ => StubEval("weak_match")),
-            telegram);
+            emailer);
 
     private sealed class FakeFetcher(List<JobFeedItem> items) : IJobFetcher
     {
@@ -275,17 +276,5 @@ public class JobDiscoveryWorkerTests
         public FakeEval(Func<string, PostingEvaluation> fn) : base() => _fn = fn;
         public override Task<PostingEvaluation> EvaluateAsync(UserProfile profile, string postingText, string? sourceUrl = null)
             => Task.FromResult(_fn(postingText));
-    }
-
-    private sealed class FakeTelegram : TelegramNotifier
-    {
-        private readonly bool _returns;
-        public int CallCount { get; private set; }
-        public FakeTelegram(bool returns = true) : base("x", "y") => _returns = returns;
-        public override Task<bool> SendAsync(string message, string? parseMode = null)
-        {
-            CallCount++;
-            return Task.FromResult(_returns);
-        }
     }
 }
