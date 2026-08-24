@@ -12,6 +12,17 @@ const LABEL = "mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200";
 // Some usages below are <a> tags rather than <button>, hence the inline-block.
 const PRIMARY_BUTTON = `inline-block ${PRIMARY_BUTTON_BASE}`;
 
+// Plain top-level function, not inlined into SourcesPage's handleSave below. react-hooks'
+// bundled compiler diagnostics flag a direct `window.location.href = ...` assignment when
+// it's textually inside a component function that also calls a useState setter elsewhere
+// (handleSave does, for the non-onboarding path) — and unlike a normal lint rule, this one
+// surfaces as a bare compiler error with no ruleId, so `eslint-disable-next-line` can't
+// suppress it (tried it; ESLint reports the directive as unused and still fails). Moving the
+// actual mutation into a plain function outside the component sidesteps it for real.
+function hardNavigateHome() {
+  window.location.href = "/";
+}
+
 function SourceToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
@@ -181,7 +192,7 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
   );
 }
 
-export function SourcesPage({ hideHeader = false }: { hideHeader?: boolean } = {}) {
+export function SourcesPage({ hideHeader = false, onboarding = false }: { hideHeader?: boolean; onboarding?: boolean } = {}) {
   const { data, loading: loadingSources } = useSources();
   const [selected, setSelected] = useSyncedState<SourcesResponse, string[]>(data, [], d => d.enabled);
   const [saved, setSaved] = useState(false);
@@ -196,6 +207,20 @@ export function SourcesPage({ hideHeader = false }: { hideHeader?: boolean } = {
 
   async function handleSave() {
     const result = await execute(selected);
+    // During onboarding, always move on after a successful save, regardless of whether an
+    // alert-based source was picked — connecting Gmail is an optional follow-up reachable
+    // any time later from the persistent Sources page (nav), not a hard blocker to finishing
+    // onboarding. There's no nav bar during onboarding to escape via otherwise, so staying on
+    // this page when Gmail isn't connected yet was a genuine dead end. A full reload (not
+    // SPA navigate) so the next /auth/me fetch picks up the now-saved needsSourceSelection
+    // flag — same pattern the other onboarding steps use (ResumeIntakePage,
+    // OnboardingCriteriaPage's CriteriaWizard onSaved) instead of react-router's navigate(),
+    // whose target `me` is only fetched once on mount and would otherwise still look stale
+    // and bounce straight back here via App.tsx's StepRedirect.
+    if (onboarding) {
+      hardNavigateHome();
+      return;
+    }
     setSelected(result.enabled);
     setSaved(true);
     // Nothing further needed if no alert-based source was chosen — move on to the
