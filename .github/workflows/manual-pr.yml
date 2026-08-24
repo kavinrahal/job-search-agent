@@ -1,12 +1,15 @@
 name: Open PR (App)
 
 # Manually triggered by whoever is driving a coding session (Claude Code or the repo owner)
-# once a feature branch is already pushed. Opens the PR under the same GitHub App used by
-# the crash-fix pipeline, rather than whichever personal account triggered this run — the
-# point isn't automation, it's giving the repo owner an app-authored PR to review/approve
-# instead of one that shows up under their own account (see crash-fix.yml's comment on
-# create-github-app-token for why that distinction matters: GitHub blocks a PR's own author
-# from approving it).
+# once a feature branch is already pushed. Opens the PR under the worksanta-jnr-engineer-bot
+# GitHub App, not whichever personal account triggered this run — the point isn't automation,
+# it's giving the repo owner an app-authored PR to review/approve instead of one that shows up
+# under their own account (see crash-fix.yml's comment on create-github-app-token for why that
+# distinction matters: GitHub blocks a PR's own author from approving it).
+#
+# Deliberately a separate App from crash-fix.yml's: this workflow opens PRs for regular
+# feature/fix work, not crash fixes, and authoring those under "worksanta-crash-bot" was
+# actively misleading (see PRs #32-#39, all opened this way before this App existed).
 on:
   workflow_dispatch:
     inputs:
@@ -34,8 +37,8 @@ jobs:
       - uses: actions/create-github-app-token@v3
         id: app-token
         with:
-          app-id: ${{ secrets.CRASH_FIX_APP_ID }}
-          private-key: ${{ secrets.CRASH_FIX_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.JNR_ENGINEER_APP_ID }}
+          private-key: ${{ secrets.JNR_ENGINEER_APP_PRIVATE_KEY }}
 
       - run: echo "GH_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
 

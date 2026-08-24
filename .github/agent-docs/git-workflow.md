@@ -28,6 +28,16 @@ auto-deploy. **Always proactively remind the repo owner to do this once staging 
 — it's an easy step to forget once attention moves to the next piece of work, and the owner has
 explicitly asked to be reminded rather than needing to bring it up themselves.
 
+**Gotcha: changes to files under `.github/workflows/` don't take effect for `workflow_dispatch`
+until they reach `master`.** GitHub always resolves a manually-triggered workflow's *definition*
+from the repo's default branch (`master`), not from whatever branch you're working on or even
+`staging` — regardless of the staging-first policy above. If you change `manual-pr.yml` itself (or
+any other `workflow_dispatch` workflow) and need the new behavior to actually run before it reaches
+`master`, pass `--ref your-branch-name` to `gh workflow run` to force it to use your branch's copy.
+Otherwise expect the *old*, currently-on-`master` version to run even after your PR merges into
+`staging` — this bit us shipping the staging-gate change itself (PR #39) and again shipping the
+new-App-credentials change (PR #41).
+
 ## Commits
 
 Every commit made on behalf of the repo owner ends with:
@@ -55,8 +65,11 @@ gh workflow run manual-pr.yml \
   -f body="PR body markdown"
 ```
 
-This runs `.github/workflows/manual-pr.yml`, which opens the PR under the same GitHub App used by
-the crash-fix pipeline — an app-authored PR the owner can actually approve.
+This runs `.github/workflows/manual-pr.yml`, which opens the PR under the `worksanta-jnr-engineer-
+bot` GitHub App — an app-authored PR the owner can actually approve. This is a separate App from
+the one `crash-fix.yml`/`pr-feedback.yml` use (`worksanta-crash-bot`): PRs #32-#39 were all opened
+under the crash-fix identity before this App existed, which was misleading since none of them were
+crash fixes — don't reuse the crash-fix App for regular feature/fix work going forward.
 
 Then poll for completion and find the resulting PR:
 
