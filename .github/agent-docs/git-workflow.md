@@ -55,8 +55,11 @@ gh workflow run manual-pr.yml \
   -f body="PR body markdown"
 ```
 
-This runs `.github/workflows/manual-pr.yml`, which opens the PR under the same GitHub App used by
-the crash-fix pipeline — an app-authored PR the owner can actually approve.
+This runs `.github/workflows/manual-pr.yml`, which opens the PR under the `worksanta-jnr-engineer-
+bot` GitHub App — an app-authored PR the owner can actually approve. This is a separate App from
+the one `crash-fix.yml`/`pr-feedback.yml` use (`worksanta-crash-bot`): PRs #32-#39 were all opened
+under the crash-fix identity before this App existed, which was misleading since none of them were
+crash fixes — don't reuse the crash-fix App for regular feature/fix work going forward.
 
 Then poll for completion and find the resulting PR:
 
