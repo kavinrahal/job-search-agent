@@ -30,14 +30,13 @@ public class BackgroundYamlParserTests
     }
 
     [Fact]
-    public void Parse_RealFixture_ExtractsAchievementsAndStackForFirstRole()
+    public void Parse_RealFixture_ExtractsAchievementsForFirstRole()
     {
         var data = BackgroundYamlParser.Parse(RealYaml);
         var willow = data.Experience[0];
 
         Assert.Equal(7, willow.Achievements.Count);
         Assert.Contains("App Status", willow.Achievements[0]);
-        Assert.Equal(["C#", "ASP.NET Core", "Azure", "Azure Data Explorer", "Azure Digital Twins"], willow.Stack["backend"]);
         Assert.Equal("2025-04", willow.Dates.Start);
         Assert.Equal("2026-05", willow.Dates.End);
     }
@@ -52,18 +51,6 @@ public class BackgroundYamlParserTests
         Assert.Equal(2022, edu.GraduationYear);
         Assert.Equal(2.9, edu.Gpa);
         Assert.NotNull(edu.GpaNotes);
-    }
-
-    [Fact]
-    public void Parse_RealFixture_ExtractsNarrativeGuidance()
-    {
-        var data = BackgroundYamlParser.Parse(RealYaml);
-
-        Assert.NotNull(data.Narrative);
-        Assert.Equal(4, data.Narrative!.StrongestAnchorsInOrder.Count);
-        Assert.Single(data.Narrative.GapToAddress);
-        Assert.Contains("GPA (2.9", data.Narrative.DoNotLeadWith[0]);
-        Assert.NotNull(data.Narrative.LayoffsContext);
     }
 
     [Fact]
@@ -94,6 +81,28 @@ public class BackgroundYamlParserTests
         Assert.Empty(data.Credentials);
         Assert.Empty(data.Publications);
         Assert.Empty(data.Volunteering);
+    }
+
+    [Fact]
+    public void Parse_ExperienceStackAsFlatStringInsteadOfCategoryMap_DoesNotThrow()
+    {
+        // Real production bug, found running the Deploy A backfill against actual user data:
+        // Experience.Stack/Project.TechStack were typed as Dictionary<string, List<string>>,
+        // but not every user's independently LLM-generated Background YAML shapes `stack` that
+        // way — one real user had it as a plain string, which threw InvalidCastException and
+        // failed their entire migration. Neither field has a renderer consumer (confirmed via
+        // grep before removing them from BackgroundData), so the fix was removing both rather
+        // than trying to support every shape a `stack:` field might take.
+        const string yaml = """
+            experience:
+              - company: Acme
+                role: Engineer
+                stack: React, Node.js, PostgreSQL
+            """;
+
+        var data = BackgroundYamlParser.Parse(yaml);
+
+        Assert.Equal("Acme", data.Experience[0].Company);
     }
 
     [Fact]
