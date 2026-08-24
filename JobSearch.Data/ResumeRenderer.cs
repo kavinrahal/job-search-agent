@@ -160,7 +160,11 @@ public static class ResumeRenderer
         foreach (var edu in background.Education)
         {
             sb.Append("**").Append(edu.Degree).Append("** – ").Append(edu.Institution).Append('\n');
-            sb.Append(edu.Location).Append(" | ").Append(edu.GraduationYear).Append('\n').Append('\n');
+            var meta = new List<string>();
+            if (!string.IsNullOrWhiteSpace(edu.Location)) meta.Add(edu.Location);
+            if (edu.GraduationYear is not null) meta.Add(edu.GraduationYear.Value.ToString());
+            if (meta.Count > 0) sb.Append(string.Join(" | ", meta)).Append('\n');
+            sb.Append('\n');
         }
         return sb.ToString().TrimEnd() + "\n";
     }

@@ -211,6 +211,37 @@ public class ResumeRendererTests
     }
 
     [Fact]
+    public void Render_EducationWithNoGraduationYear_OmitsItInsteadOfRenderingZero()
+    {
+        // Real production bug, found generating an actual CV against a real account after
+        // Deploy B shipped: GraduationYear was a non-nullable int, and a real user's Background
+        // (data drift from the repo's seed fixture, not a parsing error) genuinely has no
+        // graduation_year at all — it silently defaulted to 0 and rendered a literal "| 0" in a
+        // real generated resume.
+        var background = MinimalBackground();
+        background.Education.Add(new EducationEntry { Degree = "BSc Computer Science", Institution = "State University", Location = "Remote" });
+
+        var output = ResumeRenderer.Render(background, EmptyResume());
+
+        Assert.Contains("## Education\n\n**BSc Computer Science** – State University\nRemote\n", output);
+        Assert.DoesNotContain("| 0", output);
+    }
+
+    [Fact]
+    public void Render_EducationWithNeitherLocationNorGraduationYear_OmitsMetaLineEntirely()
+    {
+        var background = MinimalBackground();
+        background.Education.Add(new EducationEntry { Degree = "BSc Computer Science", Institution = "State University" });
+
+        var output = ResumeRenderer.Render(background, EmptyResume());
+
+        Assert.Contains("**BSc Computer Science** – State University", output);
+        // No meta line at all — degree/institution line is followed straight by the next
+        // section (or end of document), not a dangling blank "| "-style line.
+        Assert.DoesNotContain(" | \n", output);
+    }
+
+    [Fact]
     public void Render_SkillsSection_RendersStoredLabelsAndItemsNotBackgroundSkills()
     {
         var resume = EmptyResume();

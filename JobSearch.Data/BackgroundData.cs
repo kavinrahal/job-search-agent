@@ -79,7 +79,11 @@ public class EducationEntry
     public string Location { get; set; } = "";
     public double? Gpa { get; set; }
     public string? GpaNotes { get; set; }
-    public int GraduationYear { get; set; }
+    // Nullable, not defaulted to 0 — confirmed against real production data that this field is
+    // legitimately absent for some users (data drift from the repo's seed fixture, not a parsing
+    // bug), and a non-nullable int rendered a real, visible "| 0" in a real generated CV before
+    // this fix.
+    public int? GraduationYear { get; set; }
 }
 
 public class ProjectEntry
