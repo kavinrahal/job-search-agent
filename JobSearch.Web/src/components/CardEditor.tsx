@@ -48,9 +48,12 @@ export function TopicCard({ title, children, defaultOpen = true }: { title: stri
 }
 
 // One item within a list-based topic — collapsed by default so a long list doesn't dominate
-// the page; expand to read/edit it in full.
+// the page; expand to read/edit it in full. onRemove is optional: some callers (e.g. the resume
+// builder's per-experience/per-project override editors) show one card per *Background* entry,
+// which can be included/excluded but never deleted from here — Background itself is edited on
+// the Profile page. The Remove button only appears when a caller actually provides one.
 export function EntryCard({ summary, defaultOpen = false, onRemove, children }: {
-  summary: string; defaultOpen?: boolean; onRemove: () => void; children: ReactNode;
+  summary: string; defaultOpen?: boolean; onRemove?: () => void; children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -59,7 +62,9 @@ export function EntryCard({ summary, defaultOpen = false, onRemove, children }: 
         <button onClick={() => setOpen(o => !o)} className="flex-1 text-left text-sm font-medium text-gray-700 dark:text-gray-200">
           {summary || "New entry"} {open ? "▲" : "▼"}
         </button>
-        <button onClick={onRemove} className="ml-2 text-xs text-red-500 transition-colors hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">Remove</button>
+        {onRemove && (
+          <button onClick={onRemove} className="ml-2 text-xs text-red-500 transition-colors hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">Remove</button>
+        )}
       </div>
       {open && <div className="animate-fade-in-up space-y-3 border-t border-gray-100 p-3 dark:border-gray-800">{children}</div>}
     </div>
