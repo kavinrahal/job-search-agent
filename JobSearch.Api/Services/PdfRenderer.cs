@@ -33,14 +33,41 @@ public static class PdfRenderer
                 {
                     col.Spacing(2);
                     foreach (var raw in lines)
-                        AddLine(col, raw.TrimEnd());
+                        AddLine(col, raw);
                 });
             });
         }).GeneratePdf();
     }
 
-    private static void AddLine(ColumnDescriptor col, string line)
+    private static void AddLine(ColumnDescriptor col, string raw)
     {
+        // Check the bullet prefix against the untrimmed line, not a trailing-whitespace-stripped
+        // one. ResumeRenderer.RenderBulletList (JobSearch.Data/ResumeRenderer.cs) always writes a
+        // bullet as "- " + text, even when text is empty — so a cleared-to-empty achievement is
+        // literally "- " (dash, one trailing space, nothing else). TrimEnd()-ing before this
+        // check used to turn that into a bare "-", which failed the prefix match and fell
+        // through to the plain-text branch below, printing a stray "-" line. Trailing/leading
+        // whitespace is still stripped from the bullet's own text below, where it can't affect
+        // the prefix check.
+        if (raw.StartsWith("- ") || raw.StartsWith("* "))
+        {
+            var text = raw[2..].Trim();
+            // An empty-text bullet has nothing to show — skip rendering it. Bullets here are
+            // independent Row items with no shared list container (unlike the preview's <ul>),
+            // so skipping one doesn't disturb the bullets before or after it.
+            if (text.Length > 0)
+            {
+                col.Item().Row(row =>
+                {
+                    row.ConstantItem(12).Text("•");
+                    row.RelativeItem().Text(t => Inline(t, text));
+                });
+            }
+            return;
+        }
+
+        var line = raw.TrimEnd();
+
         if (line.StartsWith("# "))
         {
             col.Item().Text(line[2..]).FontSize(18).Bold();
@@ -56,14 +83,6 @@ public static class PdfRenderer
         else if (line.StartsWith("### "))
         {
             col.Item().PaddingTop(4).Text(line[4..]).FontSize(10).Bold();
-        }
-        else if (line.StartsWith("- ") || line.StartsWith("* "))
-        {
-            col.Item().Row(row =>
-            {
-                row.ConstantItem(12).Text("•");
-                row.RelativeItem().Text(t => Inline(t, line[2..]));
-            });
         }
         else if (line == "---")
         {
