@@ -1031,6 +1031,15 @@ api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbC
             await Console.Error.WriteLineAsync($"UserResume seeding failed for user {userId}, will need a manual admin backfill: {ex}");
         }
     }
+    // From-scratch onboarding save (a Background was actually being set, but there's no CvBase
+    // to reconcile — see ResumeIntakePage.tsx's "build from scratch" entry point and
+    // UserResumeProvisioningService's own comment for why this is deterministic, not an agent
+    // call). Only seeds once — a user who later replaces CvBase for real still goes through the
+    // branch above, which unconditionally overwrites via RemoveRange + Add.
+    else if (body.Background is not null)
+    {
+        await UserResumeProvisioningService.SeedDefaultIfMissingAsync(db, userId);
+    }
 
     return Results.Ok(new { profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt });
 });
