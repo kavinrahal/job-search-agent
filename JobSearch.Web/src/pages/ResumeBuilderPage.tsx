@@ -9,6 +9,7 @@ import { ChoiceButtons } from "../components/ChoiceButtons";
 import { PageTagline } from "../components/PageTagline";
 import { PRIMARY_BUTTON } from "../lib/styles";
 import { parseBackgroundYaml } from "../lib/backgroundYaml";
+import { applyTemplateToDraft } from "../lib/resumeSections";
 import type { ResumeData } from "../types";
 import type { ResumeDraft } from "../api";
 
@@ -50,7 +51,7 @@ export function ResumeBuilderPage() {
 
   async function handleApplyTemplate(industryKey: string, seniority?: "junior" | "experienced") {
     const updated = await applyTemplate(industryKey, seniority);
-    setDraft(updated);
+    setDraft(prev => applyTemplateToDraft(prev, updated));
   }
 
   async function handleSave() {

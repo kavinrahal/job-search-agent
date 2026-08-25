@@ -80,6 +80,36 @@ describe("renderResumeMarkdown", () => {
     );
   });
 
+  // Regression tests for: clearing one achievement bullet's text to empty made that bullet and
+  // every bullet after it (in the same role's list) drop out of the preview. Root cause: the
+  // line-classification loop trimmed trailing whitespace *before* checking the "- "/"* " bullet
+  // prefix. ResumeRenderer.RenderBulletList (JobSearch.Data/ResumeRenderer.cs) always writes an
+  // empty-text bullet as a literal "- " (dash, one trailing space, nothing else) — trimming that
+  // first turns it into a bare "-", which fails the prefix check, closes the list early, and
+  // forces every following bullet to open a brand new <ul>. The fix checks the bullet prefix
+  // against the untrimmed line so an empty-text bullet is still recognized as a bullet.
+  it("keeps every later bullet in the same list when an earlier bullet's text is empty", () => {
+    // Exact shape ResumeRenderer.cs produces for an ItemOverride with TextOverride = "".
+    const input = "- Shipped feature A.\n- \n- Shipped feature C.\n- Shipped feature D.";
+    expect(renderResumeMarkdown(input)).toBe(
+      '<ul class="resume-bullets"><li>Shipped feature A.</li>' +
+      "<li>Shipped feature C.</li><li>Shipped feature D.</li></ul>",
+    );
+  });
+
+  it("skips rendering a list item for an empty-text bullet rather than showing an empty marker", () => {
+    expect(renderResumeMarkdown("- \n- Only bullet.")).toBe(
+      '<ul class="resume-bullets"><li>Only bullet.</li></ul>',
+    );
+  });
+
+  it("closes the list normally when the empty-text bullet is the last one", () => {
+    const input = "- First.\n- \nplain text after";
+    expect(renderResumeMarkdown(input)).toBe(
+      '<ul class="resume-bullets"><li>First.</li></ul><p>plain text after</p>',
+    );
+  });
+
   it("renders a full multi-section document matching ResumeRenderer's real output shape", () => {
     const markdown = [
       "# Jordan Rivers",

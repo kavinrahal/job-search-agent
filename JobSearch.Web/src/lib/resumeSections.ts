@@ -1,4 +1,4 @@
-import type { SectionConfigEntry } from "../types";
+import type { ResumeData, SectionConfigEntry } from "../types";
 
 // Pure, framework-free logic behind the resume builder's section list — kept separate from
 // ResumeBuilder.tsx so reorder/toggle behaviour is pinned by a plain unit test instead of being
@@ -37,4 +37,15 @@ export function moveSection(sections: SectionConfigEntry[], index: number, direc
 
 export function toggleSectionIncluded(sections: SectionConfigEntry[], index: number): SectionConfigEntry[] {
   return sections.map((s, i) => (i === index ? { ...s, included: !s.included } : s));
+}
+
+// Applying an industry template only ever rewrites sectionConfig server-side (see
+// IndustryPicker's own copy in ResumeBuilder.tsx and POST /resume/apply-template's comment) —
+// but the response is still a full ResumeData reflecting the last-*saved* state. Writing that
+// whole object into draft state would silently discard whatever the user has edited but not
+// saved yet (summary, experience/project wording, skills) — indistinguishable from data loss.
+// Merge in just the section config (and the resulting updatedAt), leaving every other draft
+// field exactly as the user left it.
+export function applyTemplateToDraft(draft: ResumeData, templateResult: ResumeData): ResumeData {
+  return { ...draft, sectionConfig: templateResult.sectionConfig, updatedAt: templateResult.updatedAt };
 }

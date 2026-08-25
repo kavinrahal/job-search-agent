@@ -46,17 +46,29 @@ export function renderResumeMarkdown(markdown: string): string {
   }
 
   for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
-
-    if (line.startsWith("- ") || line.startsWith("* ")) {
+    // Check the bullet prefix against the untrimmed line, not a trailing-whitespace-stripped
+    // one. ResumeRenderer.RenderBulletList (JobSearch.Data/ResumeRenderer.cs) always writes a
+    // bullet as "- " + text.Trim(), even when text is empty — so a cleared-to-empty bullet is
+    // literally "- " (dash, one trailing space, nothing else). Trimming trailing whitespace
+    // before this check turns that into a bare "-", which fails the prefix match, closes the
+    // list early, and forces every bullet after it into a brand new <ul> — every bullet after
+    // an empty one dropping out of the same list was exactly this. Trailing/leading whitespace
+    // is still stripped from the bullet's own text below, where it can't affect list grouping.
+    if (rawLine.startsWith("- ") || rawLine.startsWith("* ")) {
       if (!inList) {
         html.push('<ul class="resume-bullets">');
         inList = true;
       }
-      html.push(`<li>${renderInline(line.slice(2))}</li>`);
+      const text = rawLine.slice(2).trim();
+      // An empty-text bullet has nothing to show — skip the <li> rather than rendering a bare
+      // bullet marker with no content next to it, but keep the list open so it doesn't disturb
+      // the bullets before and after it.
+      if (text.length > 0) html.push(`<li>${renderInline(text)}</li>`);
       continue;
     }
     closeList();
+
+    const line = rawLine.trimEnd();
 
     if (line.startsWith("# ")) {
       html.push(`<h1>${escapeHtml(line.slice(2))}</h1>`);
