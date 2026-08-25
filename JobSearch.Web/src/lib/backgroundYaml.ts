@@ -108,6 +108,16 @@ export function parseBackgroundYaml(text: string): BackgroundParseResult {
   };
 }
 
+// Same "warn + block save on missing required fields" pattern as
+// criteriaCompleteness.ts's getMissingCriteriaFields — used by ResumeIntakePage's
+// build-from-scratch path, where there's no parsed PDF to have already supplied these.
+export function getMissingBackgroundFields(data: BackgroundData): string[] {
+  const missing: string[] = [];
+  if (!data.personal.name.trim()) missing.push("Name");
+  if (!data.personal.email.trim()) missing.push("Email");
+  return missing;
+}
+
 export function serializeBackgroundYaml(data: BackgroundData): string {
   const ordered = {
     personal: data.personal,
