@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useResume, useResumeTemplates, useUpdateResume, useApplyResumeTemplate } from "../hooks/useResume";
 import { useProfile } from "../hooks/useProfile";
 import { useSyncedState } from "../hooks/useSyncedState";
@@ -24,6 +25,11 @@ const EMPTY: ResumeData = {
 // that shrank the document on mobile instead of scrolling it, so this stays a straight
 // grid-columns-on-desktop / toggle-on-mobile split, not a responsive redesign of the document.
 export function ResumeBuilderPage() {
+  // Set when reached via ResumeIntakePage's build-from-scratch onboarding detour (see
+  // ResumeIntakePage.handleSave) — signals that a successful save should continue the
+  // onboarding flow rather than stay on this page as a normal persistent-editor save.
+  const [searchParams] = useSearchParams();
+  const onboarding = searchParams.get("onboarding") === "1";
   const { data: resume, loading: loadingResume, error: loadError, reload } = useResume();
   const { data: templates, loading: loadingTemplates } = useResumeTemplates();
   // Background's read-only Experience/Projects entries for the override editors — same
@@ -56,6 +62,13 @@ export function ResumeBuilderPage() {
 
   async function handleSave() {
     await save(previewDraft);
+    if (onboarding) {
+      // Hard navigation, same pattern ResumeIntakePage uses for the same reason — useMe()
+      // only fetches /auth/me once on mount, so a fresh page load is needed for
+      // needsCriteria to pick up and send the user to Job Criteria next.
+      window.location.href = "/";
+      return;
+    }
     reload();
   }
 

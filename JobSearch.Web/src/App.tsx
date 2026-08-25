@@ -221,7 +221,11 @@ function PageBody({ me }: { me: NonNullable<ReturnType<typeof useMe>["data"]> })
           <Route path="/discover"           element={<DiscoveriesPage />} />
           <Route path="/applications"       element={<ApplicationsPage />} />
           <Route path="/sources"            element={<SourcesPage />} />
-          <Route path="/profile"            element={<ResumeIntakePage />} />
+          {/* A user who already has a real background (needsOnboarding false — see the flag's
+              definition in Program.cs) shouldn't see the blank build-from-scratch/upload intake
+              here; that only makes sense for a genuinely new user. Settings is the actual
+              "edit your existing info" page for everyone else. */}
+          <Route path="/profile"            element={me.needsOnboarding ? <ResumeIntakePage /> : <Navigate to="/settings" replace />} />
           <Route path="/resume-builder"     element={<ResumeBuilderPage />} />
           <Route path="/criteria"           element={<JobCriteriaPage />} />
           <Route path="/settings"           element={<SettingsPage />} />

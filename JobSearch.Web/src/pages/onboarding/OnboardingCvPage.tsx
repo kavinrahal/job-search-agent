@@ -9,7 +9,7 @@ export function OnboardingCvPage({ tier }: { tier: string }) {
       title="Let's build your foundation"
       blurb="Every CV, cover letter, and answer we generate starts from what you tell us here. The more complete this is, the better everything downstream turns out. Upload your resume and we'll do the structuring for you."
     >
-      <ResumeIntakePage hideHeader />
+      <ResumeIntakePage hideHeader onboarding />
     </OnboardingShell>
   );
 }
