@@ -1,10 +1,42 @@
 # Git & PR workflow
 
-## Branching
+## Branching and the staging gate
 
-- Always branch off updated `master` for new work. Never push directly to `master`.
-- If a branch you're working from has already been merged into `master`, don't keep building on
-  it — branch fresh off `master` again for the next piece of work.
+- `master` is the production branch (`staging.worksanta.com`'s production counterpart at
+  `worksanta.com`, auto-deploys on push). `staging` is the staging branch (deploys to
+  `staging.worksanta.com` / `api-staging.worksanta.com`). Regular feature/fix work branches off
+  **updated `staging`**, not `master`, and its PR targets `staging` — `manual-pr.yml` already
+  defaults to this. Never push directly to either branch.
+- Exception: `crash-fix.yml`'s automated pipeline branches off and targets `master` directly —
+  an urgent, already-CI-verified crash fix shouldn't wait on a staging gate. This is the only
+  path that skips staging.
+- If a branch you're working from has already been merged into `staging`, don't keep building on
+  it — branch fresh off `staging` again for the next piece of work.
+
+## Promoting staging to production
+
+Once a change has been verified working on `staging.worksanta.com` / `api-staging.worksanta.com`
+(manual click-through, or an agent's staging-verification report), promote it to production:
+
+```bash
+git fetch origin
+git checkout master && git merge --ff-only origin/staging && git push
+```
+
+This is a manual step by design, not automated — the point is a deliberate release, not another
+auto-deploy. **Always proactively remind the repo owner to do this once staging testing passes**
+— it's an easy step to forget once attention moves to the next piece of work, and the owner has
+explicitly asked to be reminded rather than needing to bring it up themselves.
+
+**Gotcha: changes to files under `.github/workflows/` don't take effect for `workflow_dispatch`
+until they reach `master`.** GitHub always resolves a manually-triggered workflow's *definition*
+from the repo's default branch (`master`), not from whatever branch you're working on or even
+`staging` — regardless of the staging-first policy above. If you change `manual-pr.yml` itself (or
+any other `workflow_dispatch` workflow) and need the new behavior to actually run before it reaches
+`master`, pass `--ref your-branch-name` to `gh workflow run` to force it to use your branch's copy.
+Otherwise expect the *old*, currently-on-`master` version to run even after your PR merges into
+`staging` — this bit us shipping the staging-gate change itself (PR #39) and again shipping the
+new-App-credentials change (PR #41).
 
 ## Commits
 
@@ -33,8 +65,11 @@ gh workflow run manual-pr.yml \
   -f body="PR body markdown"
 ```
 
-This runs `.github/workflows/manual-pr.yml`, which opens the PR under the same GitHub App used by
-the crash-fix pipeline — an app-authored PR the owner can actually approve.
+This runs `.github/workflows/manual-pr.yml`, which opens the PR under the `worksanta-jnr-engineer-
+bot` GitHub App — an app-authored PR the owner can actually approve. This is a separate App from
+the one `crash-fix.yml`/`pr-feedback.yml` use (`worksanta-crash-bot`): PRs #32-#39 were all opened
+under the crash-fix identity before this App existed, which was misleading since none of them were
+crash fixes — don't reuse the crash-fix App for regular feature/fix work going forward.
 
 Then poll for completion and find the resulting PR:
 

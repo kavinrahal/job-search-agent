@@ -125,3 +125,21 @@ public static class Fixtures
         RawEmail email,
         EmailClassification clf) => (email, clf);
 }
+
+// Stubs the HTTP transport SendGridEmailService sends through, so the email notification
+// path (JobAlertProcessor/JobDiscoveryWorker) can be exercised without a real network call.
+public sealed class FakeEmailHandler : HttpMessageHandler
+{
+    public int CallCount { get; private set; }
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        CallCount++;
+        return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.Accepted));
+    }
+}
+
+public static class Emailer
+{
+    public static SendGridEmailService Make(HttpMessageHandler handler) =>
+        new("test-key", "from@test.com", "Test", new HttpClient(handler));
+}

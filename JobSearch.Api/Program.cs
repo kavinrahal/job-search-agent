@@ -214,13 +214,6 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(policy =>
 var anthropicApiKey = builder.Configuration["ANTHROPIC_API_KEY"]
     ?? throw new InvalidOperationException("ANTHROPIC_API_KEY not set");
 
-var telegramBotToken = builder.Configuration["TELEGRAM_BOT_TOKEN"]
-    ?? throw new InvalidOperationException("TELEGRAM_BOT_TOKEN not set");
-var telegramWebhookSecret = builder.Configuration["TELEGRAM_WEBHOOK_SECRET"]
-    ?? throw new InvalidOperationException("TELEGRAM_WEBHOOK_SECRET not set");
-var telegramChatId = builder.Configuration["TELEGRAM_CHAT_ID"]
-    ?? throw new InvalidOperationException("TELEGRAM_CHAT_ID not set");
-
 // Optional — only needed for the Seek cross-check hint fallback below; that fallback just
 // skips Adzuna (Jora alone still runs) if these aren't configured.
 var adzunaAppId = builder.Configuration["ADZUNA_APP_ID"];
@@ -292,7 +285,6 @@ if (gmailClientId is not null && gmailClientSecret is not null)
     builder.Services.AddSingleton(new GmailSettingsClient(gmailClientId, gmailClientSecret));
 if (sendGridApiKey is not null && sendGridFromEmail is not null)
     builder.Services.AddSingleton(new SendGridEmailService(sendGridApiKey, sendGridFromEmail));
-builder.Services.AddSingleton(_ => new TelegramService(telegramBotToken, telegramWebhookSecret, telegramChatId));
 
 // Trust X-Forwarded-Proto from Railway's load balancer regardless of its IP.
 // KnownNetworks/KnownProxies must be cleared — the default (loopback-only) blocks
@@ -324,7 +316,7 @@ builder.Services.AddRateLimiter(o =>
         return ValueTask.CompletedTask;
     };
 
-    // Telegram webhook: unauthenticated (secret-token verified), internet-facing.
+    // Public webhooks (SendGrid inbound, Sentry): unauthenticated (secret-verified), internet-facing.
     o.AddFixedWindowLimiter("webhook", w =>
     {
         w.PermitLimit = 60;
@@ -397,8 +389,8 @@ catch (Exception ex)
 
 // Seed the owner's own account as User #1 — permanent personal testing account with
 // full Tier 1 + Tier 2 access, no paywall, separate from the beta cohort. Captured here
-// because the Telegram webhook has no logged-in session to derive a tenant from — it acts
-// as this owner for every DB read/write (see CurrentUserId usages below).
+// because the owner-only admin endpoints below (see ownerUserId usages) need a stable id
+// to compare against.
 int ownerUserId;
 using (var scope = app.Services.CreateScope())
 {
@@ -552,7 +544,6 @@ api.MapGet("/discoveries", async (HttpContext ctx, AppDbContext db, string? reco
             disqualifierHit      = d.DisqualifierHit,
             discoveredAt         = d.DiscoveredAt,
             evaluatedAt          = d.EvaluatedAt,
-            notificationSent     = d.NotificationSent,
             locationMatch        = ev?.LocationMatch,
             locationDetail       = ev?.LocationDetail,
             experienceMatch      = ev?.ExperienceMatch,
@@ -847,7 +838,6 @@ api.MapGet("/health", (AppDbContext db) =>
         durationMs = last?.DurationMs,
         lastError = last?.Error,
         totalApplications = db.Applications.Count(),
-        pendingNotifications = db.Notifications.Count(n => n.SentAt == null),
     };
 
     return status == "stale"
@@ -1472,11 +1462,7 @@ api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db, UserSecr
 });
 
 // ---------------------------------------------------------------------------
-// CV / cover letter / answer generation — authenticated web endpoints. Telegram is now an
-// optional notification channel layered on top of this same AgentThread mechanism, not the
-// only way to act (see the Telegram webhook section below, which is still its own separate
-// implementation for now — unifying the two is a reasonable later cleanup, not required for
-// this to work correctly).
+// CV / cover letter / answer generation — authenticated web endpoints, backed by AgentThread.
 // ---------------------------------------------------------------------------
 
 // A pasted URL alone carries no title/company to search Jora/Adzuna with (unlike the Seek
@@ -1532,8 +1518,7 @@ api.MapGet("/postings/search-candidates", async (HttpContext ctx, string title, 
 
 // Resolves posting text from a pasted URL, an existing (per-user) DiscoveredPosting, or
 // pasted text directly — in that priority order. Falls back to the cached evaluation summary
-// if a DiscoveredPosting can't be re-fetched — same fallback Telegram uses — but unlike
-// Telegram's reply-to-this-message trick, the caller just retries the same POST with
+// if a DiscoveredPosting can't be re-fetched — the caller just retries the same POST with
 // postingText set; no stateful correlation needed.
 // Company is only free when discoveryId is used (DiscoveredPosting already has it from its
 // own evaluation) — null in every other case, since pasting a URL/text never runs a full
@@ -1619,10 +1604,9 @@ static async Task<(User? User, IResult? Error)> RequireTier2Async(AppDbContext d
     return (user, null);
 }
 
-// Not static, unlike RequireTier2Async above — needs to close over ownerEmail (same idiom
-// as the Telegram webhook's SaveThreadAsync/SendAnswerAsync local functions elsewhere in
-// this file), which local functions can do regardless of where they're declared relative to
-// where they're called — they're hoisted through the whole enclosing scope either way.
+// Not static, unlike RequireTier2Async above — needs to close over ownerEmail, which a local
+// function can do regardless of where it's declared relative to where it's called — it's
+// hoisted through the whole enclosing scope either way.
 async Task<(User? User, IResult? Error)> RequireOwnerAsync(AppDbContext db, int userId)
 {
     var user = await db.Users.FindAsync(userId);
@@ -1865,8 +1849,8 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
 }).RequireRateLimiting("generation");
 
 // POST /api/v1/threads/{id}/edit — body: { message: string }
-// Dual-purpose, same as Telegram's /edit: on an AwaitingContext (Answer) thread this
-// continues the Q&A; on a Complete thread it's a revision request.
+// Dual-purpose: on an AwaitingContext (Answer) thread this continues the Q&A; on a Complete
+// thread it's a revision request.
 api.MapPost("/threads/{id:int}/edit", async (
     int id, HttpContext ctx, EditRequest body, AppDbContext db,
     CvTailorAgent cvAgent, CoverLetterAgent letterAgent, AnswerAgent answerAgent, AccuracyVerifierAgent verifier) =>
@@ -2028,463 +2012,11 @@ api.MapGet("/threads/{id:int}/docx", async (int id, AppDbContext db) =>
         BuildDownloadFilename(applicantName, thread.Company, "Cover Letter", "docx"));
 });
 
-// Recognizes our own "couldn't fetch, paste the description" prompt (identified by its
-// trailing "/cv <url>" or "/letter <url>" line) so a reply to it can be treated as pasted
-// posting content instead of a new command.
-static (string Command, string Url)? ParsePasteFallbackPrompt(string promptText)
-{
-    var lastLine = promptText.TrimEnd().Split('\n').LastOrDefault()?.Trim();
-    if (string.IsNullOrEmpty(lastLine)) return null;
-
-    var parts = lastLine.Split(' ', 2, StringSplitOptions.TrimEntries);
-    if (parts.Length != 2) return null;
-
-    var cmd = parts[0].ToLowerInvariant();
-    if (cmd is not ("/cv" or "/letter")) return null;
-
-    var url = TelegramService.ExtractUrl(parts[1]);
-    return url is not null ? (cmd, url) : null;
-}
-
-// ---------------------------------------------------------------------------
-// Telegram webhook — unauthenticated but verified by secret token
-// ---------------------------------------------------------------------------
-app.MapPost("/api/v1/telegram/webhook", async (
-    HttpRequest request,
-    TelegramService telegram,
-    JobPostingFetcher fetcher,
-    PostingEvaluator evaluator,
-    CoverLetterAgent letterAgent,
-    CvTailorAgent cvAgent,
-    AnswerAgent answerAgent,
-    AppDbContext db,
-    IServiceScopeFactory scopeFactory) =>
-{
-    var secretHeader = request.Headers["X-Telegram-Bot-Api-Secret-Token"].FirstOrDefault() ?? "";
-    if (!telegram.VerifySecretToken(secretHeader))
-        return Results.Unauthorized();
-
-    // No logged-in session on a bot webhook — Telegram stays personal-use-only, so it
-    // always acts as the owner.
-    db.CurrentUserId = ownerUserId;
-
-    // Captured as plain strings (not the tracked entity) so they're safe to use after the
-    // request-scoped db is gone, inside the fire-and-forget Task.Run below.
-    var ownerProfileEntity = await db.UserProfiles.FindAsync(ownerUserId)
-        ?? throw new InvalidOperationException("Owner UserProfile not seeded — startup seeding should have created it.");
-    var ownerBackground = ownerProfileEntity.Background;
-    var ownerCvBase = ownerProfileEntity.CvBase;
-    var ownerJobCriteria = ownerProfileEntity.JobCriteria;
-
-    // Same detached-string-capture reasoning as above. Unlike UserProfile, not guaranteed to
-    // exist for every user in general — but the owner's own account is confirmed migrated
-    // (Deploy A's backfill already ran for it), so failing loud here is correct: this should
-    // never actually happen, and if it somehow does, it's a real bug worth a crash + log, not a
-    // silently degraded Telegram bot for an internal, owner-only surface.
-    var ownerResumeEntity = await db.UserResumes.FindAsync(ownerUserId)
-        ?? throw new InvalidOperationException("Owner UserResume not migrated — run the admin backfill for this account.");
-    var ownerSummary = ownerResumeEntity.Summary;
-    var ownerSectionConfigJson = ownerResumeEntity.SectionConfigJson;
-    var ownerExperienceOverridesJson = ownerResumeEntity.ExperienceOverridesJson;
-    var ownerSkillsSectionJson = ownerResumeEntity.SkillsSectionJson;
-    var ownerProjectOverridesJson = ownerResumeEntity.ProjectOverridesJson;
-
-    JsonElement update;
-    try
-    {
-        update = await JsonSerializer.DeserializeAsync<JsonElement>(request.Body);
-    }
-    catch
-    {
-        return Results.Ok();
-    }
-
-    var (updateId, text, replyToText, replyToMessageId) = TelegramService.ParseUpdate(update);
-
-    // Prevent duplicate processing — Telegram retries if we don't respond within 5 seconds.
-    if (!telegram.TryMarkProcessed(updateId))
-        return Results.Ok();
-
-    if (string.IsNullOrWhiteSpace(text))
-        return Results.Ok();
-
-    // Parse command: "/cv", "/letter", or bare URL (existing eval flow).
-    // Strip @botname suffix that Telegram appends in group chats.
-    var parts = text.Trim().Split(' ', 2, StringSplitOptions.TrimEntries);
-    var command = parts[0].ToLowerInvariant().Split('@')[0];
-    var commandArg = parts.Length > 1 ? parts[1] : null;
-
-    // For /cv and /letter commands, look up stored evaluation before going async.
-    // DB context is scoped — capture the string values we need, not the context itself.
-    string? storedEvalJson = null;
-    string? storedTitle = null;
-    string? resolvedUrl = null;
-    string? pastedPostingText = null;
-
-    // A reply to our own "couldn't fetch, paste the description" prompt — treat this
-    // whole message as the posting content for the command/URL embedded in that prompt,
-    // bypassing fetch and the DB lookup entirely (there's nothing stored, that's why
-    // the prompt was sent in the first place).
-    var pasteFallback = replyToText is not null ? ParsePasteFallbackPrompt(replyToText) : null;
-    if (pasteFallback is not null)
-    {
-        command = pasteFallback.Value.Command;
-        resolvedUrl = pasteFallback.Value.Url;
-        pastedPostingText = text;
-    }
-    else if (command is "/cv" or "/letter")
-    {
-        resolvedUrl = (commandArg is not null ? TelegramService.ExtractUrl(commandArg) : null)
-            ?? (replyToText is not null ? TelegramService.ExtractUrl(replyToText) : null);
-
-        if (resolvedUrl is not null)
-        {
-            var posting = await db.DiscoveredPostings
-                .Where(d => d.Url == resolvedUrl)
-                .Select(d => new { d.EvaluationJson, d.Title })
-                .FirstOrDefaultAsync();
-
-            storedEvalJson = posting?.EvaluationJson;
-            storedTitle    = posting?.Title;
-        }
-    }
-    else if (command == "/answer" && replyToText is not null)
-    {
-        // /answer has no URL of its own — commandArg is the question. Job context (if any)
-        // only comes from replying to a job notification.
-        var answerUrl = TelegramService.ExtractUrl(replyToText);
-        if (answerUrl is not null)
-        {
-            storedEvalJson = await db.DiscoveredPostings
-                .Where(d => d.Url == answerUrl)
-                .Select(d => d.EvaluationJson)
-                .FirstOrDefaultAsync();
-        }
-    }
-
-    // A reply to a prior bot message that's part of an AgentThread (an open Q&A
-    // conversation, or a finished CV/cover letter/answer that /edit can revise).
-    int? threadId = null;
-    string? threadType = null;
-    string? threadStatus = null;
-    string? threadHistoryJson = null;
-    if (replyToMessageId is not null)
-    {
-        var thread = await db.AgentThreads
-            .Where(t => t.LastMessageId == replyToMessageId)
-            .Select(t => new { t.Id, t.ArtifactType, t.Status, t.HistoryJson })
-            .FirstOrDefaultAsync();
-
-        if (thread is not null)
-        {
-            threadId = thread.Id;
-            threadType = thread.ArtifactType;
-            threadStatus = thread.Status;
-            threadHistoryJson = thread.HistoryJson;
-        }
-    }
-
-    // Inserts or updates an AgentThread from inside the fire-and-forget block below, where
-    // the request-scoped `db` above is no longer safe to use. No-ops if the send failed
-    // (nothing to correlate a future reply to).
-    async Task SaveThreadAsync(int? id, string artifactType, List<AgentThreadTurn> history,
-        string? currentContent, string status, string? lastMessageId)
-    {
-        if (lastMessageId is null) return;
-
-        using var scope = scopeFactory.CreateScope();
-        var scopedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        scopedDb.CurrentUserId = ownerUserId;
-        var historyJson = JsonSerializer.Serialize(history);
-
-        if (id is int existingId)
-        {
-            var existing = await scopedDb.AgentThreads.FindAsync(existingId);
-            if (existing is not null)
-            {
-                existing.HistoryJson = historyJson;
-                existing.CurrentContent = currentContent;
-                existing.Status = status;
-                existing.LastMessageId = lastMessageId;
-                existing.UpdatedAt = DateTime.UtcNow;
-            }
-        }
-        else
-        {
-            scopedDb.AgentThreads.Add(new AgentThread
-            {
-                UserId = ownerUserId,
-                ArtifactType = artifactType,
-                HistoryJson = historyJson,
-                CurrentContent = currentContent,
-                Status = status,
-                LastMessageId = lastMessageId,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            });
-        }
-
-        await scopedDb.SaveChangesAsync();
-    }
-
-    // Sends an AnswerAgent response (a clarifying question or a final answer) and saves the
-    // thread accordingly. Shared by the Q&A continuation, /edit-on-answer, and new-/answer paths.
-    async Task SendAnswerAsync(int? id, List<AgentThreadTurn> history, string mode, string content)
-    {
-        var sentId = mode == "ask_followup"
-            ? await telegram.SendMessageAsync(content, parseMode: null)
-            : await telegram.SendChunkedAsync(content, parseMode: null);
-        await SaveThreadAsync(id, AgentThreadType.Answer, history,
-            mode == "final_answer" ? content : null,
-            mode == "final_answer" ? AgentThreadStatus.Complete : AgentThreadStatus.AwaitingContext,
-            sentId);
-    }
-
-    // Fire-and-forget: respond 200 immediately, process in background.
-    // Only Singletons, value types, and pre-fetched strings are captured.
-    _ = Task.Run(async () =>
-    {
-        // Detached POCO built from the strings captured above — not the tracked entity,
-        // which belongs to a db context that's gone by the time this runs.
-        var ownerProfile = new UserProfile
-        {
-            UserId = ownerUserId, Background = ownerBackground, CvBase = ownerCvBase, JobCriteria = ownerJobCriteria,
-        };
-        var ownerResume = new UserResume
-        {
-            UserId = ownerUserId, Summary = ownerSummary, SectionConfigJson = ownerSectionConfigJson,
-            ExperienceOverridesJson = ownerExperienceOverridesJson, SkillsSectionJson = ownerSkillsSectionJson,
-            ProjectOverridesJson = ownerProjectOverridesJson,
-        };
-
-        try
-        {
-            // A reply that continues an open Q&A conversation — the whole message is the
-            // candidate's answer to our clarifying question, not a new command.
-            if (threadId is not null && threadStatus == AgentThreadStatus.AwaitingContext)
-            {
-                var history = JsonSerializer.Deserialize<List<AgentThreadTurn>>(threadHistoryJson!) ?? [];
-                var followupRounds = history.Count(t => t.Role == "assistant");
-                var userTurn = followupRounds >= 3
-                    ? $"{text}\n\n(Please give your best answer now instead of asking another question.)"
-                    : text;
-                history.Add(new AgentThreadTurn("user", userTurn));
-
-                var (mode, content) = await answerAgent.RespondAsync(ownerProfile, history);
-                history.Add(new AgentThreadTurn("assistant", content));
-                await SendAnswerAsync(threadId, history, mode, content);
-                return;
-            }
-
-            // A reply asking to revise a previously delivered CV, cover letter, or answer.
-            if (threadId is not null && threadStatus == AgentThreadStatus.Complete && command == "/edit")
-            {
-                if (string.IsNullOrWhiteSpace(commandArg))
-                {
-                    await telegram.SendMessageAsync("Reply with <code>/edit &lt;what to change&gt;</code> to revise this.");
-                    return;
-                }
-
-                var history = JsonSerializer.Deserialize<List<AgentThreadTurn>>(threadHistoryJson!) ?? [];
-                history.Add(new AgentThreadTurn("user",
-                    $"Please revise the previous draft with this feedback: {commandArg}\n\n" +
-                    "Keep following all the rules in your instructions unless the feedback specifically asks to change them."));
-
-                if (threadType == AgentThreadType.Cv)
-                {
-                    var revisedCv = await cvAgent.ReviseAsync(ownerProfile, ownerResume, history);
-                    history.Add(new AgentThreadTurn("assistant", revisedCv));
-                    var pdf = JobSearch.Api.Services.PdfRenderer.RenderCv(revisedCv);
-                    var sentId = await telegram.SendDocumentAsync(pdf, "Kavin_Abeysinghe_CV.pdf");
-                    await SaveThreadAsync(threadId, threadType, history, revisedCv, AgentThreadStatus.Complete, sentId);
-                }
-                else if (threadType == AgentThreadType.CoverLetter)
-                {
-                    var revisedLetter = await letterAgent.ReviseAsync(ownerProfile, history);
-                    history.Add(new AgentThreadTurn("assistant", revisedLetter));
-                    var sentId = await telegram.SendChunkedAsync(revisedLetter);
-                    await SaveThreadAsync(threadId, threadType, history, revisedLetter, AgentThreadStatus.Complete, sentId);
-                }
-                else
-                {
-                    var (mode, content) = await answerAgent.RespondAsync(ownerProfile, history);
-                    history.Add(new AgentThreadTurn("assistant", content));
-                    await SendAnswerAsync(threadId, history, mode, content);
-                }
-                return;
-            }
-
-            if (command == "/answer")
-            {
-                if (string.IsNullOrWhiteSpace(commandArg))
-                {
-                    await telegram.SendMessageAsync(
-                        "Please include a question.\n" +
-                        "Example: <code>/answer What made you want to apply for this role?</code>\n" +
-                        "Or reply to a job notification with <code>/answer &lt;question&gt;</code> for context on that role.");
-                    return;
-                }
-
-                string? jobContext = null;
-                if (storedEvalJson is not null)
-                {
-                    try
-                    {
-                        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                        var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
-                        if (ev is not null) jobContext = EvalFormatter.ToPostingContext(ev);
-                    }
-                    catch (JsonException)
-                    {
-                        // No job context — answer from background alone.
-                    }
-                }
-
-                var history = new List<AgentThreadTurn>
-                {
-                    new("user", AnswerAgent.BuildInitialUserContent(commandArg, jobContext)),
-                };
-
-                var (mode, content) = await answerAgent.RespondAsync(ownerProfile, history);
-                history.Add(new AgentThreadTurn("assistant", content));
-                await SendAnswerAsync(null, history, mode, content);
-                return;
-            }
-
-            if (command is "/cv" or "/letter")
-            {
-                if (resolvedUrl is null)
-                {
-                    await telegram.SendMessageAsync(
-                        "Please include a job URL or reply to a job notification.\n" +
-                        "Example: <code>/cv https://au.seek.com/job/12345</code>");
-                    return;
-                }
-
-                if (storedTitle is not null &&
-                    storedTitle.Contains("Senior", StringComparison.OrdinalIgnoreCase))
-                {
-                    await telegram.SendMessageAsync(
-                        $"Skipped. This posting is Senior-level ({storedTitle}). " +
-                        "No CV or cover letter generated.", parseMode: null);
-                    return;
-                }
-
-                string label = command == "/cv" ? "CV" : "cover letter";
-
-                string? postingText;
-                if (pastedPostingText is not null)
-                {
-                    postingText = pastedPostingText;
-                    await telegram.SendMessageAsync($"Generating {label} from what you provided...");
-                }
-                else
-                {
-                    await telegram.SendMessageAsync(
-                        $"Generating {label} for <code>{System.Net.WebUtility.HtmlEncode(resolvedUrl)}</code>...");
-
-                    // Re-fetch the posting text. Fall back to the stored eval summary if unavailable.
-                    postingText = null;
-                    try
-                    {
-                        postingText = await fetcher.FetchAsync(resolvedUrl);
-                    }
-                    catch when (storedEvalJson is not null)
-                    {
-                        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                        var ev = JsonSerializer.Deserialize<PostingEvaluation>(storedEvalJson, opts);
-                        if (ev is not null) postingText = EvalFormatter.ToPostingContext(ev);
-                    }
-                    catch
-                    {
-                        // No cached fallback either — postingText stays null, handled below.
-                    }
-
-                    if (postingText is null)
-                    {
-                        await telegram.SendMessageAsync(
-                            "Couldn't fetch that posting. It may have expired or been taken down, " +
-                            "and I don't have a cached copy of it either. Reply to this message with " +
-                            "the job description text and I'll generate it from that instead.\n\n" +
-                            $"{command} {resolvedUrl}", parseMode: null);
-                        return;
-                    }
-                }
-
-                string evalJson = storedEvalJson ?? "{}";
-                var initialUserTurn = new AgentThreadTurn("user",
-                    command == "/cv"
-                        ? CvTailorAgent.BuildInitialUserContent(postingText, evalJson)
-                        : CoverLetterAgent.BuildInitialUserContent(postingText, evalJson));
-
-                if (command == "/cv")
-                {
-                    var cvText = await cvAgent.GenerateAsync(ownerProfile, ownerResume, postingText, evalJson);
-                    var pdf = JobSearch.Api.Services.PdfRenderer.RenderCv(cvText);
-                    var sentId = await telegram.SendDocumentAsync(pdf, "Kavin_Abeysinghe_CV.pdf");
-                    await SaveThreadAsync(null, AgentThreadType.Cv,
-                        [initialUserTurn, new AgentThreadTurn("assistant", cvText)],
-                        cvText, AgentThreadStatus.Complete, sentId);
-                }
-                else
-                {
-                    var letter = await letterAgent.GenerateAsync(ownerProfile, postingText, evalJson);
-                    var sentId = await telegram.SendChunkedAsync(letter);
-                    await SaveThreadAsync(null, AgentThreadType.CoverLetter,
-                        [initialUserTurn, new AgentThreadTurn("assistant", letter)],
-                        letter, AgentThreadStatus.Complete, sentId);
-                }
-                return;
-            }
-
-            // Default: bare URL → evaluate the posting.
-            var url = TelegramService.ExtractUrl(text);
-            if (url is null)
-            {
-                await telegram.SendMessageAsync(
-                    "Commands:\n" +
-                    "• Send a job URL to evaluate a posting\n" +
-                    "• <code>/cv &lt;url&gt;</code>: tailored CV\n" +
-                    "• <code>/letter &lt;url&gt;</code>: cover letter\n" +
-                    "Or reply to a job notification with <code>/cv</code> or <code>/letter</code>.");
-                return;
-            }
-
-            await telegram.SendMessageAsync(
-                $"Fetching <code>{System.Net.WebUtility.HtmlEncode(url)}</code>...");
-
-            string fetchedText;
-            try
-            {
-                fetchedText = await fetcher.FetchAsync(url);
-            }
-            catch (Exception ex)
-            {
-                await telegram.SendMessageAsync($"Could not fetch that URL: {ex.Message}", parseMode: null);
-                return;
-            }
-
-            await telegram.SendMessageAsync("Evaluating posting...");
-
-            var evaluation = await evaluator.EvaluateAsync(ownerProfile, fetchedText, url);
-            await telegram.SendMessageAsync(EvalFormatter.Format(evaluation));
-        }
-        catch (Exception ex)
-        {
-#pragma warning disable S2486, S108 // swallow intentionally — don't let Telegram send failure mask the original error
-            try { await telegram.SendMessageAsync($"Unexpected error: {ex.Message}", parseMode: null); } catch { }
-#pragma warning restore S2486, S108
-        }
-    });
-
-    return Results.Ok();
-}).AllowAnonymous().RequireRateLimiting("webhook");
-
 // ---------------------------------------------------------------------------
 // SendGrid inbound webhook — unauthenticated but verified by a shared secret query param.
 // SendGrid's Inbound Parse POST can't be configured with custom headers, so a header-based
-// secret (like Telegram's above) isn't an option — the secret is appended to the
-// Destination URL configured in SendGrid instead (?secret=...).
+// secret isn't an option — the secret is appended to the Destination URL configured in
+// SendGrid instead (?secret=...).
 // ---------------------------------------------------------------------------
 app.MapPost("/api/v1/sendgrid/inbound", async (
     HttpRequest request, AppDbContext db, IServiceScopeFactory scopeFactory) =>
@@ -2512,8 +2044,7 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
     if (string.IsNullOrEmpty(text)) text = form["html"].ToString();
 
     // Fire-and-forget: respond 200 immediately, insert in the background via a fresh
-    // scope — the request-scoped `db` above is gone by the time this runs (same pattern
-    // as the Telegram webhook below/above).
+    // scope — the request-scoped `db` above is gone by the time this runs.
     _ = Task.Run(async () =>
     {
         using var scope = scopeFactory.CreateScope();

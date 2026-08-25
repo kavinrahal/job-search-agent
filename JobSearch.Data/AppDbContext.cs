@@ -27,7 +27,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<ClassificationRecord> Classifications { get; set; }
     public DbSet<Application> Applications { get; set; }
     public DbSet<ApplicationEvent> ApplicationEvents { get; set; }
-    public DbSet<Notification> Notifications { get; set; }
     public DbSet<SystemHealth> SystemHealth { get; set; }
     public DbSet<DiscoveredPosting> DiscoveredPostings { get; set; }
     public DbSet<AgentThread> AgentThreads { get; set; }
@@ -154,10 +153,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
              .WithOne(ev => ev.Application)
              .HasForeignKey(ev => ev.ApplicationId)
              .OnDelete(DeleteBehavior.Cascade);
-            e.HasMany(a => a.Notifications)
-             .WithOne(n => n.Application)
-             .HasForeignKey(n => n.ApplicationId)
-             .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ApplicationEvent>(e =>
@@ -165,13 +160,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasIndex(ev => ev.ApplicationId);
             e.HasIndex(ev => ev.UserId);
             e.HasQueryFilter(ev => ev.UserId == CurrentUserId);
-        });
-
-        modelBuilder.Entity<Notification>(e =>
-        {
-            e.HasIndex(n => n.SentAt);           // fast query for pending notifications (Telegram)
-            e.HasIndex(n => n.UserId);
-            e.HasQueryFilter(n => n.UserId == CurrentUserId);
         });
 
         modelBuilder.Entity<SystemHealth>()
@@ -191,7 +179,6 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<AgentThread>(e =>
         {
-            e.HasIndex(t => t.LastMessageId).IsUnique(); // reply-threading lookup
             e.HasIndex(t => t.UserId);
             e.HasQueryFilter(t => t.UserId == CurrentUserId);
         });

@@ -9,7 +9,7 @@ export function OnboardingSourcesPage({ tier }: { tier: string }) {
       title="Last step: where should we look?"
       blurb="Pick where postings come from and how you want your applications tracked. This runs quietly in the background from here on, so set it once and let it work for you."
     >
-      <SourcesPage hideHeader />
+      <SourcesPage hideHeader onboarding />
     </OnboardingShell>
   );
 }

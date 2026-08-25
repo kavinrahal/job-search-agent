@@ -1,6 +1,5 @@
 using System.Text.Json;
 using JobSearch.Data;
-using JobSearchAgent.Integrations;
 using Microsoft.EntityFrameworkCore;
 
 namespace JobSearchAgent.Workers;
@@ -16,7 +15,6 @@ public class JobDiscoveryWorker
     private readonly IEnumerable<IJobFetcher> _fetchers;
     private readonly JobPostingFetcher _pageFetcher;
     private readonly PostingEvaluator _evaluator;
-    private readonly TelegramNotifier? _telegram;
     private readonly SendGridEmailService? _emailer;
 
     public JobDiscoveryWorker(
@@ -24,14 +22,12 @@ public class JobDiscoveryWorker
         IEnumerable<IJobFetcher> fetchers,
         JobPostingFetcher pageFetcher,
         PostingEvaluator evaluator,
-        TelegramNotifier? telegram,
         SendGridEmailService? emailer = null)
     {
         _db = db;
         _fetchers = fetchers;
         _pageFetcher = pageFetcher;
         _evaluator = evaluator;
-        _telegram = telegram;
         _emailer = emailer;
     }
 
@@ -131,20 +127,13 @@ public class JobDiscoveryWorker
 
                 bool isMatch = eval.Recommendation is "strong_match" or "good_match";
 
-                if (_telegram is not null && isMatch &&
-                    await _telegram.SendAsync(EvalFormatter.Format(eval), "HTML"))
-                {
-                    record.NotificationSent = true;
-                    await _db.SaveChangesAsync();
-                    notified++;
-                }
-
                 if (_emailer is not null && user is not null && isMatch && !record.EmailNotificationSent)
                 {
                     var (subject, body) = EvalFormatter.FormatPlainTextEmail(eval);
                     await _emailer.SendAsync(user.Email, subject, body);
                     record.EmailNotificationSent = true;
                     await _db.SaveChangesAsync();
+                    notified++;
                 }
             }
             catch (Exception ex)
