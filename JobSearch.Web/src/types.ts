@@ -140,12 +140,61 @@ export interface ResumeTemplatesResponse {
   industries: ResumeIndustry[];
 }
 
+// Mirrors JobSearch.Data.ItemOverride — shared by ExperienceOverride.achievements and
+// ProjectOverride.highlights. order: null keeps the item's natural (Background) position; set
+// it to move the item to a specific rendered position (see ResumeRenderer.RenderBulletList's
+// two-group sort — an explicit order always wins over natural position).
+export interface ItemOverride {
+  index: number;
+  included: boolean;
+  textOverride: string | null;
+  order: number | null;
+}
+
+// Mirrors JobSearch.Data.ExperienceOverride, referencing Background.experience by positional
+// index (not a stored id — see UserResumeData.cs's own comment on why).
+export interface ExperienceOverride {
+  experienceIndex: number;
+  included: boolean;
+  companyDescriptionOverride: string | null;
+  achievements: ItemOverride[];
+  extraAchievements: string[];
+  notes: string | null;
+}
+
+// Mirrors JobSearch.Data.ProjectOverride, referencing Background.projects by positional index.
+export interface ProjectOverride {
+  projectIndex: number;
+  included: boolean;
+  descriptionOverride: string | null;
+  highlights: ItemOverride[];
+  extraHighlights: string[];
+}
+
+// Mirrors JobSearch.Data.SkillsSectionEntry — the actual rendered Skills section, authored
+// independently of Background.skills (see UserResume.cs's own comment on why).
+export interface SkillsSectionEntry {
+  label: string;
+  items: string[];
+}
+
 // GET/PUT /resume — the curation half of the resume-builder data model (UserResume), distinct
-// from the raw-fact Background editor at /profile.
+// from the raw-fact Background editor at /profile. The four override fields are always present
+// on a GET response (never omitted, unlike the PUT request's optional partial-update fields).
 export interface ResumeData {
   summary: string;
   sectionConfig: SectionConfigEntry[];
+  experienceOverrides: ExperienceOverride[];
+  projectOverrides: ProjectOverride[];
+  skillsSection: SkillsSectionEntry[];
   updatedAt: string;
+}
+
+// POST /resume/preview's response — the real ResumeRenderer.Render output for an unsaved
+// draft, subset-markdown so renderResumeMarkdown.ts can display it without a second
+// implementation of ResumeRenderer's merge logic (see that endpoint's own comment).
+export interface ResumePreviewResponse {
+  markdown: string;
 }
 
 export interface SourceCatalogItem {

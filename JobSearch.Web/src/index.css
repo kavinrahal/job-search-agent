@@ -35,3 +35,54 @@ body {
     background-color 0.2s ease,
     color 0.2s ease;
 }
+
+/* Resume builder's live preview "document" (see ResumePreviewPane.tsx / renderResumeMarkdown.ts)
+   — a faithful representation of the real PDF output, so it intentionally always looks the
+   same regardless of theme, same principle as ResumePdfViewer's canvas staying white. Sizing
+   loosely tracks JobSearch.Api/Services/PdfRenderer.cs's own font sizes/rule colors so the
+   preview reads like the real document, not just "some rendered markdown". */
+.resume-preview-document h1 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.resume-preview-document h2 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-top: 1rem;
+}
+
+.resume-preview-document .resume-section-rule {
+  margin: 0.15rem 0 0.5rem;
+  border: none;
+  border-top: 1px solid #aaaaaa;
+}
+
+.resume-preview-document h3 {
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
+}
+
+.resume-preview-document p {
+  margin-bottom: 0.35rem;
+  line-height: 1.4;
+}
+
+.resume-preview-document .resume-bullets {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.resume-preview-document .resume-bullets li {
+  margin-bottom: 0.15rem;
+  line-height: 1.4;
+}
+
+.resume-preview-document .resume-divider {
+  margin: 0.5rem 0;
+  border: none;
+  border-top: 1px solid #cccccc;
+}

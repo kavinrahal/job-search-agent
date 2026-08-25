@@ -34,6 +34,10 @@ export interface ProjectEntry {
   name: string;
   description: string;
   tech_stack?: string;
+  // Typed (unlike the other passthrough fields below) because the resume builder's
+  // ProjectOverrideEditor needs it as a real string[] to drive per-highlight override editing
+  // (see ProjectOverride.highlights in types.ts) — same role achievements plays for Experience.
+  highlights?: string[];
   [key: string]: unknown;
 }
 
