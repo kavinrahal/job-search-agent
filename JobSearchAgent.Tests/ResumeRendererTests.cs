@@ -265,6 +265,54 @@ public class ResumeRendererTests
     }
 
     [Fact]
+    public void Render_SkillsGroupWithEmptyLabelButItems_RendersItemsWithoutBareBoldMarkers()
+    {
+        // Real production bug: a skills group added via the Resume Builder's Skills editor with
+        // Items filled in but no Label typed yet rendered a literal "****" (bold markers with
+        // nothing between them) in real generated resumes.
+        var resume = EmptyResume();
+        resume.SkillsSectionJson = JsonSerializer.Serialize(new List<SkillsSectionEntry>
+        {
+            new("", ["C#", "TypeScript"]),
+        });
+
+        var output = ResumeRenderer.Render(MinimalBackground(), resume);
+
+        Assert.Contains("## Skills\n\nC#, TypeScript", output);
+        Assert.DoesNotContain("****", output);
+    }
+
+    [Fact]
+    public void Render_SkillsGroupWithEmptyLabelAndNoItems_SkipsThatGroupEntirely()
+    {
+        var resume = EmptyResume();
+        resume.SkillsSectionJson = JsonSerializer.Serialize(new List<SkillsSectionEntry>
+        {
+            new("", []),
+            new("Languages", ["C#"]),
+        });
+
+        var output = ResumeRenderer.Render(MinimalBackground(), resume);
+
+        Assert.Contains("## Skills\n\n**Languages** – C#", output);
+        Assert.DoesNotContain("****", output);
+    }
+
+    [Fact]
+    public void Render_AllSkillsGroupsHaveEmptyLabelAndNoItems_OmitsSkillsHeadingEntirely()
+    {
+        var resume = EmptyResume();
+        resume.SkillsSectionJson = JsonSerializer.Serialize(new List<SkillsSectionEntry>
+        {
+            new("", []),
+        });
+
+        var output = ResumeRenderer.Render(MinimalBackground(), resume);
+
+        Assert.DoesNotContain("## Skills", output);
+    }
+
+    [Fact]
     public void Render_Projects_AppliesDescriptionAndHighlightOverridesAndExtras()
     {
         var background = MinimalBackground();

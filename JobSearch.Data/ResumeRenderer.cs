@@ -178,9 +178,24 @@ public static class ResumeRenderer
         var sections = JsonSerializer.Deserialize<List<SkillsSectionEntry>>(resume.SkillsSectionJson) ?? [];
         if (sections.Count == 0) return null;
         var sb = new StringBuilder("## Skills\n\n");
+        var any = false;
         foreach (var s in sections)
-            sb.Append("**").Append(s.Label).Append("** – ").Append(string.Join(", ", s.Items)).Append('\n');
-        return sb.ToString().TrimEnd() + "\n";
+        {
+            var label = s.Label?.Trim();
+            var items = s.Items ?? [];
+            // A group the user has started (added items or a label) but not finished still
+            // deserves to render — same spirit as RenderBulletList/PR #47: don't destroy user
+            // data, don't render garbage. An unlabeled group renders as a bare item list instead
+            // of a literal "****" (bold markers with nothing between them). A group with neither
+            // label nor items has nothing meaningful to show, so it's skipped entirely.
+            if (string.IsNullOrWhiteSpace(label) && items.Count == 0) continue;
+            any = true;
+            if (!string.IsNullOrWhiteSpace(label))
+                sb.Append("**").Append(label).Append("** – ").Append(string.Join(", ", items)).Append('\n');
+            else
+                sb.Append(string.Join(", ", items)).Append('\n');
+        }
+        return any ? sb.ToString().TrimEnd() + "\n" : null;
     }
 
     private static string? RenderProjects(BackgroundData background, UserResume resume)
