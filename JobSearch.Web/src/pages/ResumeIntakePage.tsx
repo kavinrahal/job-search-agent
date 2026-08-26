@@ -14,7 +14,7 @@ const EMPTY_BACKGROUND: BackgroundParseResult = {
   data: { personal: { name: "", email: "" }, experience: [], education: [], skills: {}, projects: [], extra: {} },
 };
 
-export function ResumeIntakePage({ hideHeader = false }: { hideHeader?: boolean } = {}) {
+export function ResumeIntakePage({ hideHeader = false, onboarding = false }: { hideHeader?: boolean; onboarding?: boolean } = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [background, setBackground] = useState<BackgroundParseResult | null>(null);
   const [cvBase, setCvBase] = useState("");
@@ -48,10 +48,14 @@ export function ResumeIntakePage({ hideHeader = false }: { hideHeader?: boolean 
       save.execute(file ? { background: backgroundYaml, cvBase } : { background: backgroundYaml }),
       ...(file ? [uploadPdf.execute(file)] : []),
     ]);
+    // Build-from-scratch (no file) during onboarding detours through the Resume Builder to pick
+    // an industry template/structure before continuing to Job Criteria, instead of skipping
+    // straight there. Uploading a real resume keeps today's behavior, and so does /profile's
+    // usage (onboarding=false there) for an already-onboarded user.
     // Hard navigation, not client-side — useMe() only fetches /auth/me once on mount, so
     // needsOnboarding/needsCriteria need a fresh page load to reflect what was just saved.
-    // A client-side navigate("/") would immediately bounce back here via the stale flag.
-    window.location.href = "/";
+    // A client-side navigate() would immediately bounce back here via the stale flag.
+    window.location.href = onboarding && !file ? "/resume-builder?onboarding=1" : "/";
   }
 
   return (
