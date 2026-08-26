@@ -1,4 +1,4 @@
-import { fetchResume, fetchResumeTemplates, updateResume, applyResumeTemplate } from "../api";
+import { fetchResume, fetchResumeTemplates, updateResume, applyResumeTemplate, generateResumeSummary } from "../api";
 import { useAsyncData, useAsyncAction } from "./useAsync";
 
 export function useResume() {
@@ -16,4 +16,8 @@ export function useUpdateResume() {
 
 export function useApplyResumeTemplate() {
   return useAsyncAction(applyResumeTemplate);
+}
+
+export function useGenerateResumeSummary() {
+  return useAsyncAction(generateResumeSummary);
 }
