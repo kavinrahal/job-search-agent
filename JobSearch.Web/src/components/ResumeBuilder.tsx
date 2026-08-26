@@ -124,7 +124,10 @@ function SectionList({ value, onChange }: { value: SectionConfigEntry[]; onChang
 // highlights) that the override editors need to show what they're overriding — null while
 // Background hasn't loaded yet or doesn't parse as structured YAML (see parseBackgroundYaml), in
 // which case those editors just don't render; nothing else on this page depends on it.
-export function ResumeBuilder({ value, onChange, industries, onApplyTemplate, applyingTemplate, background, onGenerateSummary, generatingSummary }: {
+export function ResumeBuilder({
+  value, onChange, industries, onApplyTemplate, applyingTemplate, background,
+  onGenerateSummary, generatingSummary, generateSummaryError,
+}: {
   value: ResumeData;
   onChange: (v: ResumeData) => void;
   industries: ResumeIndustry[];
@@ -133,6 +136,7 @@ export function ResumeBuilder({ value, onChange, industries, onApplyTemplate, ap
   background: BackgroundData | null;
   onGenerateSummary: () => void;
   generatingSummary: boolean;
+  generateSummaryError: string | null;
 }) {
   return (
     <div className="space-y-4">
@@ -149,6 +153,13 @@ export function ResumeBuilder({ value, onChange, industries, onApplyTemplate, ap
           >
             {generatingSummary ? "Generating…" : "Generate summary"}
           </button>
+          {/* Rendered right by the button that triggers it, not the page's shared bottom error
+              slot (used by Save/Apply template) — this page has enough content above the fold
+              that a bottom-slot error is easy to miss without scrolling. Same inline-error
+              styling as AdvancedSection's YAML error in CardEditor.tsx. */}
+          {generateSummaryError && (
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400">{generateSummaryError}</p>
+          )}
         </div>
       </TopicCard>
       {background && (

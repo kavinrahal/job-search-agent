@@ -61,19 +61,36 @@ export function ResumeBuilderPage() {
   const { markdown, loading: loadingPreview, error: previewError } = useDebouncedPreview(previewDraft, !loading);
 
   async function handleApplyTemplate(industryKey: string, seniority?: "junior" | "experienced") {
-    const updated = await applyTemplate(industryKey, seniority);
-    setDraft(prev => applyTemplateToDraft(prev, updated));
+    // execute() already records the failure in applyError (rendered below) and rethrows purely
+    // so callers can react to failure inline — nothing here needs that, so catch and drop it
+    // rather than let it surface as an unhandled promise rejection (same pattern as
+    // CriteriaWizard.commit's try/catch around execute()).
+    try {
+      const updated = await applyTemplate(industryKey, seniority);
+      setDraft(prev => applyTemplateToDraft(prev, updated));
+    } catch {
+      // already surfaced via applyError
+    }
   }
 
   // Draft-only, same as handleApplyTemplate — populates the unsaved summary field for the user
   // to review/edit, doesn't touch the server's copy until they click Save below.
   async function handleGenerateSummary() {
-    const { summary } = await generateSummary();
-    setDraft({ ...draft, summary });
+    try {
+      const { summary } = await generateSummary();
+      setDraft({ ...draft, summary });
+    } catch {
+      // already surfaced via generateSummaryError, rendered next to the button in ResumeBuilder
+    }
   }
 
   async function handleSave() {
-    await save(previewDraft);
+    try {
+      await save(previewDraft);
+    } catch {
+      // already surfaced via saveError
+      return;
+    }
     // Only continue the onboarding detour when the account is actually still mid-detour
     // (needsCriteria still true) — the ?onboarding=1 param alone isn't trustworthy, since a
     // fully-onboarded account can land here too via a bookmarked/shared link, and for them a
@@ -90,8 +107,11 @@ export function ResumeBuilderPage() {
   }
 
   // loadError gets its own amber presentation below (it's most often the expected "resume
-  // setup isn't finished yet" 409, not an unexpected failure) — this is only for save/apply/generate.
-  const error = saveError ?? applyError ?? generateSummaryError;
+  // setup isn't finished yet" 409, not an unexpected failure) — this is only for save/apply.
+  // generateSummaryError renders next to the "Generate summary" button instead (see
+  // ResumeBuilder's Summary card) since that error is easy to miss in this bottom slot on a
+  // page with substantial content above it.
+  const error = saveError ?? applyError;
 
   if (loading) {
     return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
@@ -129,6 +149,7 @@ export function ResumeBuilderPage() {
                 background={background}
                 onGenerateSummary={handleGenerateSummary}
                 generatingSummary={generatingSummary}
+                generateSummaryError={generateSummaryError}
               />
               <button onClick={handleSave} disabled={saving} className={PRIMARY_BUTTON}>
                 {saving ? "Saving…" : "Save resume"}
