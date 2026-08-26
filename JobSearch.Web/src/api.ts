@@ -12,6 +12,7 @@ import type {
   SourcesResponse,
   ResumeData,
   ResumeTemplatesResponse,
+  ResumePreviewResponse,
 } from "./types";
 
 // VITE_API_URL is set in production to the API's own Railway URL — the frontend and API are
@@ -199,14 +200,32 @@ export async function fetchResume(): Promise<ResumeData> {
   return request("/resume");
 }
 
-export async function updateResume(
-  fields: Partial<Pick<ResumeData, "summary" | "sectionConfig">>,
-): Promise<ResumeData> {
+// Shared by updateResume and fetchResumePreview — both send this same partial-draft shape
+// (only provided fields are considered; PUT persists them, /preview renders them transiently).
+export type ResumeDraft = Partial<Pick<
+  ResumeData, "summary" | "sectionConfig" | "experienceOverrides" | "projectOverrides" | "skillsSection"
+>>;
+
+export async function updateResume(fields: ResumeDraft): Promise<ResumeData> {
   return request("/resume", { method: "PUT", ...json(fields) });
+}
+
+// Renders the *real* ResumeRenderer output against a draft that hasn't been saved yet — no DB
+// write happens server-side (see POST /resume/preview's own comment). Debounced by the caller
+// (useDebouncedPreview), not here, so this stays a plain one-shot request.
+export async function fetchResumePreview(draft: ResumeDraft): Promise<ResumePreviewResponse> {
+  return request("/resume/preview", { method: "POST", ...json(draft) });
 }
 
 export async function applyResumeTemplate(industryKey: string, seniority?: "junior" | "experienced"): Promise<ResumeData> {
   return request("/resume/apply-template", { method: "POST", ...json({ industryKey, seniority }) });
+}
+
+// Draft only — does not persist. Fills the caller's (unsaved) summary field; the page's normal
+// Save button still owns writing it. 422s with a clear message if Background has nothing to
+// summarize yet (see the matching backend endpoint's comment).
+export async function generateResumeSummary(): Promise<{ summary: string }> {
+  return request("/resume/generate-summary", { method: "POST" });
 }
 
 // Company is a separate query param, not folded into the title search string — Jora/Adzuna's

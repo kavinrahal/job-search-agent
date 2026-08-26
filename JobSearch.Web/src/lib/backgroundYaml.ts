@@ -34,6 +34,10 @@ export interface ProjectEntry {
   name: string;
   description: string;
   tech_stack?: string;
+  // Typed (unlike the other passthrough fields below) because the resume builder's
+  // ProjectOverrideEditor needs it as a real string[] to drive per-highlight override editing
+  // (see ProjectOverride.highlights in types.ts) — same role achievements plays for Experience.
+  highlights?: string[];
   [key: string]: unknown;
 }
 
@@ -102,6 +106,16 @@ export function parseBackgroundYaml(text: string): BackgroundParseResult {
       extra,
     },
   };
+}
+
+// Same "warn + block save on missing required fields" pattern as
+// criteriaCompleteness.ts's getMissingCriteriaFields — used by ResumeIntakePage's
+// build-from-scratch path, where there's no parsed PDF to have already supplied these.
+export function getMissingBackgroundFields(data: BackgroundData): string[] {
+  const missing: string[] = [];
+  if (!data.personal.name.trim()) missing.push("Name");
+  if (!data.personal.email.trim()) missing.push("Email");
+  return missing;
 }
 
 export function serializeBackgroundYaml(data: BackgroundData): string {

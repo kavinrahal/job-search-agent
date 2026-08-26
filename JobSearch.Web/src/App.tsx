@@ -42,8 +42,11 @@ const NAV_LINKS = [
 const ONBOARDING_ROUTES = ["/onboarding/cv", "/settings"];
 
 // Next step: Background is saved but Job Criteria has never been visited/saved
-// (needsCriteria). Same escape hatch to Settings as every other step below.
-const CRITERIA_ROUTES = ["/onboarding/criteria", "/settings"];
+// (needsCriteria). Same escape hatch to Settings as every other step below, plus
+// /resume-builder — the build-from-scratch onboarding detour (see ResumeIntakePage.handleSave)
+// lands here in exactly this needsCriteria-true window, so without it StepRedirect would bounce
+// the user off Resume Builder before they can interact with it.
+const CRITERIA_ROUTES = ["/onboarding/criteria", "/resume-builder", "/settings"];
 
 // Same idea, one step later: a Tier 2 user who hasn't picked sources yet (needsSourceSelection)
 // can still reach Settings to back out, but everything else bounces to /sources first.
@@ -221,7 +224,11 @@ function PageBody({ me }: { me: NonNullable<ReturnType<typeof useMe>["data"]> })
           <Route path="/discover"           element={<DiscoveriesPage />} />
           <Route path="/applications"       element={<ApplicationsPage />} />
           <Route path="/sources"            element={<SourcesPage />} />
-          <Route path="/profile"            element={<ResumeIntakePage />} />
+          {/* A user who already has a real background (needsOnboarding false — see the flag's
+              definition in Program.cs) shouldn't see the blank build-from-scratch/upload intake
+              here; that only makes sense for a genuinely new user. Settings is the actual
+              "edit your existing info" page for everyone else. */}
+          <Route path="/profile"            element={me.needsOnboarding ? <ResumeIntakePage /> : <Navigate to="/settings" replace />} />
           <Route path="/resume-builder"     element={<ResumeBuilderPage />} />
           <Route path="/criteria"           element={<JobCriteriaPage />} />
           <Route path="/settings"           element={<SettingsPage />} />

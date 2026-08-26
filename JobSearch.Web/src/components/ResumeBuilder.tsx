@@ -1,7 +1,11 @@
 import { useState } from "react";
 import type { ResumeData, ResumeIndustry, SectionConfigEntry } from "../types";
+import type { BackgroundData } from "../lib/backgroundYaml";
 import { LABEL, Field, TopicCard } from "./CardEditor";
 import { ChoiceButtons } from "./ChoiceButtons";
+import { ExperienceOverrideEditor } from "./ExperienceOverrideEditor";
+import { ProjectOverrideEditor } from "./ProjectOverrideEditor";
+import { SkillsSectionEditor } from "./SkillsSectionEditor";
 import { moveSection, toggleSectionIncluded, sectionLabel } from "../lib/resumeSections";
 import { PRIMARY_BUTTON_SM } from "../lib/styles";
 
@@ -112,16 +116,27 @@ function SectionList({ value, onChange }: { value: SectionConfigEntry[]; onChang
   );
 }
 
-// First user-facing surface for UserResume (the curation layer over Background — see
-// UserResume.cs). Deliberately scoped to industry template + section include/reorder + summary
-// text this pass; per-achievement/per-project override editing (ExperienceOverridesJson/
-// SkillsSectionJson/ProjectOverridesJson) is a distinct, larger phase, deferred.
-export function ResumeBuilder({ value, onChange, industries, onApplyTemplate, applyingTemplate }: {
+// The full user-facing surface for UserResume (the curation layer over Background — see
+// UserResume.cs): industry template, section include/reorder, summary text (hand-written or
+// auto-generated via the "Generate summary" button, grounded in `background` + target job
+// titles — see ResumeSummaryAgent), and per-experience/project/skills curation. `background` is
+// Background's read-only Experience/Projects entries (role/company/dates, achievements/
+// highlights) that the override editors need to show what they're overriding — null while
+// Background hasn't loaded yet or doesn't parse as structured YAML (see parseBackgroundYaml), in
+// which case those editors just don't render; nothing else on this page depends on it.
+export function ResumeBuilder({
+  value, onChange, industries, onApplyTemplate, applyingTemplate, background,
+  onGenerateSummary, generatingSummary, generateSummaryError,
+}: {
   value: ResumeData;
   onChange: (v: ResumeData) => void;
   industries: ResumeIndustry[];
   onApplyTemplate: (industryKey: string, seniority?: Seniority) => void;
   applyingTemplate: boolean;
+  background: BackgroundData | null;
+  onGenerateSummary: () => void;
+  generatingSummary: boolean;
+  generateSummaryError: string | null;
 }) {
   return (
     <div className="space-y-4">
@@ -129,7 +144,39 @@ export function ResumeBuilder({ value, onChange, industries, onApplyTemplate, ap
       <SectionList value={value.sectionConfig} onChange={sectionConfig => onChange({ ...value, sectionConfig })} />
       <TopicCard title="Summary">
         <Field label="Resume summary" value={value.summary} onChange={summary => onChange({ ...value, summary })} multiline />
+        <div>
+          <button
+            type="button"
+            disabled={generatingSummary}
+            onClick={onGenerateSummary}
+            className={PRIMARY_BUTTON_SM}
+          >
+            {generatingSummary ? "Generating…" : "Generate summary"}
+          </button>
+          {/* Rendered right by the button that triggers it, not the page's shared bottom error
+              slot (used by Save/Apply template) — this page has enough content above the fold
+              that a bottom-slot error is easy to miss without scrolling. Same inline-error
+              styling as AdvancedSection's YAML error in CardEditor.tsx. */}
+          {generateSummaryError && (
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400">{generateSummaryError}</p>
+          )}
+        </div>
       </TopicCard>
+      {background && (
+        <>
+          <ExperienceOverrideEditor
+            background={background.experience}
+            value={value.experienceOverrides}
+            onChange={experienceOverrides => onChange({ ...value, experienceOverrides })}
+          />
+          <ProjectOverrideEditor
+            background={background.projects}
+            value={value.projectOverrides}
+            onChange={projectOverrides => onChange({ ...value, projectOverrides })}
+          />
+        </>
+      )}
+      <SkillsSectionEditor value={value.skillsSection} onChange={skillsSection => onChange({ ...value, skillsSection })} />
     </div>
   );
 }

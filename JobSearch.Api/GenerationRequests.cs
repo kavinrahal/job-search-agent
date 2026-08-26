@@ -45,9 +45,16 @@ public record UpdateApplicationStatusRequest(string Status);
 public record GmailTrackingModeRequest(string Mode);
 
 // PUT /api/v1/resume — only provided (non-null) fields are updated, same partial-update shape
-// as ProfileUpdateRequest above. SectionConfig here (not the raw JSON string) since the frontend
-// builder edits it as structured {sectionKey, included} rows, not free text.
-public record ResumeUpdateRequest(string? Summary, List<SectionConfigEntry>? SectionConfig);
+// as ProfileUpdateRequest above. SectionConfig/ExperienceOverrides/ProjectOverrides/SkillsSection
+// here (not the raw JSON string) since the frontend builder edits these as structured objects,
+// not free text — same shapes as UserResume's own JSON columns (see UserResumeData.cs).
+// POST /api/v1/resume/preview accepts this exact same shape (the full draft, not yet saved).
+public record ResumeUpdateRequest(
+    string? Summary,
+    List<SectionConfigEntry>? SectionConfig,
+    List<ExperienceOverride>? ExperienceOverrides,
+    List<ProjectOverride>? ProjectOverrides,
+    List<SkillsSectionEntry>? SkillsSection);
 
 // POST /api/v1/resume/apply-template — Seniority is "junior" or "experienced" (validated against
 // ResumeSeniority in Program.cs); omitted/ignored for industries where

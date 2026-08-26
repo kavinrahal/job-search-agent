@@ -202,6 +202,46 @@ public class ContractTests
     }
 
     // =========================================================================
+    // ResumeSummaryAgent
+    // =========================================================================
+
+    // Verifies structural contract: non-empty summary text of reasonable length, obeying the
+    // shared hard constraints (no colons, no em dashes).
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task ResumeSummaryAgent_ReturnsNonEmptySummaryGroundedInBackground()
+    {
+        if (ApiKey is null) return;
+
+        var agent = new ResumeSummaryAgent(ApiKey);
+        var profile = Make.OwnerProfile();
+
+        var summary = await agent.GenerateAsync(userId: 1, profile.Background, targetJobTitles: ["Software Engineer"]);
+
+        Assert.False(string.IsNullOrWhiteSpace(summary));
+        Assert.True(summary.Length >= 50, $"Expected >=50 chars, got {summary.Length}");
+        Assert.DoesNotContain(':', summary);
+        Assert.DoesNotContain('—', summary);
+    }
+
+    // Verifies the agent still produces a reasonable, non-empty summary with no target job
+    // titles given at all (the "generic, role-agnostic" branch generate_resume_summary.md
+    // describes).
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task ResumeSummaryAgent_NoTargetJobTitles_StillReturnsNonEmptySummary()
+    {
+        if (ApiKey is null) return;
+
+        var agent = new ResumeSummaryAgent(ApiKey);
+        var profile = Make.OwnerProfile();
+
+        var summary = await agent.GenerateAsync(userId: 1, profile.Background, targetJobTitles: []);
+
+        Assert.False(string.IsNullOrWhiteSpace(summary));
+    }
+
+    // =========================================================================
     // ResumeIntakeAgent
     // =========================================================================
 

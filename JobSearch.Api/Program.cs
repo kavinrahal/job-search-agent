@@ -263,6 +263,7 @@ builder.Services.AddSingleton(sp => new CvTailorAgent(anthropicApiKey, sp.GetReq
 builder.Services.AddSingleton(sp => new AnswerAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new ResumeIntakeAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new ResumeBackfillAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(sp => new ResumeSummaryAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new PostingMatcherAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new CompanyExtractorAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new AccuracyVerifierAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
@@ -1031,6 +1032,15 @@ api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbC
             await Console.Error.WriteLineAsync($"UserResume seeding failed for user {userId}, will need a manual admin backfill: {ex}");
         }
     }
+    // From-scratch onboarding save (a Background was actually being set, but there's no CvBase
+    // to reconcile — see ResumeIntakePage.tsx's "build from scratch" entry point and
+    // UserResumeProvisioningService's own comment for why this is deterministic, not an agent
+    // call). Only seeds once — a user who later replaces CvBase for real still goes through the
+    // branch above, which unconditionally overwrites via RemoveRange + Add.
+    else if (body.Background is not null)
+    {
+        await UserResumeProvisioningService.SeedDefaultIfMissingAsync(db, userId);
+    }
 
     return Results.Ok(new { profile.Background, profile.CvBase, profile.JobCriteria, profile.UpdatedAt });
 });
@@ -1043,8 +1053,9 @@ api.MapGet("/resume-templates", () => Results.Ok(new
     industries = ResumeIndustryTemplates.All.Select(t => new { t.Key, t.DisplayName, t.HasSeniorityToggle }),
 }));
 
-// GET /api/v1/resume — the current user's UserResume curation data (SectionConfig + Summary),
-// for the resume builder. 409 (same message /cv already uses) if the row doesn't exist yet —
+// GET /api/v1/resume — the current user's full UserResume curation data (Summary, SectionConfig,
+// and the per-experience/project/skills overrides), for the resume builder. 409 (same message
+// /cv already uses) if the row doesn't exist yet —
 // UserResume isn't guaranteed to exist the moment a UserProfile does, see PUT /profile's
 // best-effort seeding comment above.
 api.MapGet("/resume", async (HttpContext ctx, AppDbContext db) =>
@@ -1055,19 +1066,38 @@ api.MapGet("/resume", async (HttpContext ctx, AppDbContext db) =>
 });
 
 // PUT /api/v1/resume — partial update: only provided fields change. Manual section
-// include/reorder edits and Summary edits both go through this one endpoint.
+// include/reorder edits, Summary edits, and per-experience/project/skills curation edits all
+// go through this one endpoint.
 api.MapPut("/resume", async (HttpContext ctx, ResumeUpdateRequest body, AppDbContext db) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
     var resume = await db.UserResumes.FindAsync(userId);
     if (resume is null) return ResumeNotReadyError();
 
-    if (body.Summary is not null) resume.Summary = body.Summary;
-    if (body.SectionConfig is not null) resume.SectionConfigJson = JsonSerializer.Serialize(body.SectionConfig);
+    ResumeCuration.ApplyUpdate(resume, body.Summary, body.SectionConfig, body.ExperienceOverrides, body.ProjectOverrides, body.SkillsSection);
     resume.UpdatedAt = DateTime.UtcNow;
     await db.SaveChangesAsync();
 
     return ResumeResponse(resume);
+});
+
+// POST /api/v1/resume/preview — the resume builder's live preview. Takes the same draft shape
+// as PUT /resume but never saves it: builds a transient UserResume (draft fields where
+// provided, the user's real stored UserResume otherwise) and renders it with the real
+// ResumeRenderer, so the preview is guaranteed to match what a Save would actually produce
+// instead of a second, drifting reimplementation of the merge logic. See ResumeCuration.Preview.
+api.MapPost("/resume/preview", async (HttpContext ctx, ResumeUpdateRequest body, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var resume = await db.UserResumes.FindAsync(userId);
+    if (resume is null) return ResumeNotReadyError();
+
+    var profile = await db.UserProfiles.FindAsync(userId)
+        ?? throw new InvalidOperationException("UserProfile not found for the current user.");
+    var background = BackgroundYamlParser.Parse(profile.Background);
+
+    var markdown = ResumeCuration.Preview(background, resume, body.Summary, body.SectionConfig, body.ExperienceOverrides, body.ProjectOverrides, body.SkillsSection);
+    return Results.Ok(new { markdown });
 });
 
 // POST /api/v1/resume/apply-template — seeds SectionConfigJson from a chosen industry's
@@ -1099,6 +1129,28 @@ api.MapPost("/resume/apply-template", async (HttpContext ctx, ApplyResumeTemplat
     await db.SaveChangesAsync();
 
     return ResumeResponse(resume);
+});
+
+// POST /api/v1/resume/generate-summary — auto-generates a fresh Summary from BACKGROUND + target
+// job titles alone (no job posting in context — that's CvTailorAgent's job, not this one). Draft
+// only: does not write UserResume, same "nothing persists until Save" model as the rest of this
+// page. Only needs UserProfile (not UserResume) to exist — the frontend only reaches this button
+// once /resume has already loaded successfully, and this endpoint never touches the UserResume row.
+api.MapPost("/resume/generate-summary", async (HttpContext ctx, AppDbContext db, ResumeSummaryAgent summaryAgent) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var profile = await db.UserProfiles.FindAsync(userId);
+    if (profile is null) return Results.NotFound();
+
+    var background = BackgroundYamlParser.Parse(profile.Background);
+    if (ResumeSummaryAgent.IsBackgroundEssentiallyEmpty(background))
+        return Results.Json(
+            new { error = "Add some experience, education, or projects to your Background first — there's nothing to summarize yet." },
+            statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var targetJobTitles = TargetJobTitles.Parse(profile.JobCriteria);
+    var summary = await summaryAgent.GenerateAsync(userId, profile.Background, targetJobTitles);
+    return Results.Ok(new { summary });
 });
 
 // GET /api/v1/sources — Tier 2 only. Source catalog, the user's current selection, and
@@ -1625,12 +1677,16 @@ static HashSet<string> MarkdownHeadings(string markdown) =>
         .Where(l => l.StartsWith("## "))
         .Select(l => l[3..].Trim())];
 
-// Shared by GET/PUT /resume and POST /resume/apply-template — the one response shape all three
-// return.
+// Shared by GET/PUT /resume and POST /resume/apply-template — the one response shape all four
+// return. Overrides/SkillsSection are always present here (never omitted like the request's
+// optional fields) since this always reflects the real, fully-populated stored row.
 static IResult ResumeResponse(UserResume resume) => Results.Ok(new
 {
     resume.Summary,
     sectionConfig = JsonSerializer.Deserialize<List<SectionConfigEntry>>(resume.SectionConfigJson) ?? [],
+    experienceOverrides = JsonSerializer.Deserialize<List<ExperienceOverride>>(resume.ExperienceOverridesJson) ?? [],
+    projectOverrides = JsonSerializer.Deserialize<List<ProjectOverride>>(resume.ProjectOverridesJson) ?? [],
+    skillsSection = JsonSerializer.Deserialize<List<SkillsSectionEntry>>(resume.SkillsSectionJson) ?? [],
     resume.UpdatedAt,
 });
 
