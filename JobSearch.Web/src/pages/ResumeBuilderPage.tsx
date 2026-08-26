@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useMe } from "../hooks/useAuth";
 import { useResume, useResumeTemplates, useUpdateResume, useApplyResumeTemplate } from "../hooks/useResume";
 import { useProfile } from "../hooks/useProfile";
 import { useSyncedState } from "../hooks/useSyncedState";
@@ -26,10 +27,13 @@ const EMPTY: ResumeData = {
 // grid-columns-on-desktop / toggle-on-mobile split, not a responsive redesign of the document.
 export function ResumeBuilderPage() {
   // Set when reached via ResumeIntakePage's build-from-scratch onboarding detour (see
-  // ResumeIntakePage.handleSave) — signals that a successful save should continue the
-  // onboarding flow rather than stay on this page as a normal persistent-editor save.
+  // ResumeIntakePage.handleSave) — signals that a successful save *may* continue the onboarding
+  // flow rather than stay on this page as a normal persistent-editor save. Query-param presence
+  // alone isn't enough to trust, though (e.g. a bookmarked/shared /resume-builder?onboarding=1
+  // link visited by an already-onboarded account) — see the needsCriteria check in handleSave.
   const [searchParams] = useSearchParams();
   const onboarding = searchParams.get("onboarding") === "1";
+  const { data: me, loading: loadingMe } = useMe();
   const { data: resume, loading: loadingResume, error: loadError, reload } = useResume();
   const { data: templates, loading: loadingTemplates } = useResumeTemplates();
   // Background's read-only Experience/Projects entries for the override editors — same
@@ -42,7 +46,7 @@ export function ResumeBuilderPage() {
   const { execute: applyTemplate, loading: applying, error: applyError } = useApplyResumeTemplate();
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
 
-  const loading = loadingResume || loadingTemplates || loadingProfile;
+  const loading = loadingResume || loadingTemplates || loadingProfile || loadingMe;
   const parsedBackground = profile ? parseBackgroundYaml(profile.background) : null;
   const background = parsedBackground?.ok ? parsedBackground.data : null;
 
@@ -62,7 +66,12 @@ export function ResumeBuilderPage() {
 
   async function handleSave() {
     await save(previewDraft);
-    if (onboarding) {
+    // Only continue the onboarding detour when the account is actually still mid-detour
+    // (needsCriteria still true) — the ?onboarding=1 param alone isn't trustworthy, since a
+    // fully-onboarded account can land here too via a bookmarked/shared link, and for them a
+    // Resume Builder save should behave like any other visit (stay put, reload) rather than
+    // hard-navigating away.
+    if (onboarding && me?.needsCriteria) {
       // Hard navigation, same pattern ResumeIntakePage uses for the same reason — useMe()
       // only fetches /auth/me once on mount, so a fresh page load is needed for
       // needsCriteria to pick up and send the user to Job Criteria next.

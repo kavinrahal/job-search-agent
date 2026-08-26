@@ -42,8 +42,11 @@ const NAV_LINKS = [
 const ONBOARDING_ROUTES = ["/onboarding/cv", "/settings"];
 
 // Next step: Background is saved but Job Criteria has never been visited/saved
-// (needsCriteria). Same escape hatch to Settings as every other step below.
-const CRITERIA_ROUTES = ["/onboarding/criteria", "/settings"];
+// (needsCriteria). Same escape hatch to Settings as every other step below, plus
+// /resume-builder — the build-from-scratch onboarding detour (see ResumeIntakePage.handleSave)
+// lands here in exactly this needsCriteria-true window, so without it StepRedirect would bounce
+// the user off Resume Builder before they can interact with it.
+const CRITERIA_ROUTES = ["/onboarding/criteria", "/resume-builder", "/settings"];
 
 // Same idea, one step later: a Tier 2 user who hasn't picked sources yet (needsSourceSelection)
 // can still reach Settings to back out, but everything else bounces to /sources first.
