@@ -263,6 +263,7 @@ builder.Services.AddSingleton(sp => new CvTailorAgent(anthropicApiKey, sp.GetReq
 builder.Services.AddSingleton(sp => new AnswerAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new ResumeIntakeAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new ResumeBackfillAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
+builder.Services.AddSingleton(sp => new ResumeSummaryAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new PostingMatcherAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new CompanyExtractorAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
 builder.Services.AddSingleton(sp => new AccuracyVerifierAgent(anthropicApiKey, sp.GetRequiredService<ClaudeUsageLogger>()));
@@ -1128,6 +1129,28 @@ api.MapPost("/resume/apply-template", async (HttpContext ctx, ApplyResumeTemplat
     await db.SaveChangesAsync();
 
     return ResumeResponse(resume);
+});
+
+// POST /api/v1/resume/generate-summary — auto-generates a fresh Summary from BACKGROUND + target
+// job titles alone (no job posting in context — that's CvTailorAgent's job, not this one). Draft
+// only: does not write UserResume, same "nothing persists until Save" model as the rest of this
+// page. Only needs UserProfile (not UserResume) to exist — the frontend only reaches this button
+// once /resume has already loaded successfully, and this endpoint never touches the UserResume row.
+api.MapPost("/resume/generate-summary", async (HttpContext ctx, AppDbContext db, ResumeSummaryAgent summaryAgent) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var profile = await db.UserProfiles.FindAsync(userId);
+    if (profile is null) return Results.NotFound();
+
+    var background = BackgroundYamlParser.Parse(profile.Background);
+    if (ResumeSummaryAgent.IsBackgroundEssentiallyEmpty(background))
+        return Results.Json(
+            new { error = "Add some experience, education, or projects to your Background first — there's nothing to summarize yet." },
+            statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var targetJobTitles = TargetJobTitles.Parse(profile.JobCriteria);
+    var summary = await summaryAgent.GenerateAsync(userId, profile.Background, targetJobTitles);
+    return Results.Ok(new { summary });
 });
 
 // GET /api/v1/sources — Tier 2 only. Source catalog, the user's current selection, and

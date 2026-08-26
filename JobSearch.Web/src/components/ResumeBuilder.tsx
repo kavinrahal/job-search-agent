@@ -117,19 +117,22 @@ function SectionList({ value, onChange }: { value: SectionConfigEntry[]; onChang
 }
 
 // The full user-facing surface for UserResume (the curation layer over Background — see
-// UserResume.cs): industry template, section include/reorder, summary text, and per-
-// experience/project/skills curation. `background` is Background's read-only Experience/
-// Projects entries (role/company/dates, achievements/highlights) that the override editors need
-// to show what they're overriding — null while Background hasn't loaded yet or doesn't parse as
-// structured YAML (see parseBackgroundYaml), in which case those editors just don't render;
-// nothing else on this page depends on it.
-export function ResumeBuilder({ value, onChange, industries, onApplyTemplate, applyingTemplate, background }: {
+// UserResume.cs): industry template, section include/reorder, summary text (hand-written or
+// auto-generated via the "Generate summary" button, grounded in `background` + target job
+// titles — see ResumeSummaryAgent), and per-experience/project/skills curation. `background` is
+// Background's read-only Experience/Projects entries (role/company/dates, achievements/
+// highlights) that the override editors need to show what they're overriding — null while
+// Background hasn't loaded yet or doesn't parse as structured YAML (see parseBackgroundYaml), in
+// which case those editors just don't render; nothing else on this page depends on it.
+export function ResumeBuilder({ value, onChange, industries, onApplyTemplate, applyingTemplate, background, onGenerateSummary, generatingSummary }: {
   value: ResumeData;
   onChange: (v: ResumeData) => void;
   industries: ResumeIndustry[];
   onApplyTemplate: (industryKey: string, seniority?: Seniority) => void;
   applyingTemplate: boolean;
   background: BackgroundData | null;
+  onGenerateSummary: () => void;
+  generatingSummary: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -137,6 +140,16 @@ export function ResumeBuilder({ value, onChange, industries, onApplyTemplate, ap
       <SectionList value={value.sectionConfig} onChange={sectionConfig => onChange({ ...value, sectionConfig })} />
       <TopicCard title="Summary">
         <Field label="Resume summary" value={value.summary} onChange={summary => onChange({ ...value, summary })} multiline />
+        <div>
+          <button
+            type="button"
+            disabled={generatingSummary}
+            onClick={onGenerateSummary}
+            className={PRIMARY_BUTTON_SM}
+          >
+            {generatingSummary ? "Generating…" : "Generate summary"}
+          </button>
+        </div>
       </TopicCard>
       {background && (
         <>

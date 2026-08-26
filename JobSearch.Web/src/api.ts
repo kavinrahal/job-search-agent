@@ -221,6 +221,13 @@ export async function applyResumeTemplate(industryKey: string, seniority?: "juni
   return request("/resume/apply-template", { method: "POST", ...json({ industryKey, seniority }) });
 }
 
+// Draft only — does not persist. Fills the caller's (unsaved) summary field; the page's normal
+// Save button still owns writing it. 422s with a clear message if Background has nothing to
+// summarize yet (see the matching backend endpoint's comment).
+export async function generateResumeSummary(): Promise<{ summary: string }> {
+  return request("/resume/generate-summary", { method: "POST" });
+}
+
 // Company is a separate query param, not folded into the title search string — Jora/Adzuna's
 // keyword search ranks worse when a company name is blended into the query. See
 // JobFetcherUtils.RankByCompany for how the backend uses it instead (reorders results, doesn't

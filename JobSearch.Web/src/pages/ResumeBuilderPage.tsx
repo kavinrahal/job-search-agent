@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMe } from "../hooks/useAuth";
-import { useResume, useResumeTemplates, useUpdateResume, useApplyResumeTemplate } from "../hooks/useResume";
+import { useResume, useResumeTemplates, useUpdateResume, useApplyResumeTemplate, useGenerateResumeSummary } from "../hooks/useResume";
 import { useProfile } from "../hooks/useProfile";
 import { useSyncedState } from "../hooks/useSyncedState";
 import { useDebouncedPreview } from "../hooks/useDebouncedPreview";
@@ -44,6 +44,7 @@ export function ResumeBuilderPage() {
   const [draft, setDraft] = useSyncedState(resume, EMPTY, r => r);
   const { execute: save, loading: saving, error: saveError } = useUpdateResume();
   const { execute: applyTemplate, loading: applying, error: applyError } = useApplyResumeTemplate();
+  const { execute: generateSummary, loading: generatingSummary, error: generateSummaryError } = useGenerateResumeSummary();
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
 
   const loading = loadingResume || loadingTemplates || loadingProfile || loadingMe;
@@ -64,6 +65,13 @@ export function ResumeBuilderPage() {
     setDraft(prev => applyTemplateToDraft(prev, updated));
   }
 
+  // Draft-only, same as handleApplyTemplate — populates the unsaved summary field for the user
+  // to review/edit, doesn't touch the server's copy until they click Save below.
+  async function handleGenerateSummary() {
+    const { summary } = await generateSummary();
+    setDraft({ ...draft, summary });
+  }
+
   async function handleSave() {
     await save(previewDraft);
     // Only continue the onboarding detour when the account is actually still mid-detour
@@ -82,8 +90,8 @@ export function ResumeBuilderPage() {
   }
 
   // loadError gets its own amber presentation below (it's most often the expected "resume
-  // setup isn't finished yet" 409, not an unexpected failure) — this is only for save/apply.
-  const error = saveError ?? applyError;
+  // setup isn't finished yet" 409, not an unexpected failure) — this is only for save/apply/generate.
+  const error = saveError ?? applyError ?? generateSummaryError;
 
   if (loading) {
     return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
@@ -119,6 +127,8 @@ export function ResumeBuilderPage() {
                 onApplyTemplate={handleApplyTemplate}
                 applyingTemplate={applying}
                 background={background}
+                onGenerateSummary={handleGenerateSummary}
+                generatingSummary={generatingSummary}
               />
               <button onClick={handleSave} disabled={saving} className={PRIMARY_BUTTON}>
                 {saving ? "Saving…" : "Save resume"}
