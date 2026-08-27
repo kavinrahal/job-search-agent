@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
+import { DocumentPage, Callout } from "../ui";
 
 // Vite-native worker resolution — bundles the exact worker matching the installed pdfjs-dist
 // version as a static asset, no CDN dependency or version-mismatch risk.
@@ -27,7 +28,7 @@ export function ResumePdfViewer({ source }: { source: string | File }) {
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
+    <div className="space-y-3">
       <Document
         file={source}
         options={typeof source === "string" ? DOCUMENT_OPTIONS : undefined}
@@ -39,19 +40,22 @@ export function ResumePdfViewer({ source }: { source: string | File }) {
         // the same failure.
         error=""
         onLoadError={err => setError(`Couldn't load the PDF (${err.message || err.name}).`)}
-        loading={<p className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">Loading PDF…</p>}
+        loading={<p className="py-8 text-center text-note text-faint">Loading PDF…</p>}
       >
-        <div className="flex gap-4">
+        <div className="flex gap-4 overflow-x-auto">
           {Array.from({ length: numPages }, (_, i) => (
             // The PDF canvas itself always stays white (it's the real document content, not
-            // themeable chrome) — only the border around it follows dark mode.
-            <div key={i} className="shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700">
-              <Page pageNumber={i + 1} width={420} />
+            // themeable chrome) — DocumentPage (ui) is the design system's own fixed-A4-
+            // proportion preview frame, one per rendered page.
+            <div key={i} className="shrink-0">
+              <DocumentPage maxWidth={420}>
+                <Page pageNumber={i + 1} width={420} />
+              </DocumentPage>
             </div>
           ))}
         </div>
       </Document>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <Callout variant="danger" title={error} />}
     </div>
   );
 }

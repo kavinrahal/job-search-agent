@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParseResumePdf, useUpdateProfile, useUploadResumePdf } from "../hooks/useProfile";
 import { BackgroundEditor } from "../components/BackgroundEditor";
 import { ResumePdfViewer } from "../components/ResumePdfViewer";
 import { parseBackgroundYaml, serializeBackgroundYaml, getMissingBackgroundFields, type BackgroundParseResult } from "../lib/backgroundYaml";
-import { PageTagline } from "../components/PageTagline";
-import { PRIMARY_BUTTON } from "../lib/styles";
+import { PageHeader, Surface, Button, Callout } from "../ui";
 
 // Offered by the "build from scratch" entry point below, as a starting point for someone with
 // no resume to upload — BackgroundEditor's cards/add()/remove() machinery already works fine on
@@ -18,6 +17,7 @@ export function ResumeIntakePage({ hideHeader = false, onboarding = false }: { h
   const [file, setFile] = useState<File | null>(null);
   const [background, setBackground] = useState<BackgroundParseResult | null>(null);
   const [cvBase, setCvBase] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const parsePdf = useParseResumePdf();
   const save = useUpdateProfile();
@@ -61,79 +61,69 @@ export function ResumeIntakePage({ hideHeader = false, onboarding = false }: { h
   return (
     <div className="space-y-6">
       {!hideHeader && (
-        <>
-          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Resume &amp; background</h2>
-          <PageTagline>The foundation everything else gets tailored from. Worth getting right.</PageTagline>
-        </>
+        <PageHeader title="Resume & background" tagline="The foundation everything else gets tailored from. Worth getting right." />
       )}
 
       {!background && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <Surface padding="lg">
           <div className="flex items-center gap-3">
-            <label className={`inline-block cursor-pointer ${PRIMARY_BUTTON}`}>
-              Choose file
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={e => setFile(e.target.files?.[0] ?? null)}
-                className="hidden"
-              />
-            </label>
-            {file && <span className="text-sm text-gray-600 dark:text-gray-300">{file.name}</span>}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf"
+              onChange={e => setFile(e.target.files?.[0] ?? null)}
+              className="hidden"
+            />
+            <Button onClick={() => fileInputRef.current?.click()}>Choose file</Button>
+            {file && <span className="text-body text-ink-2">{file.name}</span>}
           </div>
 
-          <button onClick={handleParse} disabled={!file || parsePdf.loading} className={`mt-4 ${PRIMARY_BUTTON}`}>
+          <Button className="mt-4" onClick={handleParse} disabled={!file || parsePdf.loading}>
             {parsePdf.loading ? "Parsing…" : "Parse"}
-          </button>
+          </Button>
 
-          <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <div className="hairline-t mt-4 pt-4">
             <button
+              type="button"
               onClick={() => setBackground(EMPTY_BACKGROUND)}
-              className="text-sm font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+              className="text-note font-[650] text-ember transition-colors hover:text-ember-hi focus-ring rounded-ctl"
             >
               Don't have a resume? Build one from scratch.
             </button>
           </div>
-        </div>
+        </Surface>
       )}
 
       {background && (
         <div className="animate-fade-in-up space-y-4">
           <div>
-            <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">Background: review and edit before saving</p>
+            <p className="mb-2 text-body font-[650] text-ink-2">Background: review and edit before saving</p>
             <BackgroundEditor value={background} onChange={setBackground} />
           </div>
 
           {file && (
             <div>
-              <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">Base CV</p>
+              <p className="mb-2 text-body font-[650] text-ink-2">Base CV</p>
               <ResumePdfViewer source={file} />
             </div>
           )}
 
           {missing.length > 0 && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-500/10 dark:text-amber-300">
-              Still needed before you can save: {missing.join(", ")}.
-            </div>
+            <Callout variant="warning" title={`Still needed before you can save: ${missing.join(", ")}.`} />
           )}
 
           <div className="flex items-center gap-3">
-            <button onClick={handleSave} disabled={save.loading || uploadPdf.loading || missing.length > 0} className={PRIMARY_BUTTON}>
+            <Button onClick={handleSave} disabled={save.loading || uploadPdf.loading || missing.length > 0}>
               {save.loading || uploadPdf.loading ? "Saving…" : "Save to profile"}
-            </button>
-            <button
-              onClick={() => setBackground(null)}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-            >
+            </Button>
+            <Button variant="ghost" onClick={() => setBackground(null)}>
               Start over
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">{error}</div>
-      )}
+      {error && <Callout variant="danger" title={error} />}
     </div>
   );
 }

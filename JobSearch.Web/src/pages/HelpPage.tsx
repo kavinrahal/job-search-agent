@@ -1,22 +1,21 @@
-import { PageTagline } from "../components/PageTagline";
+import { PageHeader, Surface, Badge } from "../ui";
 
 function Section({ title, tier2, children }: { title: string; tier2?: boolean; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
+    <Surface padding="lg">
+      <h3 className="mb-2 flex items-center gap-2 text-lede font-[650] text-ink-2">
         {title}
-        {tier2 && <span className="ml-2 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">Tier 2</span>}
+        {tier2 && <Badge variant="live">Tier 2</Badge>}
       </h3>
-      <div className="space-y-2 text-sm text-gray-600 dark:text-gray-300">{children}</div>
-    </div>
+      <div className="space-y-2 text-body text-muted">{children}</div>
+    </Surface>
   );
 }
 
 export function HelpPage() {
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Help</h2>
-      <PageTagline>How everything fits together, in plain language.</PageTagline>
+      <PageHeader title="Help" tagline="How everything fits together, in plain language." />
 
       <Section title="Getting started">
         <p>

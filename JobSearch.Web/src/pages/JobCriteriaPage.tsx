@@ -4,8 +4,7 @@ import { useSyncedState } from "../hooks/useSyncedState";
 import { JobCriteriaEditor } from "../components/JobCriteriaEditor";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
 import { getMissingCriteriaFields } from "../lib/criteriaCompleteness";
-import { PageTagline } from "../components/PageTagline";
-import { PRIMARY_BUTTON } from "../lib/styles";
+import { PageHeader, Button, Callout } from "../ui";
 
 const EMPTY: JobCriteriaData = parseJobCriteriaYaml("");
 
@@ -27,40 +26,29 @@ export function JobCriteriaPage({ hideHeader = false, onSaved }: { hideHeader?: 
     else window.location.reload();
   }
 
-  if (loadingProfile) return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
+  if (loadingProfile) return <div className="py-12 text-center text-note text-faint">Loading…</div>;
 
   const missing = getMissingCriteriaFields(criteria, me?.tier ?? "Tier1");
 
   return (
     <div className="space-y-6">
       {!hideHeader && (
-        <>
-          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Job criteria</h2>
-          <PageTagline>What you're actually looking for, precise enough to tell a good match from a bad one.</PageTagline>
-        </>
+        <PageHeader title="Job criteria" tagline="What you're actually looking for, precise enough to tell a good match from a bad one." />
       )}
 
       <JobCriteriaEditor value={criteria} onChange={setCriteria} tier={me?.tier ?? "Tier1"} />
 
       {missing.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-500/10 dark:text-amber-300">
-          Still needed before you can save: {missing.map(m => m.label).join(", ")}.
-        </div>
+        <Callout variant="warning" title={`Still needed before you can save: ${missing.map(m => m.label).join(", ")}.`} />
       )}
 
       <div className="flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          disabled={saving || missing.length > 0}
-          className={PRIMARY_BUTTON}
-        >
+        <Button onClick={handleSave} disabled={saving || missing.length > 0}>
           {saving ? "Saving…" : "Save criteria"}
-        </button>
+        </Button>
       </div>
 
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">{error}</div>
-      )}
+      {error && <Callout variant="danger" title={error} />}
     </div>
   );
 }

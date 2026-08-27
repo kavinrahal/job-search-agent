@@ -1,4 +1,5 @@
 import { LABEL, INPUT, TopicCard, AddButton } from "./CardEditor";
+import { IconButton, CloseIcon } from "../ui";
 import type { SkillsSectionEntry } from "../types";
 
 // Authors the resume's actual rendered Skills section directly — SkillsSectionEntry[] is
@@ -30,7 +31,7 @@ export function SkillsSectionEditor({ value, onChange }: {
 
   return (
     <TopicCard title="Skills">
-      <p className="text-xs text-gray-400 dark:text-gray-500">
+      <p className="text-note text-faint">
         The Skills section as it actually renders on your resume — one row per group, in order.
       </p>
       <div className="space-y-2">
@@ -49,12 +50,9 @@ export function SkillsSectionEditor({ value, onChange }: {
                 onBlur={e => setItems(i, e.target.value)}
               />
             </div>
-            <button
-              onClick={() => remove(i)}
-              className="mb-2.5 text-xs text-red-500 transition-colors hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-            >
-              &#10005;
-            </button>
+            <IconButton aria-label="Remove skills group" size="sm" className="mb-0.5" onClick={() => remove(i)}>
+              <CloseIcon className="h-3.5 w-3.5" />
+            </IconButton>
           </div>
         ))}
         <AddButton onClick={add}>+ Add skills group</AddButton>

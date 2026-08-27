@@ -4,13 +4,9 @@ import { useSources, useUpdateSources, useUpdateGmailTrackingMode, useGmailForwa
 import { useSyncedState } from "../hooks/useSyncedState";
 import { gmailOAuthStartUrl } from "../api";
 import type { SourcesResponse } from "../types";
-import { InfoTooltip } from "../components/InfoTooltip";
-import { PageTagline } from "../components/PageTagline";
-import { CARD, PRIMARY_BUTTON as PRIMARY_BUTTON_BASE } from "../lib/styles";
+import { PageHeader, Surface, Well, Button, Chip, Tooltip, Callout } from "../ui";
 
-const LABEL = "mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200";
-// Some usages below are <a> tags rather than <button>, hence the inline-block.
-const PRIMARY_BUTTON = `inline-block ${PRIMARY_BUTTON_BASE}`;
+const LABEL = "mb-2 flex items-center text-body font-[650] text-ink-2";
 
 // Plain top-level function, not inlined into SourcesPage's handleSave below. react-hooks'
 // bundled compiler diagnostics flag a direct `window.location.href = ...` assignment when
@@ -25,17 +21,9 @@ function hardNavigateHome() {
 
 function SourceToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
-        active
-          ? "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
-          : "bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
-      }`}
-    >
+    <Chip role="checkbox" selected={active} onClick={onClick}>
       {label}
-    </button>
+    </Chip>
   );
 }
 
@@ -56,18 +44,16 @@ function GmailForwardingSetup() {
 
   if (status?.status === "verified") {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-500/10">
-        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-          ✓ Forwarding confirmed. The job-alert filter is installed automatically.
-        </p>
+      <div className="rounded-core bg-pos-wash p-5">
+        <p className="text-body font-[650] text-pos">✓ Forwarding confirmed. The job-alert filter is installed automatically.</p>
       </div>
     );
   }
 
   return (
-    <div className={CARD}>
+    <Surface padding="lg">
       <label className={LABEL}>Set up alert forwarding</label>
-      <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <p className="mb-3 text-body text-muted">
         Gmail requires you to add this yourself. In Gmail, go to Settings → Forwarding and
         POP/IMAP → Add a forwarding address, paste the address below, then confirm it via
         the email Gmail sends you. Once confirmed, the app automatically installs a filter
@@ -75,25 +61,22 @@ function GmailForwardingSetup() {
       </p>
       {status && (
         <div className="mb-3 flex items-center gap-2">
-          <code className="rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200">{status.address}</code>
-          <button
-            onClick={handleCopy}
-            className="rounded-lg px-3 py-2 text-sm font-medium text-violet-600 transition-colors hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-500/10"
-          >
+          <Well className="px-3 py-2 text-body text-ink-2">{status.address}</Well>
+          <Button variant="ghost" size="sm" onClick={handleCopy}>
             {copied ? "Copied!" : "Copy"}
-          </button>
+          </Button>
         </div>
       )}
       <div className="flex items-center gap-3">
-        <button onClick={reload} disabled={loading} className={PRIMARY_BUTTON}>
+        <Button onClick={reload} disabled={loading}>
           {loading ? "Checking…" : "Check status"}
-        </button>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
+        </Button>
+        <span className="text-body text-muted">
           {status?.status === "pending" ? "Waiting for you to confirm in Gmail" : status?.status === "not_added" ? "Not added yet" : ""}
         </span>
       </div>
-      {error && <p className="mt-2 text-sm text-red-700 dark:text-red-400">{error}</p>}
-    </div>
+      {error && <p className="mt-2 text-caption text-ember">{error}</p>}
+    </Surface>
   );
 }
 
@@ -139,12 +122,12 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
   }
 
   return (
-    <div className={CARD}>
+    <Surface padding="lg">
       <label className={LABEL}>
         Application status tracking
-        <InfoTooltip text="This choice only affects how status changes (like a rejection or an interview invite) get detected automatically. You can always update statuses yourself either way." />
+        <Tooltip text="This choice only affects how status changes (like a rejection or an interview invite) get detected automatically. You can always update statuses yourself either way." />
       </label>
-      <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <p className="mb-3 text-body text-muted">
         How should we track the status of jobs you've applied to? Pick whichever you're
         comfortable with.
       </p>
@@ -155,40 +138,32 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
             type="button"
             disabled={loading}
             onClick={() => select(m.value)}
-            className={`block w-full rounded-lg border p-3 text-left transition-colors duration-150 ${
-              mode === m.value
-                ? "border-violet-300 bg-violet-50 dark:border-violet-700 dark:bg-violet-500/10"
-                : "border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
+            className={`block w-full rounded-ctl p-3 text-left transition-colors duration-300 focus-ring tappable disabled:pointer-events-none disabled:opacity-55 ${
+              mode === m.value ? "bg-ember-wash shadow-[inset_0_0_0_1px_var(--color-ember)]" : "surface-sunk hover:bg-shell"
             }`}
           >
-            <p className={`text-sm font-medium ${mode === m.value ? "text-violet-700 dark:text-violet-300" : "text-gray-700 dark:text-gray-200"}`}>
-              {m.label}
-            </p>
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{m.description}</p>
+            <p className={`text-body font-[650] ${mode === m.value ? "text-ember" : "text-ink-2"}`}>{m.label}</p>
+            <p className="mt-0.5 text-caption text-faint">{m.description}</p>
           </button>
         ))}
       </div>
 
       {mode === "filter" && !sources.gmailConnected && (
         <div className="mt-3 flex items-center gap-3">
-          <a href={gmailOAuthStartUrl()} className={PRIMARY_BUTTON}>
-            Connect Gmail
-          </a>
-          <span className="text-sm text-gray-500 dark:text-gray-400">Needed to install per-company filters.</span>
+          <Button href={gmailOAuthStartUrl()}>Connect Gmail</Button>
+          <span className="text-body text-muted">Needed to install per-company filters.</span>
         </div>
       )}
       {mode === "full" && !sources.gmailReadonlyConnected && (
         <div className="mt-3 flex items-center gap-3">
-          <a href={gmailOAuthStartUrl("full")} className={PRIMARY_BUTTON}>
-            Grant full inbox access
-          </a>
-          <span className="text-sm text-gray-500 dark:text-gray-400">Redirects to Google's consent screen.</span>
+          <Button href={gmailOAuthStartUrl("full")}>Grant full inbox access</Button>
+          <span className="text-body text-muted">Redirects to Google's consent screen.</span>
         </div>
       )}
       {mode === "full" && sources.gmailReadonlyConnected && (
-        <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">✓ Connected, tracking automatically.</p>
+        <p className="mt-3 text-body text-pos">✓ Connected, tracking automatically.</p>
       )}
-    </div>
+    </Surface>
   );
 }
 
@@ -230,7 +205,7 @@ export function SourcesPage({ hideHeader = false, onboarding = false }: { hideHe
     if (!result.enabled.some(k => alertKeys.has(k))) navigate("/");
   }
 
-  if (loadingSources) return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
+  if (loadingSources) return <div className="py-12 text-center text-note text-faint">Loading…</div>;
 
   const automatic = data?.catalog.filter(c => c.automatic) ?? [];
   const alertBased = data?.catalog.filter(c => !c.automatic) ?? [];
@@ -241,77 +216,66 @@ export function SourcesPage({ hideHeader = false, onboarding = false }: { hideHe
   return (
     <div className="space-y-6">
       {!hideHeader && (
-        <>
-          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Choose your sources</h2>
-          <PageTagline>Tell us where to look, and how you want applications tracked.</PageTagline>
-        </>
+        <PageHeader title="Choose your sources" tagline="Tell us where to look, and how you want applications tracked." />
       )}
-      <p className="text-sm text-gray-500 dark:text-gray-400">
+      <p className="text-body text-muted">
         Pick where job postings should come from. Automatic sources need nothing from you.
         Alert-based sources need a job alert set up on that platform, forwarded in once you
         connect Gmail. That's the next step.
       </p>
 
       {gmailStatus === "connected" && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-500/10 dark:text-emerald-300">
-          Gmail connected.
-        </div>
+        <div className="rounded-core bg-pos-wash p-4 text-body text-pos">Gmail connected.</div>
       )}
-      {gmailStatus === "error" && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
-          Couldn't connect Gmail. Please try again.
-        </div>
-      )}
+      {gmailStatus === "error" && <Callout variant="danger" title="Couldn't connect Gmail. Please try again." />}
 
-      <div className={CARD}>
+      <Surface padding="lg">
         <label className={LABEL}>
           Automatic
-          <InfoTooltip text="Runs on its own, nothing to set up. We search these directly for postings matching your criteria." />
+          <Tooltip text="Runs on its own, nothing to set up. We search these directly for postings matching your criteria." />
         </label>
         <div className="flex flex-wrap gap-2">
           {automatic.map(s => (
             <SourceToggle key={s.key} label={s.label} active={selected.includes(s.key)} onClick={() => toggle(s.key)} />
           ))}
         </div>
-      </div>
+      </Surface>
 
-      <div className={CARD}>
+      <Surface padding="lg">
         <label className={LABEL}>
           Alert-based, needs setup
-          <InfoTooltip text="You need a saved job alert already set up on that platform. Forward its emails to us via Gmail (next step) and we'll extract the postings from it." />
+          <Tooltip text="You need a saved job alert already set up on that platform. Forward its emails to us via Gmail (next step) and we'll extract the postings from it." />
         </label>
         <div className="flex flex-wrap gap-2">
           {alertBased.map(s => (
             <SourceToggle key={s.key} label={s.label} active={selected.includes(s.key)} onClick={() => toggle(s.key)} />
           ))}
         </div>
-      </div>
+      </Surface>
 
       {needsGmail && data?.gmailConnected && <GmailForwardingSetup />}
 
       {needsGmail && !data?.gmailConnected && (
-        <div className={CARD}>
+        <Surface padding="lg">
           <label className={LABEL}>Connect Gmail</label>
-          <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mb-3 text-body text-muted">
             Lets the app manage a filter that forwards matching job alerts to us. It can only
             manage filters and settings, never read your mail.
           </p>
-          <a href={gmailOAuthStartUrl()} className={PRIMARY_BUTTON}>
-            Connect Gmail
-          </a>
-        </div>
+          <Button href={gmailOAuthStartUrl()}>Connect Gmail</Button>
+        </Surface>
       )}
 
       {data && <GmailTrackingModeSection sources={data} />}
 
       <div className="flex items-center gap-3">
-        <button onClick={handleSave} disabled={saving} className={PRIMARY_BUTTON}>
+        <Button onClick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save sources"}
-        </button>
-        {saved && <span className="text-sm text-emerald-600 dark:text-emerald-400">Saved.</span>}
+        </Button>
+        {saved && <span className="text-body text-pos">Saved.</span>}
       </div>
 
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">{error}</div>}
+      {error && <Callout variant="danger" title={error} />}
     </div>
   );
 }

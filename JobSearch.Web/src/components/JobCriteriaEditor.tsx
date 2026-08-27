@@ -1,9 +1,7 @@
-import type { ReactNode } from "react";
 import type { JobCriteriaData, SkillDimension, Disqualifier } from "../lib/jobCriteriaYaml";
 import { LABEL, INPUT, Field, TopicCard, EntryCard, AddButton, AdvancedSection } from "./CardEditor";
 import { COUNTRIES, CURRENCIES, STATES_BY_COUNTRY } from "../lib/regionData";
-import { InfoTooltip } from "./InfoTooltip";
-import { ChoiceButtons } from "./ChoiceButtons";
+import { Tooltip, ChipGroup, Select, Callout } from "../ui";
 import { getMissingCriteriaFields } from "../lib/criteriaCompleteness";
 
 // Exported so CriteriaWizard.tsx's Employment type question reuses the exact same list rather
@@ -27,9 +25,9 @@ function TieredMatchFields({ value, onChange }: { value: SkillDimension; onChang
   const set = <K extends keyof SkillDimension>(key: K, v: SkillDimension[K]) => onChange({ ...value, [key]: v });
   return (
     <div>
-      <div className="mb-2 flex items-center text-xs text-gray-400 dark:text-gray-500">
+      <div className="mb-2 flex items-center text-note text-faint">
         List the specific skills/tools that fall in each tier below.
-        <InfoTooltip text="These four tiers control how closely a posting's requirements need to match. Strong/good match boost a posting's ranking; acceptable is neutral; excluded rules it out. Leave any tier blank if it doesn't apply." />
+        <Tooltip text="These four tiers control how closely a posting's requirements need to match. Strong/good match boost a posting's ranking; acceptable is neutral; excluded rules it out. Leave any tier blank if it doesn't apply." />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Strong match (comma-separated)" value={value.strongMatch} onChange={v => set("strongMatch", v)} />
@@ -51,7 +49,7 @@ function SkillDimensionsSection({ value, onChange, missing }: { value: SkillDime
 
   return (
     <TopicCard title="Skill dimensions" defaultOpen={false}>
-      <p className="text-xs text-gray-400 dark:text-gray-500">
+      <p className="text-note text-faint">
         Any skill, tool, certification, or knowledge area worth ranking candidates on. One
         entry per dimension, in priority order. Works for any profession: "Cloud platform"
         for an engineer, "EHR system experience" for a nurse, "Knife skills" for a chef.
@@ -89,10 +87,10 @@ function DisqualifiersSection({ value, onChange }: { value: Disqualifier[]; onCh
 
   return (
     <TopicCard title="Disqualifiers">
-      <p className="text-xs text-gray-400 dark:text-gray-500">
+      <p className="text-note text-faint">
         Anything that should end evaluation immediately. Signals are the exact phrases to
         watch for in a posting (one per line). Optional, a description alone is enough.
-        <InfoTooltip text="Disqualifiers rule a posting out entirely. Orange flags and FYI context (below) don't rule anything out, they just add a note to the evaluation." />
+        <Tooltip text="Disqualifiers rule a posting out entirely. Orange flags and FYI context (below) don't rule anything out, they just add a note to the evaluation." />
       </p>
       <div className="space-y-3">
         {value.map((dq, i) => (
@@ -111,8 +109,8 @@ function DisqualifiersSection({ value, onChange }: { value: Disqualifier[]; onCh
 // Matches the existing Target-job-titles warning's exact styling — one visual language for
 // "this is required and currently blank" everywhere it appears, in both this editor and
 // (via getMissingCriteriaFields) the wizard/dashboard banner.
-function RequiredWarning({ children }: { children: ReactNode }) {
-  return <p className="text-xs text-amber-600 dark:text-amber-400">{children}</p>;
+function RequiredWarning({ children }: { children: string }) {
+  return <Callout variant="warning" title={children} />;
 }
 
 export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteriaData; onChange: (v: JobCriteriaData) => void; tier: string }) {
@@ -146,11 +144,11 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
           page rather than silently leaving discovery broken. */}
       {tier === "Tier2" && (
         <TopicCard title="Target job titles">
-          <p className="text-xs text-gray-400 dark:text-gray-500">
+          <p className="text-note text-faint">
             The exact job titles to search for automatically — e.g. "Software Engineer, Backend
             Developer" or "Sous Chef, Line Cook". This is what actually gets searched; everything
             else below only affects how a found posting gets ranked.
-            <InfoTooltip text="Required for automatic discovery to run. Without at least one title here, there's nothing to search for, so automatic discovery is skipped entirely until this is filled in." />
+            <Tooltip text="Required for automatic discovery to run. Without at least one title here, there's nothing to search for, so automatic discovery is skipped entirely until this is filled in." />
           </p>
           <Field
             label="Job titles (comma-separated) *"
@@ -164,8 +162,9 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
       )}
 
       <TopicCard title="Employment type">
-        <ChoiceButtons
+        <ChipGroup
           multi
+          label="Employment type"
           options={EMPLOYMENT_TYPES.map(type => ({ value: type, label: type.replace("_", " ") }))}
           value={value.employmentTypes}
           onChange={v => set("employmentTypes", v)}
@@ -211,22 +210,22 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
         <Field label="Notes (e.g. city preference, or lack thereof)" value={value.locationNotes} onChange={v => set("locationNotes", v)} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
-            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-              <input type="checkbox" checked={value.remoteAccepted} onChange={e => set("remoteAccepted", e.target.checked)} />
+            <label className="flex items-center gap-2 text-body text-ink-2">
+              <input type="checkbox" className="accent-ember" checked={value.remoteAccepted} onChange={e => set("remoteAccepted", e.target.checked)} />
               Remote
             </label>
             <Field label="Condition" value={value.remoteCondition} onChange={v => set("remoteCondition", v)} />
           </div>
           <div>
-            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-              <input type="checkbox" checked={value.hybridAccepted} onChange={e => set("hybridAccepted", e.target.checked)} />
+            <label className="flex items-center gap-2 text-body text-ink-2">
+              <input type="checkbox" className="accent-ember" checked={value.hybridAccepted} onChange={e => set("hybridAccepted", e.target.checked)} />
               Hybrid
             </label>
             <Field label="Notes" value={value.hybridNotes} onChange={v => set("hybridNotes", v)} />
           </div>
           <div>
-            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-              <input type="checkbox" checked={value.onsiteAccepted} onChange={e => set("onsiteAccepted", e.target.checked)} />
+            <label className="flex items-center gap-2 text-body text-ink-2">
+              <input type="checkbox" className="accent-ember" checked={value.onsiteAccepted} onChange={e => set("onsiteAccepted", e.target.checked)} />
               On-site
             </label>
             <Field label="Notes" value={value.onsiteNotes} onChange={v => set("onsiteNotes", v)} />
@@ -236,7 +235,7 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
       </TopicCard>
 
       <TopicCard title="Sponsorship" defaultOpen={false}>
-        <p className="text-xs text-gray-400 dark:text-gray-500">
+        <p className="text-note text-faint">
           If you need visa/work-authorization sponsorship, use this to describe when a
           posting should be disqualified for excluding sponsorship-needing candidates.
           Leave blank if this doesn't apply to you.
@@ -251,10 +250,9 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
       <TopicCard title="Experience">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className={LABEL}>Seniority level</label>
-            <select className={INPUT} value={value.seniorityLevel} onChange={e => set("seniorityLevel", e.target.value)}>
+            <Select label="Seniority level" value={value.seniorityLevel} onChange={e => set("seniorityLevel", e.target.value)}>
               {SENIORITY_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <Field label={'Your current experience (e.g. "~4 years") *'} value={value.candidateCurrentExperience} onChange={v => set("candidateCurrentExperience", v)} />
@@ -274,10 +272,9 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
       <TopicCard title="Salary">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
-            <label className={LABEL}>Currency</label>
-            <select className={INPUT} value={value.currency} onChange={e => set("currency", e.target.value)}>
+            <Select label="Currency" value={value.currency} onChange={e => set("currency", e.target.value)}>
               {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-            </select>
+            </Select>
           </div>
           <Field label="Flag if below" type="number" min={0} value={value.salaryFlagBelow} onChange={v => set("salaryFlagBelow", v)} />
           <Field label="Minimum acceptable" type="number" min={0} value={value.salaryMin} onChange={v => set("salaryMin", v)} />
@@ -324,8 +321,8 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
 
       <TopicCard title="Team" defaultOpen={false}>
         <Field label="Minimum team size" type="number" min={0} value={value.minimumTeamSize} onChange={v => set("minimumTeamSize", v)} />
-        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-          <input type="checkbox" checked={value.onCallAccepted} onChange={e => set("onCallAccepted", e.target.checked)} />
+        <label className="flex items-center gap-2 text-body text-ink-2">
+          <input type="checkbox" className="accent-ember" checked={value.onCallAccepted} onChange={e => set("onCallAccepted", e.target.checked)} />
           On-call is acceptable
         </label>
         <Field label="Condition (e.g. must be compensated)" value={value.onCallCondition} onChange={v => set("onCallCondition", v)} />
@@ -333,18 +330,18 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
       </TopicCard>
 
       <TopicCard title="Orange flags" defaultOpen={false}>
-        <p className="text-xs text-gray-400 dark:text-gray-500">
+        <p className="text-note text-faint">
           Things worth surfacing alongside a recommendation, without disqualifying it. One
           per line.
-          <InfoTooltip text="A negative-leaning note (e.g. a possible downside), unlike FYI context below which is neutral." />
+          <Tooltip text="A negative-leaning note (e.g. a possible downside), unlike FYI context below which is neutral." />
         </p>
         <Field label="Orange flags (one per line)" value={value.orangeFlags} onChange={v => set("orangeFlags", v)} multiline />
       </TopicCard>
 
       <TopicCard title="FYI context" defaultOpen={false}>
-        <p className="text-xs text-gray-400 dark:text-gray-500">
+        <p className="text-note text-faint">
           Worth mentioning but not a flag or a disqualifier. One per line.
-          <InfoTooltip text="A neutral note worth knowing, not a downside. Use Orange flags above for anything negative-leaning." />
+          <Tooltip text="A neutral note worth knowing, not a downside. Use Orange flags above for anything negative-leaning." />
         </p>
         <Field label="FYI context (one per line)" value={value.fyiContext} onChange={v => set("fyiContext", v)} multiline />
       </TopicCard>

@@ -1,12 +1,11 @@
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useState, type ComponentType } from "react";
 import { useProfile, useUpdateProfile } from "../hooks/useProfile";
 import { useSyncedState } from "../hooks/useSyncedState";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
 import { COUNTRIES, COUNTRY_TO_CURRENCY } from "../lib/regionData";
 import { Field, INPUT } from "./CardEditor";
-import { ChoiceButtons } from "./ChoiceButtons";
+import { Surface, Button, ChipGroup, PageHeader, Select } from "../ui";
 import { EMPLOYMENT_TYPES } from "./JobCriteriaEditor";
-import { CARD, PRIMARY_BUTTON } from "../lib/styles";
 import {
   type CriteriaPatch,
   EXPERIENCE_BUCKETS, experienceBucketPatch, nearestExperienceBucket,
@@ -31,7 +30,6 @@ import {
 // candidate with no dealbreakers is a complete answer, but every other question has no
 // meaningful "nothing" state, so Skip only exists on that one step.
 
-const GHOST_BUTTON = "text-sm text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300";
 const EMPTY: JobCriteriaData = parseJobCriteriaYaml("");
 
 interface StepProps {
@@ -53,24 +51,19 @@ function StepFooter({ onBack, onSkip, onNext, isFirst, isLast, canSkip = false, 
 }) {
   return (
     <div className="mt-6 flex items-center justify-between">
-      {isFirst ? <span /> : <button onClick={onBack} className={GHOST_BUTTON}>Back</button>}
+      {isFirst ? <span /> : <Button variant="ghost" size="sm" onClick={onBack}>Back</Button>}
       <div className="flex items-center gap-4">
-        {canSkip && <button onClick={onSkip} className={GHOST_BUTTON}>Skip</button>}
-        <button onClick={onNext} disabled={nextDisabled} className={PRIMARY_BUTTON}>
+        {canSkip && <Button variant="ghost" size="sm" onClick={onSkip}>Skip</Button>}
+        <Button onClick={onNext} disabled={nextDisabled}>
           {isLast ? "Finish" : "Next"}
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
 
-function StepHeading({ children, hint }: { children: ReactNode; hint?: string }) {
-  return (
-    <div className="mb-4">
-      <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">{children}</h2>
-      {hint && <p className="mt-1 text-sm text-gray-400 dark:text-gray-500">{hint}</p>}
-    </div>
-  );
+function StepHeading({ children, hint }: { children: string; hint?: string }) {
+  return <PageHeader title={children} tagline={hint} className="mb-4" />;
 }
 
 function TitlesStep({ data, onNext, ...nav }: StepProps) {
@@ -96,7 +89,8 @@ function ExperienceStep({ data, onNext, ...nav }: StepProps) {
   return (
     <div>
       <StepHeading>How much experience do you have?</StepHeading>
-      <ChoiceButtons
+      <ChipGroup
+        label="Experience"
         options={EXPERIENCE_BUCKETS.map(b => ({ value: b.id, label: b.label }))}
         value={selected}
         onChange={setSelected}
@@ -137,8 +131,9 @@ function EmploymentStep({ data, onNext, ...nav }: StepProps) {
   return (
     <div>
       <StepHeading>What type of work are you looking for?</StepHeading>
-      <ChoiceButtons
+      <ChipGroup
         multi
+        label="Employment type"
         options={EMPLOYMENT_TYPES.map(t => ({ value: t, label: t.replace("_", " ") }))}
         value={selected}
         onChange={setSelected}
@@ -185,12 +180,12 @@ function LocationStep({ data, onNext, ...nav }: StepProps) {
       <StepHeading hint="States/regions can be added later in the full criteria editor.">
         Where do you want to work?
       </StepHeading>
-      <select className={INPUT} value={country} onChange={e => setCountry(e.target.value)}>
+      <Select label="Country" value={country} onChange={e => setCountry(e.target.value)}>
         <option value="">Select a country</option>
         {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-      </select>
+      </Select>
       <div className="mt-3">
-        <ChoiceButtons multi options={ARRANGEMENT_OPTIONS} value={arrangements} onChange={setArrangements} />
+        <ChipGroup multi label="Work arrangement" options={ARRANGEMENT_OPTIONS} value={arrangements} onChange={setArrangements} />
       </div>
       <StepFooter {...nav} nextDisabled={!country || arrangements.length === 0} onNext={commit} />
     </div>
@@ -205,8 +200,8 @@ function LocationStep({ data, onNext, ...nav }: StepProps) {
 const RANGE_THUMB_CLASSES =
   "absolute inset-0 h-6 w-full cursor-pointer appearance-none bg-transparent pointer-events-none " +
   "[&::-webkit-slider-runnable-track]:bg-transparent [&::-moz-range-track]:bg-transparent " +
-  "[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-violet-600 [&::-webkit-slider-thumb]:shadow " +
-  "[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-violet-600";
+  "[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-ember [&::-webkit-slider-thumb]:shadow " +
+  "[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-ember";
 
 function DualRangeSlider({ min, max, step, value, onChange }: {
   min: number; max: number; step: number; value: [number, number]; onChange: (v: [number, number]) => void;
@@ -216,9 +211,9 @@ function DualRangeSlider({ min, max, step, value, onChange }: {
   const pctHi = ((hi - min) / (max - min)) * 100;
   return (
     <div className="relative h-6">
-      <div className="absolute top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-gray-200 dark:bg-gray-700" />
+      <div className="absolute top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-sunk" />
       <div
-        className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-violet-600"
+        className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-ember"
         style={{ left: `${pctLo}%`, right: `${100 - pctHi}%` }}
       />
       <input
@@ -244,9 +239,9 @@ function SalaryStep({ data, onNext, ...nav }: StepProps) {
   return (
     <div>
       <StepHeading>What salary range are you happy with?</StepHeading>
-      <p className="flex items-baseline gap-2 text-xl font-semibold text-gray-700 dark:text-gray-200">
+      <p className="flex items-baseline gap-2 text-display font-bold text-ink-2">
         <span>{formatSalaryAmount(min, currency)}</span>
-        <span className="text-sm font-normal text-gray-400">to</span>
+        <span className="text-note font-normal text-faint">to</span>
         <span>{formatSalaryAmount(max, currency)}</span>
       </p>
 
@@ -254,7 +249,7 @@ function SalaryStep({ data, onNext, ...nav }: StepProps) {
         <DualRangeSlider min={SALARY_SLIDER_MIN} max={SALARY_SLIDER_MAX} step={SALARY_SLIDER_STEP} value={range} onChange={setRange} />
       </div>
 
-      <div className="mt-1 flex justify-between text-xs text-gray-400 dark:text-gray-500">
+      <div className="mt-1 flex justify-between text-caption text-faint">
         <span>{formatSalaryAmount(SALARY_SLIDER_MIN, currency)}</span>
         <span>{formatSalaryAmount(SALARY_SLIDER_MAX, currency)}+</span>
       </div>
@@ -274,7 +269,7 @@ function SponsorshipStep({ data, onNext, ...nav }: StepProps) {
   return (
     <div>
       <StepHeading>Do you need visa or work sponsorship?</StepHeading>
-      <ChoiceButtons options={SPONSORSHIP_OPTIONS} value={selected} onChange={setSelected} />
+      <ChipGroup label="Sponsorship" options={SPONSORSHIP_OPTIONS} value={selected} onChange={setSelected} />
       <StepFooter {...nav} nextDisabled={!selected} onNext={() => onNext(selected === "yes" ? SPONSORSHIP_YES_PATCH : {})} />
     </div>
   );
@@ -314,7 +309,7 @@ function DisqualifiersStep({ data, onNext, ...nav }: StepProps) {
       <button
         type="button"
         onClick={() => setInputs(prev => [...prev, ""])}
-        className="mt-2 text-sm font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+        className="mt-2 text-note font-[650] text-ember transition-colors hover:text-ember-hi focus-ring rounded-ctl"
       >
         + Add another
       </button>
@@ -372,7 +367,7 @@ export function CriteriaWizard({ tier, onSaved }: { tier: string; onSaved: () =>
   }
 
   if (loadingProfile) {
-    return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
+    return <div className="py-12 text-center text-note text-faint">Loading…</div>;
   }
 
   // stepIndex is clamped to [0, steps.length - 1] by commit() above, and stepId is always a
@@ -383,8 +378,8 @@ export function CriteriaWizard({ tier, onSaved }: { tier: string; onSaved: () =>
   const StepComponent = STEP_COMPONENTS[stepId];
 
   return (
-    <div className={CARD}>
-      <p className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+    <Surface padding="lg">
+      <p className="mb-4 text-eyebrow text-faint uppercase">
         Question {stepIndex + 1} of {steps.length}
       </p>
       <StepComponent
@@ -395,7 +390,7 @@ export function CriteriaWizard({ tier, onSaved }: { tier: string; onSaved: () =>
         isFirst={stepIndex === 0}
         isLast={stepIndex === steps.length - 1}
       />
-      {saveError && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{saveError}</p>}
-    </div>
+      {saveError && <p className="mt-3 text-caption text-ember">{saveError}</p>}
+    </Surface>
   );
 }

@@ -2,12 +2,11 @@ import { useState } from "react";
 import type { ResumeData, ResumeIndustry, SectionConfigEntry } from "../types";
 import type { BackgroundData } from "../lib/backgroundYaml";
 import { LABEL, Field, TopicCard } from "./CardEditor";
-import { ChoiceButtons } from "./ChoiceButtons";
+import { Button, ChipGroup, IconButton, ChevronDownIcon } from "../ui";
 import { ExperienceOverrideEditor } from "./ExperienceOverrideEditor";
 import { ProjectOverrideEditor } from "./ProjectOverrideEditor";
 import { SkillsSectionEditor } from "./SkillsSectionEditor";
 import { moveSection, toggleSectionIncluded, sectionLabel } from "../lib/resumeSections";
-import { PRIMARY_BUTTON_SM } from "../lib/styles";
 
 type Seniority = "junior" | "experienced";
 const SENIORITY_OPTIONS = [
@@ -31,12 +30,13 @@ function IndustryPicker({ industries, onApply, applying }: {
 
   return (
     <TopicCard title="Industry template">
-      <p className="text-xs text-gray-400 dark:text-gray-500">
+      <p className="text-note text-faint">
         Applying a template rewrites the section order and which sections are included below,
         based on what's typical for that industry. It never changes your summary or any
         experience/project wording.
       </p>
-      <ChoiceButtons
+      <ChipGroup
+        label="Industry"
         options={industries.map(i => ({ value: i.key, label: i.displayName }))}
         value={industryKey}
         onChange={setIndustryKey}
@@ -44,18 +44,17 @@ function IndustryPicker({ industries, onApply, applying }: {
       {industry?.hasSeniorityToggle && (
         <div>
           <label className={LABEL}>Seniority</label>
-          <ChoiceButtons options={SENIORITY_OPTIONS} value={seniority} onChange={setSeniority} />
+          <ChipGroup label="Seniority" options={SENIORITY_OPTIONS} value={seniority} onChange={setSeniority} />
         </div>
       )}
       <div>
-        <button
-          type="button"
+        <Button
+          size="sm"
           disabled={!industryKey || applying}
           onClick={() => industryKey && onApply(industryKey, industry?.hasSeniorityToggle ? seniority : undefined)}
-          className={PRIMARY_BUTTON_SM}
         >
           {applying ? "Applying…" : "Apply template"}
-        </button>
+        </Button>
       </div>
     </TopicCard>
   );
@@ -68,47 +67,39 @@ function IndustryPicker({ industries, onApply, applying }: {
 function SectionList({ value, onChange }: { value: SectionConfigEntry[]; onChange: (v: SectionConfigEntry[]) => void }) {
   return (
     <TopicCard title="Sections">
-      <p className="text-xs text-gray-400 dark:text-gray-500">
+      <p className="text-note text-faint">
         What's included in your resume, and in what order. Excluded sections stay in your
         background data, they just aren't rendered.
       </p>
       <div className="space-y-1">
         {value.map((section, i) => (
-          <div
-            key={section.sectionKey}
-            className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/50"
-          >
+          <div key={section.sectionKey} className="surface-sunk flex items-center gap-3 rounded-ctl px-3 py-2">
             <input
               type="checkbox"
+              className="accent-ember"
               checked={section.included}
               onChange={() => onChange(toggleSectionIncluded(value, i))}
               aria-label={`Include ${sectionLabel(section.sectionKey)}`}
             />
-            <span
-              className={`flex-1 text-sm ${
-                section.included ? "text-gray-700 dark:text-gray-200" : "text-gray-400 line-through dark:text-gray-600"
-              }`}
-            >
+            <span className={`flex-1 text-body ${section.included ? "text-ink-2" : "text-faint line-through"}`}>
               {sectionLabel(section.sectionKey)}
             </span>
-            <button
-              type="button"
+            <IconButton
+              size="sm"
               disabled={i === 0}
               onClick={() => onChange(moveSection(value, i, -1))}
               aria-label={`Move ${sectionLabel(section.sectionKey)} up`}
-              className="text-gray-400 transition-colors hover:text-gray-700 disabled:opacity-30 dark:hover:text-gray-200"
             >
-              &#9650;
-            </button>
-            <button
-              type="button"
+              <ChevronDownIcon className="h-3 w-3 rotate-180" />
+            </IconButton>
+            <IconButton
+              size="sm"
               disabled={i === value.length - 1}
               onClick={() => onChange(moveSection(value, i, 1))}
               aria-label={`Move ${sectionLabel(section.sectionKey)} down`}
-              className="text-gray-400 transition-colors hover:text-gray-700 disabled:opacity-30 dark:hover:text-gray-200"
             >
-              &#9660;
-            </button>
+              <ChevronDownIcon className="h-3 w-3" />
+            </IconButton>
           </div>
         ))}
       </div>
@@ -145,20 +136,15 @@ export function ResumeBuilder({
       <TopicCard title="Summary">
         <Field label="Resume summary" value={value.summary} onChange={summary => onChange({ ...value, summary })} multiline />
         <div>
-          <button
-            type="button"
-            disabled={generatingSummary}
-            onClick={onGenerateSummary}
-            className={PRIMARY_BUTTON_SM}
-          >
+          <Button size="sm" disabled={generatingSummary} onClick={onGenerateSummary}>
             {generatingSummary ? "Generating…" : "Generate summary"}
-          </button>
+          </Button>
           {/* Rendered right by the button that triggers it, not the page's shared bottom error
               slot (used by Save/Apply template) — this page has enough content above the fold
               that a bottom-slot error is easy to miss without scrolling. Same inline-error
               styling as AdvancedSection's YAML error in CardEditor.tsx. */}
           {generateSummaryError && (
-            <p className="mt-2 text-xs text-red-600 dark:text-red-400">{generateSummaryError}</p>
+            <p className="mt-2 text-caption text-ember">{generateSummaryError}</p>
           )}
         </div>
       </TopicCard>
