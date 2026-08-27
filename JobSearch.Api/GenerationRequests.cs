@@ -29,6 +29,18 @@ public record SourcesUpdateRequest(string[] Sources);
 // POST /api/v1/admin/invite
 public record InviteRequest(string Email);
 
+// POST /api/v1/auth/register
+public record RegisterRequest(string Email, string Password);
+
+// POST /api/v1/auth/login
+public record LoginRequest(string Email, string Password);
+
+// POST /api/v1/auth/forgot-password
+public record ForgotPasswordRequest(string Email);
+
+// POST /api/v1/auth/reset-password
+public record ResetPasswordRequest(string Token, string NewPassword);
+
 // POST /api/v1/account/cancel — the user's own explicit choice, not a default we pick for
 // them. See the endpoint's own comment for exactly what this does and doesn't control.
 public record CancelAccountRequest(bool DeleteData);

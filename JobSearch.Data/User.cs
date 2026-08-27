@@ -31,6 +31,20 @@ public class User
     // Null means not chosen yet (same convention as EnabledSources): no default is ever
     // silently assumed, since "full" implies reading inbox content.
     public string? GmailTrackingMode { get; set; }
+
+    // Email/password login, fully independent of Google OAuth. Null means "no password set,
+    // Google-only" — the state of every user before this feature and of every Google user
+    // indefinitely afterward; nobody is ever migrated or prompted to set one. Only set when
+    // someone registers via POST /auth/register or completes POST /auth/reset-password.
+    public string? PasswordHash { get; set; }
+
+    // Set the moment this email first proves ownership: automatically on first successful
+    // Google login (Google already did the proving), or on completing the emailed
+    // verification link from password registration. Password login is gated on this being
+    // non-null; Google login never reads or is affected by it. Also what makes the
+    // account-linking safety net work — a password registration against an email that
+    // already has this set (a prior Google login) skips re-verification entirely.
+    public DateTime? EmailVerifiedAt { get; set; }
 }
 
 // Bare entitlement fields — Stripe/billing wiring is a separate later ticket.
