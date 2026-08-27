@@ -29,7 +29,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (res.status === 402) throw new InsufficientCreditsError("Insufficient credits");
   if (!res.ok) {
     const errBody = await res.json().catch(() => null);
-    throw new Error(errBody?.error ?? `${res.status} ${res.statusText}`);
+    // Two error shapes exist server-side: the usual `{ error: "..." }` single message, and
+    // `{ errors: [...] }` — a list of every failed password rule, returned by /auth/register
+    // and /auth/reset-password (see PasswordRules.Validate). Join the list into one sentence
+    // so every caller keeps dealing with a single Error.message either way.
+    const ruleErrors: string | null = Array.isArray(errBody?.errors) ? errBody.errors.join(" ") : null;
+    throw new Error(errBody?.error ?? ruleErrors ?? `${res.status} ${res.statusText}`);
   }
   // Some endpoints reply 200 with an empty body (Results.Ok() with no value) rather than 204
   // — checking status alone isn't enough, so parse whatever text actually came back instead.
@@ -119,6 +124,36 @@ export async function updateGmailTrackingMode(mode: "full" | "filter" | "manual"
 
 export async function logout(): Promise<void> {
   await request("/auth/logout", { method: "POST" });
+}
+
+// --- Email/password auth. A second, independent path alongside Google OAuth (which stays a
+// plain navigable URL — see useLoginUrl — not a fetch, because it's a redirect round-trip).
+// Every one of these signs the user in via the same session cookie Google's callback sets, so
+// on success the caller needs a fresh /auth/me: hard-navigate rather than client-side route.
+
+// Two success outcomes, deliberately distinguished by the server: "signed_in" when this email
+// already proved ownership through a prior Google login (registration attaches to that same
+// account and needs no re-verification), "verification_sent" for a genuinely new account, which
+// is NOT signed in until the emailed link is clicked.
+export async function register(email: string, password: string): Promise<{ status: "signed_in" | "verification_sent" }> {
+  return request("/auth/register", { method: "POST", ...json({ email, password }) });
+}
+
+// Note the path is shared with Google's GET /auth/login challenge endpoint — same route,
+// different verb, so this POST doesn't collide with it.
+export async function login(email: string, password: string): Promise<void> {
+  await request("/auth/login", { method: "POST", ...json({ email, password }) });
+}
+
+// Always resolves with the same generic message whether or not the email has an account —
+// the server refuses to confirm either way, to prevent account enumeration.
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  return request("/auth/forgot-password", { method: "POST", ...json({ email }) });
+}
+
+// The token comes from the ?resetToken= param on the emailed link. Signs the user in on success.
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await request("/auth/reset-password", { method: "POST", ...json({ token, newPassword }) });
 }
 
 export async function cancelAccount(deleteData: boolean): Promise<void> {
