@@ -501,14 +501,19 @@ var api = app.MapGroup("/api/v1").RequireAuthorization();
 // GET /api/v1/discoveries — Tier 2 only: discovery is a Tier 2-exclusive feature.
 api.MapGet("/discoveries", async (HttpContext ctx, AppDbContext db, string? recommendation = null, int page = 1, int pageSize = 25) =>
 {
-    var (_, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var (_, tierError) = await RequireTier2Async(db, userId);
     if (tierError is not null) return tierError;
 
     var validRecs = new HashSet<string> { "strong_match", "good_match", "weak_match", "discard" };
     if (recommendation is not null && !validRecs.Contains(recommendation))
         return Results.BadRequest(new { error = "Invalid recommendation value" });
 
-    var query = db.DiscoveredPostings.AsQueryable();
+    // Explicit ownership scoping — defense-in-depth alongside AppDbContext's global query
+    // filter (HasQueryFilter, OnModelCreating), which already restricts this to the
+    // caller's own rows; every other explicit UserId check/filter added below is the same
+    // belt-and-suspenders reasoning, not repeated per site.
+    var query = db.DiscoveredPostings.AsQueryable().Where(d => d.UserId == userId);
 
     // No explicit recommendation = the "All" tab, which should still never surface discards —
     // the user should never see something the agent decided didn't meet their criteria. Doing
@@ -569,10 +574,14 @@ api.MapGet("/discoveries", async (HttpContext ctx, AppDbContext db, string? reco
 // records, not inbox content, so it's fine to summarize.
 api.MapGet("/summary", async (HttpContext ctx, AppDbContext db) =>
 {
-    var (_, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var (_, tierError) = await RequireTier2Async(db, userId);
     if (tierError is not null) return tierError;
 
-    var appsByStatus = await db.Applications
+    // Explicit ownership scoping, defense-in-depth (see the /discoveries comment above).
+    var ownApplications = db.Applications.Where(a => a.UserId == userId);
+
+    var appsByStatus = await ownApplications
         .GroupBy(a => a.Status)
         .Select(g => new { Status = g.Key, Count = g.Count() })
         .ToListAsync();
@@ -581,7 +590,7 @@ api.MapGet("/summary", async (HttpContext ctx, AppDbContext db) =>
     {
         applications = new
         {
-            total = await db.Applications.CountAsync(),
+            total = await ownApplications.CountAsync(),
             byStatus = appsByStatus.ToDictionary(x => x.Status, x => x.Count),
         },
     });
@@ -595,13 +604,15 @@ api.MapGet("/applications", async (
     int page = 1,
     int pageSize = 25) =>
 {
-    var (_, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var (_, tierError) = await RequireTier2Async(db, userId);
     if (tierError is not null) return tierError;
 
     if (status is not null && !ApplicationStatus.All.Contains(status))
         return Results.BadRequest(new { error = "Invalid status" });
 
-    var query = db.Applications.AsQueryable();
+    // Explicit ownership scoping, defense-in-depth (see the /discoveries comment above).
+    var query = db.Applications.AsQueryable().Where(a => a.UserId == userId);
     if (status is not null)
         query = query.Where(a => a.Status == status);
 
@@ -630,11 +641,17 @@ api.MapGet("/applications", async (
 // GET /api/v1/applications/{id}/events — Tier 2 only.
 api.MapGet("/applications/{id}/events", async (HttpContext ctx, int id, AppDbContext db) =>
 {
-    var (_, tierError) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var (_, tierError) = await RequireTier2Async(db, userId);
     if (tierError is not null) return tierError;
 
+    // Explicit ownership check, defense-in-depth: AppDbContext's global query filter
+    // (HasQueryFilter, OnModelCreating) already makes FindAsync return null for a row
+    // owned by another user; this re-checks it explicitly at the call site too. NotFound,
+    // not Forbidden, so a caller can't distinguish "doesn't exist" from "someone else's" —
+    // same reasoning at every other FindAsync-by-id site touched below.
     var application = await db.Applications.FindAsync(id);
-    if (application is null) return Results.NotFound();
+    if (application is null || application.UserId != userId) return Results.NotFound();
 
     var events = await db.ApplicationEvents
         .Where(e => e.ApplicationId == id)
@@ -754,8 +771,9 @@ api.MapPatch("/applications/{id}", async (HttpContext ctx, int id, AppDbContext 
     if (!ApplicationStatus.All.Contains(body.Status))
         return Results.BadRequest(new { error = "Invalid status" });
 
+    // Explicit ownership check, defense-in-depth (see /applications/{id}/events above).
     var application = await db.Applications.FindAsync(id);
-    if (application is null) return Results.NotFound();
+    if (application is null || application.UserId != user!.Id) return Results.NotFound();
 
     if (application.Status != body.Status)
     {
@@ -1912,8 +1930,9 @@ api.MapPost("/threads/{id:int}/edit", async (
     CvTailorAgent cvAgent, CoverLetterAgent letterAgent, AnswerAgent answerAgent, AccuracyVerifierAgent verifier) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
+    // Explicit ownership check, defense-in-depth (see /applications/{id}/events above).
     var thread = await db.AgentThreads.FindAsync(id);
-    if (thread is null) return Results.NotFound();
+    if (thread is null || thread.UserId != userId) return Results.NotFound();
 
     if (!await CreditService.HasCreditAsync(db, userId))
         return Results.Json(new { error = "Insufficient credits" }, statusCode: StatusCodes.Status402PaymentRequired);
@@ -2034,10 +2053,12 @@ static async Task<string?> GetApplicantNameAsync(AppDbContext db, int userId)
 }
 
 // GET /api/v1/threads/{id}/pdf — renders a completed CV or cover-letter thread as a PDF
-api.MapGet("/threads/{id:int}/pdf", async (int id, AppDbContext db) =>
+api.MapGet("/threads/{id:int}/pdf", async (int id, HttpContext ctx, AppDbContext db) =>
 {
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    // Explicit ownership check, defense-in-depth (see /applications/{id}/events above).
     var thread = await db.AgentThreads.FindAsync(id);
-    if (thread?.CurrentContent is null) return Results.NotFound();
+    if (thread is null || thread.UserId != userId || thread.CurrentContent is null) return Results.NotFound();
 
     var applicantName = await GetApplicantNameAsync(db, thread.UserId);
 
@@ -2054,10 +2075,13 @@ api.MapGet("/threads/{id:int}/pdf", async (int id, AppDbContext db) =>
 });
 
 // GET /api/v1/threads/{id}/docx — cover letter as a Word document
-api.MapGet("/threads/{id:int}/docx", async (int id, AppDbContext db) =>
+api.MapGet("/threads/{id:int}/docx", async (int id, HttpContext ctx, AppDbContext db) =>
 {
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    // Explicit ownership check, defense-in-depth (see /applications/{id}/events above).
     var thread = await db.AgentThreads.FindAsync(id);
-    if (thread?.CurrentContent is null || thread.ArtifactType != AgentThreadType.CoverLetter)
+    if (thread is null || thread.UserId != userId || thread.CurrentContent is null
+        || thread.ArtifactType != AgentThreadType.CoverLetter)
         return Results.NotFound();
 
     var applicantName = await GetApplicantNameAsync(db, thread.UserId);
