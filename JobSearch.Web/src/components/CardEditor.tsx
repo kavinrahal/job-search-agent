@@ -1,49 +1,71 @@
 import { useState, type ReactNode } from "react";
 import { load as loadYaml, dump as dumpYaml } from "js-yaml";
-import { InfoTooltip } from "./InfoTooltip";
+import { Surface, Input, Textarea, Tooltip, ChevronDownIcon, CloseIcon } from "../ui";
+import { cx } from "../ui/cx";
 
 // Shared building blocks for the topic-card editing pattern used by BackgroundEditor and
 // JobCriteriaEditor — a page-level topic (Personal, Experience, Location, Salary, ...) each
 // gets its own card, with list-based topics collapsing individual entries by default so a
 // long list doesn't dominate the page.
-
-export const LABEL = "mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400";
-export const INPUT = "w-full rounded-lg border border-gray-200 bg-white p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-violet-500";
+//
+// LABEL/INPUT stay as exported class-string constants (rather than disappearing entirely)
+// because several call sites compose a `<select>`/multi-select/checkbox row that doesn't fit
+// Field's single-control shape — now built from the same tokens ui/Field.tsx uses internally,
+// so they carry no manual dark: variant either.
+export const LABEL = "mb-[5px] block text-meta font-[650] text-muted";
+export const INPUT =
+  "w-full rounded-ctl bg-sunk px-3 py-[9px] text-body text-ink border-0 placeholder:text-faint hairline-ring focus-ring " +
+  "transition-[box-shadow,background-color] duration-400 ease-spring motion-reduce:transition-none";
 
 export function Field({ label, value, onChange, multiline, type = "text", min, max, tooltip }: {
   label: string; value: string; onChange: (v: string) => void; multiline?: boolean;
   type?: "text" | "email" | "tel" | "number" | "month"; min?: number; max?: number; tooltip?: string;
 }) {
-  return (
-    <div>
-      <label className={LABEL}>
-        {label}
-        {tooltip && <InfoTooltip text={tooltip} />}
-      </label>
-      {multiline ? (
-        <textarea className={INPUT} rows={3} value={value} onChange={e => onChange(e.target.value)} />
-      ) : (
-        <input className={INPUT} type={type} min={min} max={max} value={value} onChange={e => onChange(e.target.value)} />
-      )}
-    </div>
+  // ui/Field's label slot is plain text with no room for a trailing Tooltip trigger, and this is
+  // the only Field call in the app that needs one (JobCriteriaEditor's skill-priority tooltip) —
+  // not worth threading a tooltip prop through ui/Field for one caller, so this one case composes
+  // the label row by hand instead, reusing the exact LABEL/INPUT tokens above.
+  if (tooltip) {
+    return (
+      <div>
+        <label className={LABEL}>
+          {label}
+          <Tooltip text={tooltip} />
+        </label>
+        {multiline ? (
+          <textarea className={INPUT} rows={3} value={value} onChange={e => onChange(e.target.value)} />
+        ) : (
+          <input className={INPUT} type={type} min={min} max={max} value={value} onChange={e => onChange(e.target.value)} />
+        )}
+      </div>
+    );
+  }
+  return multiline ? (
+    <Textarea label={label} value={value} onChange={e => onChange(e.target.value)} />
+  ) : (
+    <Input label={label} type={type} min={min} max={max} value={value} onChange={e => onChange(e.target.value)} />
   );
 }
 
 // The outer "topic" grouping — stays expanded by default, since this is the structure
-// itself, not dense content within it.
+// itself, not dense content within it. No ready-made accordion exists in the design system, so
+// this stays a bespoke composite, but built from Surface and the shared tokens rather than raw
+// gray/dark: strings.
 export function TopicCard({ title, children, defaultOpen = true }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+    <Surface padding="none" clip>
       <button
+        type="button"
         onClick={() => setOpen(o => !o)}
-        className="flex w-full items-center justify-between p-4 text-left"
+        aria-expanded={open}
+        className="flex w-full items-center justify-between p-4 text-left focus-ring"
       >
-        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</span>
-        <span className="text-gray-400 dark:text-gray-500">{open ? "−" : "+"}</span>
+        <span className="text-lede font-[650] text-ink-2">{title}</span>
+        <ChevronDownIcon className={cx("h-3.5 w-3.5 flex-none text-faint transition-transform duration-300", open && "rotate-180")} />
       </button>
-      {open && <div className="animate-fade-in-up space-y-4 border-t border-gray-100 p-4 dark:border-gray-800">{children}</div>}
-    </div>
+      {open && <div className="animate-fade-in-up hairline-t space-y-4 p-4">{children}</div>}
+    </Surface>
   );
 }
 
@@ -57,23 +79,40 @@ export function EntryCard({ summary, defaultOpen = false, onRemove, children }: 
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-lg border border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-800/50">
+    <div className="surface-sunk overflow-hidden rounded-ctl">
       <div className="flex items-center justify-between p-3">
-        <button onClick={() => setOpen(o => !o)} className="flex-1 text-left text-sm font-medium text-gray-700 dark:text-gray-200">
-          {summary || "New entry"} {open ? "▲" : "▼"}
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className="flex flex-1 items-center gap-1.5 text-left text-body font-[650] text-ink-2 focus-ring"
+        >
+          {summary || "New entry"}
+          <ChevronDownIcon className={cx("h-3 w-3 flex-none text-faint transition-transform duration-300", open && "rotate-180")} />
         </button>
         {onRemove && (
-          <button onClick={onRemove} className="ml-2 text-xs text-red-500 transition-colors hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">Remove</button>
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label="Remove"
+            className="ml-2 inline-grid h-7 w-7 flex-none place-items-center rounded-ctl text-faint transition-[background-color,color,transform] duration-300 hover:bg-ember-wash hover:text-ember focus-ring tappable active:scale-[.94]"
+          >
+            <CloseIcon className="h-3.5 w-3.5" />
+          </button>
         )}
       </div>
-      {open && <div className="animate-fade-in-up space-y-3 border-t border-gray-100 p-3 dark:border-gray-800">{children}</div>}
+      {open && <div className="animate-fade-in-up hairline-t space-y-3 p-3">{children}</div>}
     </div>
   );
 }
 
 export function AddButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
-    <button onClick={onClick} className="text-sm font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-note font-[650] text-ember transition-colors hover:text-ember-hi focus-ring rounded-ctl"
+    >
       {children}
     </button>
   );
@@ -100,7 +139,7 @@ export function AdvancedSection({ value, onChange }: { value: Record<string, unk
 
   return (
     <TopicCard title="Advanced (raw YAML)" defaultOpen={false}>
-      <p className="text-xs text-gray-400 dark:text-gray-500">
+      <p className="text-note text-faint">
         Sections here aren't yet supported by the structured editor above. Edit as YAML directly.
       </p>
       <textarea
@@ -110,7 +149,7 @@ export function AdvancedSection({ value, onChange }: { value: Record<string, unk
         onChange={e => setText(e.target.value)}
         onBlur={handleBlur}
       />
-      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-caption text-ember">{error}</p>}
     </TopicCard>
   );
 }

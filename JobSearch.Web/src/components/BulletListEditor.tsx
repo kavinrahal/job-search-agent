@@ -1,4 +1,6 @@
 import { LABEL, INPUT, AddButton } from "./CardEditor";
+import { IconButton, ChevronDownIcon, CloseIcon } from "../ui";
+import { cx } from "../ui/cx";
 import type { ItemOverride } from "../types";
 import { orderedBulletRows, upsertItemOverride, moveBulletOverride } from "../lib/resumeOverrides";
 
@@ -31,36 +33,34 @@ export function BulletListEditor({ itemLabel, baseItems, itemOverrides, extras, 
           <div key={row.index} className="flex items-start gap-2">
             <input
               type="checkbox"
-              className="mt-2.5 shrink-0"
+              className="mt-2.5 shrink-0 accent-ember"
               checked={row.included}
               aria-label={row.included ? `Exclude this ${itemLabel}` : `Include this ${itemLabel}`}
               onChange={e => onChangeItemOverrides(upsertItemOverride(itemOverrides, row.index, { included: e.target.checked }))}
             />
             <textarea
-              className={`${INPUT} flex-1 ${row.included ? "" : "text-gray-400 line-through dark:text-gray-600"}`}
+              className={cx(INPUT, "flex-1", !row.included && "text-faint line-through")}
               rows={2}
               value={row.text}
               onChange={e => onChangeItemOverrides(upsertItemOverride(itemOverrides, row.index, { textOverride: e.target.value }))}
             />
             <div className="flex shrink-0 flex-col">
-              <button
-                type="button"
+              <IconButton
+                size="sm"
                 disabled={position === 0}
                 onClick={() => onChangeItemOverrides(moveBulletOverride(baseItems, itemOverrides, row.index, -1))}
                 aria-label={`Move this ${itemLabel} up`}
-                className="text-gray-400 transition-colors hover:text-gray-700 disabled:opacity-30 dark:hover:text-gray-200"
               >
-                &#9650;
-              </button>
-              <button
-                type="button"
+                <ChevronDownIcon className="h-3 w-3 rotate-180" />
+              </IconButton>
+              <IconButton
+                size="sm"
                 disabled={position === rows.length - 1}
                 onClick={() => onChangeItemOverrides(moveBulletOverride(baseItems, itemOverrides, row.index, 1))}
                 aria-label={`Move this ${itemLabel} down`}
-                className="text-gray-400 transition-colors hover:text-gray-700 disabled:opacity-30 dark:hover:text-gray-200"
               >
-                &#9660;
-              </button>
+                <ChevronDownIcon className="h-3 w-3" />
+              </IconButton>
             </div>
           </div>
         ))}
@@ -69,17 +69,14 @@ export function BulletListEditor({ itemLabel, baseItems, itemOverrides, extras, 
         {extras.map((extra, i) => (
           <div key={i} className="flex gap-2">
             <textarea
-              className={`${INPUT} flex-1`}
+              className={cx(INPUT, "flex-1")}
               rows={2}
               value={extra}
               onChange={e => onChangeExtras(extras.map((x, idx) => (idx === i ? e.target.value : x)))}
             />
-            <button
-              onClick={() => onChangeExtras(extras.filter((_, idx) => idx !== i))}
-              className="text-xs text-red-500 transition-colors hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-            >
-              &#10005;
-            </button>
+            <IconButton aria-label={`Remove this ${itemLabel}`} size="sm" onClick={() => onChangeExtras(extras.filter((_, idx) => idx !== i))}>
+              <CloseIcon className="h-3.5 w-3.5" />
+            </IconButton>
           </div>
         ))}
         <AddButton onClick={() => onChangeExtras([...extras, ""])}>+ Add extra {itemLabel}</AddButton>

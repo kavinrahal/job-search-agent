@@ -18,7 +18,7 @@ export function ExperienceOverrideEditor({ background, value, onChange }: {
 
   return (
     <TopicCard title="Experience">
-      <p className="text-xs text-gray-400 dark:text-gray-500">
+      <p className="text-note text-faint">
         Fine-tune how each role from your background is shown on this resume — what's included,
         the wording, and the order of bullets. To edit the role, company, or dates themselves,
         use the Profile page.
@@ -32,11 +32,11 @@ export function ExperienceOverrideEditor({ background, value, onChange }: {
 
           return (
             <EntryCard key={index} summary={over.included ? label : `${label} (excluded)`}>
-              <p className="text-xs text-gray-400 dark:text-gray-500">
+              <p className="text-note text-faint">
                 {[entry.location, [entry.dates.start, entry.dates.end || "Present"].filter(Boolean).join(" – ")].filter(Boolean).join(" | ")}
               </p>
-              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
-                <input type="checkbox" checked={over.included} onChange={e => set({ included: e.target.checked })} />
+              <label className="flex items-center gap-2 text-body text-ink-2">
+                <input type="checkbox" className="accent-ember" checked={over.included} onChange={e => set({ included: e.target.checked })} />
                 Include this role
               </label>
               <Field

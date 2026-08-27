@@ -7,9 +7,7 @@ import { useSyncedState } from "../hooks/useSyncedState";
 import { useDebouncedPreview } from "../hooks/useDebouncedPreview";
 import { ResumeBuilder } from "../components/ResumeBuilder";
 import { ResumePreviewPane } from "../components/ResumePreviewPane";
-import { ChoiceButtons } from "../components/ChoiceButtons";
-import { PageTagline } from "../components/PageTagline";
-import { PRIMARY_BUTTON } from "../lib/styles";
+import { PageHeader, ChipGroup, Button, Callout } from "../ui";
 import { parseBackgroundYaml } from "../lib/backgroundYaml";
 import { applyTemplateToDraft } from "../lib/resumeSections";
 import type { ResumeData } from "../types";
@@ -114,24 +112,25 @@ export function ResumeBuilderPage() {
   const error = saveError ?? applyError;
 
   if (loading) {
-    return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
+    return <div className="py-12 text-center text-note text-faint">Loading…</div>;
   }
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Resume builder</h2>
-      <PageTagline>How your resume is laid out and worded — pick an industry starting point, then fine-tune what's shown, the wording, and the order.</PageTagline>
+      <PageHeader
+        title="Resume builder"
+        tagline="How your resume is laid out and worded — pick an industry starting point, then fine-tune what's shown, the wording, and the order."
+      />
 
       {loadError ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-500/10 dark:text-amber-300">
-          {loadError}
-        </div>
+        <Callout variant="warning" title={loadError} />
       ) : (
         <>
           {/* Mobile/tablet only — the lg: grid below shows form and preview side by side, where
               this toggle would be redundant. */}
           <div className="lg:hidden">
-            <ChoiceButtons
+            <ChipGroup
+              label="View"
               options={[{ value: "edit" as const, label: "Edit" }, { value: "preview" as const, label: "Preview" }]}
               value={mobileView}
               onChange={setMobileView}
@@ -151,9 +150,9 @@ export function ResumeBuilderPage() {
                 generatingSummary={generatingSummary}
                 generateSummaryError={generateSummaryError}
               />
-              <button onClick={handleSave} disabled={saving} className={PRIMARY_BUTTON}>
+              <Button onClick={handleSave} disabled={saving}>
                 {saving ? "Saving…" : "Save resume"}
-              </button>
+              </Button>
             </div>
 
             <div className={mobileView === "edit" ? "hidden lg:block" : ""}>
@@ -165,9 +164,7 @@ export function ResumeBuilderPage() {
         </>
       )}
 
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">{error}</div>
-      )}
+      {error && <Callout variant="danger" title={error} />}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { BackgroundData, BackgroundParseResult, PersonalInfo, ExperienceEntry, EducationEntry, ProjectEntry } from "../lib/backgroundYaml";
 import { LABEL, INPUT, Field, TopicCard, EntryCard, AddButton, AdvancedSection } from "./CardEditor";
+import { Callout, IconButton, CloseIcon } from "../ui";
 
 const EMPLOYMENT_TYPES = ["full_time", "part_time", "contract", "casual", "internship"];
 
@@ -48,9 +49,10 @@ function ExperienceSection({ value, onChange }: { value: ExperienceEntry[]; onCh
                     onChange={e => update(i, { dates: { ...entry.dates, end: e.target.value } })}
                   />
                 )}
-                <label className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <label className="mt-1 flex items-center gap-2 text-caption text-muted">
                   <input
                     type="checkbox"
+                    className="accent-ember"
                     checked={entry.dates.end.trim().toLowerCase() === "present"}
                     onChange={e => update(i, { dates: { ...entry.dates, end: e.target.checked ? "present" : "" } })}
                   />
@@ -78,12 +80,13 @@ function ExperienceSection({ value, onChange }: { value: ExperienceEntry[]; onCh
                         achievements: entry.achievements.map((x, idx) => (idx === ai ? e.target.value : x)),
                       })}
                     />
-                    <button
+                    <IconButton
+                      aria-label="Remove achievement"
+                      size="sm"
                       onClick={() => update(i, { achievements: entry.achievements.filter((_, idx) => idx !== ai) })}
-                      className="text-xs text-red-500 transition-colors hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                     >
-                      &#10005;
-                    </button>
+                      <CloseIcon className="h-3.5 w-3.5" />
+                    </IconButton>
                   </div>
                 ))}
                 <AddButton onClick={() => update(i, { achievements: [...entry.achievements, ""] })}>+ Add achievement</AddButton>
@@ -193,7 +196,9 @@ function SkillsSection({ value, onChange }: { value: Record<string, string[]>; o
                 onBlur={e => setItems(category, e.target.value)}
               />
             </div>
-            <button onClick={() => removeCategory(category)} className="text-xs text-red-500 transition-colors hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">&#10005;</button>
+            <IconButton aria-label="Remove skill category" size="sm" onClick={() => removeCategory(category)}>
+              <CloseIcon className="h-3.5 w-3.5" />
+            </IconButton>
           </div>
         ))}
         <AddButton onClick={addCategory}>+ Add category</AddButton>
@@ -221,11 +226,8 @@ function StructuredBackgroundEditor({ value, onChange }: { value: BackgroundData
 export function BackgroundEditor({ value, onChange }: { value: BackgroundParseResult; onChange: (v: BackgroundParseResult) => void }) {
   if (!value.ok) {
     return (
-      <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <p className="text-xs text-amber-600 dark:text-amber-400">
-          This background doesn't parse as structured YAML, so it's shown as raw text instead.
-          Nothing has been lost, edit it directly below.
-        </p>
+      <div className="space-y-2">
+        <Callout variant="warning" title="This background doesn't parse as structured YAML, so it's shown as raw text instead. Nothing has been lost, edit it directly below." />
         <textarea
           className={`${INPUT} font-mono`}
           rows={16}
