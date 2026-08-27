@@ -102,12 +102,24 @@ export function GeneratePage() {
 
         {mode === "url" ? (
           <div className="space-y-2">
-            <input
-              value={postingUrl}
-              onChange={e => setPostingUrl(e.target.value)}
-              placeholder="https://…"
-              className={INPUT}
-            />
+            <div className="relative">
+              <input
+                value={postingUrl}
+                onChange={e => setPostingUrl(e.target.value)}
+                placeholder="https://…"
+                className={`${INPUT} ${postingUrl.length > 0 ? "pr-8" : ""}`}
+              />
+              {postingUrl.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPostingUrl("")}
+                  aria-label="Clear URL"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             {showHintFields && (
               <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/50">
                 <p className="text-xs text-gray-500 dark:text-gray-400">Couldn't fetch that link directly. Search for it instead.</p>
@@ -183,7 +195,12 @@ export function GeneratePage() {
       </div>
 
       {generateCv.loading && <GeneratingIndicator kind="cv" />}
-      {cvResult && (
+      {/* Discard the previous CV the moment a regenerate starts, rather than leaving a stale,
+          fully-interactive result (download link, revision box) on screen next to the
+          "generating" indicator for the whole duration of the new call — that's what read as
+          "two cards" even though cvResult itself is always a single value that gets replaced,
+          never appended to. */}
+      {cvResult && !generateCv.loading && (
         <div className={`${CARD} animate-fade-in-up`}>
           <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">CV ready</p>
           <CvResult result={cvResult} onRevised={setCvResult} />
@@ -191,7 +208,8 @@ export function GeneratePage() {
       )}
 
       {generateLetter.loading && <GeneratingIndicator kind="letter" />}
-      {letterResult && (
+      {/* Same reasoning as cvResult above. */}
+      {letterResult && !generateLetter.loading && (
         <div className={`${CARD} animate-fade-in-up`}>
           <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">Cover letter</p>
           <LetterResult result={letterResult} onRevised={setLetterResult} />

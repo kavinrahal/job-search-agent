@@ -1763,6 +1763,15 @@ static async Task<IResult> GenerateArtifactAsync(
     if (resolvedText is null)
         return Results.BadRequest(new { error });
 
+    // ResolvePostingTextAsync's try/catch only catches a fetch that *throws* — a bot-block page,
+    // login wall, or near-empty redirect target comes back as a non-null 200 response, so it
+    // sails past the check above and would otherwise go straight to the writing agent, which
+    // (reasonably) responds with a prose apology instead of a CV/letter. That apology then gets
+    // saved and returned as an ordinary successful generation with nothing to distinguish it —
+    // see GenerateArtifactAsync's own comment. A real posting is always well over this floor.
+    if (!PostingTextSufficiency.IsSufficient(resolvedText))
+        return Results.BadRequest(new { error = "Could not fetch a usable posting from that URL. Try pasting the job description text instead." });
+
     // Only known for free via discoveryId (DiscoveredPosting already has it) — everywhere
     // else, a cheap dedicated extraction beats leaving the download filename generic.
     company ??= await companyExtractor.ExtractAsync(userId, resolvedText);
