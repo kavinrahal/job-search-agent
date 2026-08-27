@@ -1,30 +1,32 @@
 import { useState, type ReactNode } from "react";
 import { useGenerateCv, useGenerateLetter, useAskQuestion, useSearchPostingCandidates } from "../hooks/useGeneration";
 import type { GenerationResult, PostingCandidate } from "../types";
-import { PageTagline } from "../components/PageTagline";
 import { GeneratingIndicator } from "../components/GeneratingIndicator";
 import { AccuracyWarningBanner, CvResult, LetterResult, RevisionBox } from "../components/GenerationResult";
-import { CARD, PRIMARY_BUTTON, INPUT, SECONDARY_BUTTON } from "../lib/styles";
+import { Surface, Well, Button, Callout, Input, Textarea, IconButton, CloseIcon, cx } from "../ui";
 
 type Mode = "url" | "text";
 
 function PasteInsteadLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="text-xs font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
+    <button onClick={onClick} className="text-caption font-[650] text-ember hover:text-ember-hi">
       {label}
     </button>
   );
 }
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+// Sign in / Create account style tab switch — see LandingPage's TabSwitch for the same
+// hand-rolled treatment and why it isn't SegmentedControl (this swaps input modes, it doesn't
+// filter a list already on screen).
+function ModeTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
-        active
-          ? "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
-          : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-      }`}
+      className={cx(
+        "rounded-inset px-3 py-1.5 text-control font-[650] tappable focus-ring",
+        "transition-[background-color,color,transform] duration-350 ease-spring motion-reduce:transition-none active:scale-[.97]",
+        active ? "bg-core text-ink shadow-e1" : "text-muted hover:text-ink",
+      )}
     >
       {children}
     </button>
@@ -91,82 +93,88 @@ export function GeneratePage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Generate</h2>
-      <PageTagline>Paste a posting, get a tailored CV, cover letter, or answer back in seconds.</PageTagline>
+      <div>
+        <h2 className="m-0 text-lede font-bold text-ink">Generate</h2>
+        <p className="m-0 text-caption text-faint">Paste a posting, get a tailored CV, cover letter, or answer back in seconds.</p>
+      </div>
 
-      <div className={CARD}>
-        <div className="mb-4 flex gap-1">
-          <TabButton active={mode === "url"} onClick={() => setMode("url")}>Paste URL</TabButton>
-          <TabButton active={mode === "text"} onClick={() => setMode("text")}>Paste description</TabButton>
+      <Surface elevation="raised">
+        <div className="surface-sunk mb-4 inline-flex gap-px rounded-ctl p-[3px]">
+          <ModeTab active={mode === "url"} onClick={() => setMode("url")}>Paste URL</ModeTab>
+          <ModeTab active={mode === "text"} onClick={() => setMode("text")}>Paste description</ModeTab>
         </div>
 
         {mode === "url" ? (
           <div className="space-y-2">
             <div className="relative">
-              <input
+              <Input
+                label="Job posting URL"
                 value={postingUrl}
                 onChange={e => setPostingUrl(e.target.value)}
                 placeholder="https://…"
-                className={`${INPUT} ${postingUrl.length > 0 ? "pr-8" : ""}`}
+                className={postingUrl.length > 0 ? "pr-9" : undefined}
               />
               {postingUrl.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setPostingUrl("")}
+                <IconButton
                   aria-label="Clear URL"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                  size="sm"
+                  onClick={() => setPostingUrl("")}
+                  className="absolute top-[26px] right-1.5"
                 >
-                  ✕
-                </button>
+                  <CloseIcon className="h-3.5 w-3.5" />
+                </IconButton>
               )}
             </div>
             {showHintFields && (
-              <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/50">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Couldn't fetch that link directly. Search for it instead.</p>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
+              <Well className="space-y-2 p-3">
+                <p className="m-0 text-caption text-muted">Couldn't fetch that link directly. Search for it instead.</p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <Input
+                    label="Job title"
+                    className="flex-1"
                     value={postingTitle}
                     onChange={e => { setPostingTitle(e.target.value); setCandidates(null); }}
-                    placeholder="Job title (required)"
-                    className={`flex-1 ${INPUT}`}
+                    placeholder="Required"
                   />
-                  <input
+                  <Input
+                    label="Company"
+                    className="flex-1"
                     value={postingCompany}
                     onChange={e => { setPostingCompany(e.target.value); setCandidates(null); }}
-                    placeholder="Company (optional)"
-                    className={`flex-1 ${INPUT}`}
+                    placeholder="Optional"
                   />
-                  <button
+                  <Button
+                    variant="subtle"
                     onClick={handleSearchCandidates}
                     disabled={postingTitle.trim().length === 0 || searchCandidates.loading}
-                    className={`shrink-0 ${SECONDARY_BUTTON}`}
+                    className="shrink-0"
                   >
                     {searchCandidates.loading ? "Searching…" : "Search Jora/Adzuna"}
-                  </button>
+                  </Button>
                 </div>
-              </div>
+              </Well>
             )}
 
             {candidates && (
               candidates.length === 0 ? (
                 <div className="space-y-1.5">
-                  <p className="text-xs text-gray-400 dark:text-gray-500">No results for that search.</p>
+                  <p className="m-0 text-caption text-faint">No results for that search.</p>
                   <PasteInsteadLink label="Paste the job description instead →" onClick={() => setMode("text")} />
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <p className="text-xs text-gray-400 dark:text-gray-500">Pick the one you meant.</p>
+                  <p className="m-0 text-caption text-faint">Pick the one you meant.</p>
                   {candidates.map(c => (
                     <button
                       key={c.url}
                       onClick={() => handlePickCandidate(c)}
-                      className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-left text-sm transition-colors duration-150 hover:border-violet-300 hover:bg-violet-50 dark:border-gray-700 dark:hover:border-violet-700 dark:hover:bg-violet-500/10"
+                      className="hairline-ring flex w-full items-center justify-between rounded-ctl px-3 py-2 text-left text-body tappable transition-colors duration-300 hover:bg-shell"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate font-medium text-gray-800 dark:text-gray-100">{c.title}</span>
-                        <span className="block truncate text-xs text-gray-500 dark:text-gray-400">{c.company} · {c.location}</span>
+                        <span className="block truncate font-[650] text-ink">{c.title}</span>
+                        <span className="block truncate text-caption text-faint">{c.company} · {c.location}</span>
                       </span>
-                      <span className="ml-2 shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">{c.source}</span>
+                      <span className="ml-2 shrink-0 rounded-pill bg-shell px-2 py-0.5 text-caption text-faint">{c.source}</span>
                     </button>
                   ))}
                   <PasteInsteadLink label="None of these? Paste the job description instead →" onClick={() => setMode("text")} />
@@ -175,24 +183,24 @@ export function GeneratePage() {
             )}
           </div>
         ) : (
-          <textarea
+          <Textarea
+            label="Job description"
             value={postingText}
             onChange={e => setPostingText(e.target.value)}
             placeholder="Paste the job description here…"
             rows={8}
-            className={`${INPUT} p-3`}
           />
         )}
 
         <div className="mt-4 flex flex-wrap gap-3">
-          <button onClick={handleGenerateCv} disabled={!canSubmitPosting || generateCv.loading} className={PRIMARY_BUTTON}>
+          <Button onClick={handleGenerateCv} disabled={!canSubmitPosting || generateCv.loading} loading={generateCv.loading}>
             {generateCv.loading ? "Generating…" : "Generate CV"}
-          </button>
-          <button onClick={handleGenerateLetter} disabled={!canSubmitPosting || generateLetter.loading} className={PRIMARY_BUTTON}>
+          </Button>
+          <Button onClick={handleGenerateLetter} disabled={!canSubmitPosting || generateLetter.loading} loading={generateLetter.loading}>
             {generateLetter.loading ? "Generating…" : "Generate cover letter"}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Surface>
 
       {generateCv.loading && <GeneratingIndicator kind="cv" />}
       {/* Discard the previous CV the moment a regenerate starts, rather than leaving a stale,
@@ -201,53 +209,48 @@ export function GeneratePage() {
           "two cards" even though cvResult itself is always a single value that gets replaced,
           never appended to. */}
       {cvResult && !generateCv.loading && (
-        <div className={`${CARD} animate-fade-in-up`}>
-          <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">CV ready</p>
+        <Surface elevation="raised" className="animate-fade-in-up">
+          <p className="m-0 mb-2 text-body font-[650] text-ink-2">CV ready</p>
           <CvResult result={cvResult} onRevised={setCvResult} />
-        </div>
+        </Surface>
       )}
 
       {generateLetter.loading && <GeneratingIndicator kind="letter" />}
       {/* Same reasoning as cvResult above. */}
       {letterResult && !generateLetter.loading && (
-        <div className={`${CARD} animate-fade-in-up`}>
-          <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">Cover letter</p>
+        <Surface elevation="raised" className="animate-fade-in-up">
+          <p className="m-0 mb-2 text-body font-[650] text-ink-2">Cover letter</p>
           <LetterResult result={letterResult} onRevised={setLetterResult} />
-        </div>
+        </Surface>
       )}
 
-      <div className={CARD}>
-        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Ask a question about this application</label>
-        <div className="flex gap-3">
-          <input
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            placeholder="Why do you want to work here?"
-            className={`flex-1 ${INPUT}`}
-          />
-          <button onClick={handleAskQuestion} disabled={question.trim().length === 0 || askQuestion.loading} className={PRIMARY_BUTTON}>
-            {askQuestion.loading ? "Asking…" : "Ask"}
-          </button>
-        </div>
+      <Surface elevation="raised">
+        <Input
+          label="Ask a question about this application"
+          value={question}
+          onChange={e => setQuestion(e.target.value)}
+          placeholder="Why do you want to work here?"
+        />
+        <Button onClick={handleAskQuestion} disabled={question.trim().length === 0 || askQuestion.loading} loading={askQuestion.loading} className="mt-3">
+          {askQuestion.loading ? "Asking…" : "Ask"}
+        </Button>
         {answerResult && (
-          <div className="mt-4 animate-fade-in-up rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
+          <Well className="mt-4 animate-fade-in-up p-3 text-body text-ink-2">
             {answerResult.mode === "ask_followup" && (
-              <p className="mb-1 text-xs font-medium text-amber-600 dark:text-amber-400">Needs more context:</p>
+              <p className="m-0 mb-1 text-caption font-[650] text-brass">Needs more context:</p>
             )}
             <AccuracyWarningBanner warnings={answerResult.accuracyWarnings} />
-            <p className="whitespace-pre-wrap">{answerResult.content}</p>
+            <p className="m-0 whitespace-pre-wrap">{answerResult.content}</p>
             <RevisionBox
               threadId={answerResult.threadId}
               placeholder={answerResult.mode === "ask_followup" ? "Your answer to the question above" : "Request changes"}
               onRevised={setAnswerResult}
             />
-          </div>
+          </Well>
         )}
-      </div>
+      </Surface>
 
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">{error}</div>
-      )}
+      {error && <Callout variant="danger" title={error} />}
     </div>
   );
 }

@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import { useMe } from "../hooks/useAuth";
 import { useProfile } from "../hooks/useProfile";
 import { parseJobCriteriaYaml } from "../lib/jobCriteriaYaml";
@@ -6,6 +5,7 @@ import { getMissingCriteriaFields } from "../lib/criteriaCompleteness";
 import { Tier1Dashboard } from "../components/Tier1Dashboard";
 import { Tier2Dashboard } from "../components/Tier2Dashboard";
 import { DashboardGreeting } from "../components/DashboardGreeting";
+import { Button, Callout } from "../ui";
 
 // Separate from the /auth/me needsCriteria gate (App.tsx), which only checks that the user
 // has visited and saved the Criteria page once — saving always writes a full YAML skeleton
@@ -20,17 +20,16 @@ function CriteriaNudge({ tier }: { tier: string }) {
   if (missing.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-500/10 dark:text-amber-300">
-      <p>
-        Your job criteria is missing: {missing.map(m => m.label).join(", ")}. It's what makes
-        Tier 2's automatic matching accurate, worth filling in now even before you upgrade.
-      </p>
-      <Link
-        to="/criteria"
-        className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors duration-150 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-500"
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <Callout
+        variant="warning"
+        title="Your job criteria is incomplete."
+        className="flex-1"
       >
-        Set criteria
-      </Link>
+        Missing: {missing.map(m => m.label).join(", ")}. It's what makes Tier 2's automatic
+        matching accurate, worth filling in now even before you upgrade.
+      </Callout>
+      <Button href="/criteria" size="sm" className="shrink-0">Set criteria</Button>
     </div>
   );
 }
@@ -38,7 +37,7 @@ function CriteriaNudge({ tier }: { tier: string }) {
 export function DashboardPage() {
   const { data: me, loading } = useMe();
 
-  if (loading || !me) return <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>;
+  if (loading || !me) return <div className="py-12 text-center text-caption text-faint">Loading…</div>;
 
   return (
     <div className="space-y-6">

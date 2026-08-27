@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CARD } from "../lib/styles";
+import { Surface, BrandGlyph } from "../ui";
 
 const CV_MESSAGES = [
   "Reading your background…",
@@ -42,17 +42,15 @@ export function GeneratingIndicator({ kind }: { kind: "cv" | "letter" }) {
   }, []);
 
   return (
-    <div className={`${CARD} animate-fade-in-up flex items-center gap-3`}>
-      <div className="flex h-9 w-9 shrink-0 animate-pulse items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-500 text-white shadow-sm shadow-violet-600/30">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} className="h-5 w-5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" />
-        </svg>
+    <Surface elevation="raised" className="animate-fade-in-up flex items-center gap-3">
+      <div className="flex h-9 w-9 shrink-0 animate-pulse items-center justify-center rounded-core bg-ember text-on-ember">
+        <BrandGlyph className="h-5 w-5" />
       </div>
-      <p key={index} className="animate-fade-in text-sm text-gray-600 dark:text-gray-300">
+      <p key={index} className="animate-fade-in text-body text-muted">
         {/* index = tick % messages.length, always in [0, messages.length - 1]. */}
         {/* eslint-disable-next-line security/detect-object-injection */}
         {messages[index]}
       </p>
-    </div>
+    </Surface>
   );
 }

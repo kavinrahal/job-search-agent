@@ -18,7 +18,7 @@ const GREETINGS: ((name: string | null) => string)[] = [
 export function DashboardGreeting({ name }: { name: string | null }) {
   const [greeting] = useState(() => GREETINGS[Math.floor(Math.random() * GREETINGS.length)](name));
   return (
-    <p className="animate-fade-in-up bg-gradient-to-r from-violet-600 to-fuchsia-500 bg-clip-text text-xl font-semibold text-transparent dark:from-violet-400 dark:to-fuchsia-400">
+    <p className="animate-fade-in-up text-heading font-bold text-ink">
       {greeting}
     </p>
   );

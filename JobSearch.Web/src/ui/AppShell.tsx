@@ -21,16 +21,23 @@ export interface AppShellProps {
   tabs?: ReactNode;
   children: ReactNode;
   className?: string;
+  /**
+   * Overrides the `max-w-7xl` on both the header's inner row and `<main>` — `className` above
+   * only reaches the outermost div, so a consumer that genuinely wants the frame to fill the
+   * viewport (rather than a centered column) had no way to ask for that. Defaults to `max-w-7xl`,
+   * so every existing consumer (the gallery included) renders identically without passing this.
+   */
+  contentClassName?: string;
 }
 
-export function AppShell({ nav, actions, tabs, children, className }: AppShellProps) {
+export function AppShell({ nav, actions, tabs, children, className, contentClassName = "max-w-7xl" }: AppShellProps) {
   return (
     <div className={cx("min-h-screen bg-bg text-ink", className)}>
       <Grain />
       <SkipLink />
 
       <header className="hairline-b sticky top-0 z-30 bg-core">
-        <div className="mx-auto flex h-[50px] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+        <div className={cx("mx-auto flex h-[50px] items-center justify-between gap-4 px-4 sm:px-6", contentClassName)}>
           <div className="flex min-w-0 items-center gap-5">
             <Brand />
             {nav}
@@ -42,7 +49,8 @@ export function AppShell({ nav, actions, tabs, children, className }: AppShellPr
       <main
         id="main"
         className={cx(
-          "relative z-1 mx-auto max-w-7xl px-4 py-4 sm:px-6",
+          "relative z-1 mx-auto px-4 py-4 sm:px-6",
+          contentClassName,
           // Clears the fixed tab bar, including the home indicator, so the last row of content is
           // never stranded underneath it.
           tabs ? "pb-[calc(64px+env(safe-area-inset-bottom))] md:pb-4" : undefined,
