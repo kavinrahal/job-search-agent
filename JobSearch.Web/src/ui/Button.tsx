@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { cx, styleFor } from "./cx";
+import { Link } from "react-router-dom";
+import { cx, isInternalPath, styleFor } from "./cx";
 import { ArrowRightIcon } from "./icons";
 
 // Buttons.
@@ -101,7 +102,11 @@ export function Button({
   );
 
   if (href) {
-    return (
+    return isInternalPath(href) ? (
+      <Link to={href} className={cx("group/btn", classes)} {...(rest as object)}>
+        {content}
+      </Link>
+    ) : (
       <a href={href} className={cx("group/btn", classes)} {...(rest as object)}>
         {content}
       </a>

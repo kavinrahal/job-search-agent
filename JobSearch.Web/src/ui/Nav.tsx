@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { cx } from "./cx";
+import { Link } from "react-router-dom";
+import { cx, isInternalPath } from "./cx";
 
 // Desktop nav and the mobile tab bar. Both are presentational: they take an `active` flag and an
 // `href`, so whatever router the app uses stays the caller's business.
@@ -25,17 +26,20 @@ export interface NavItemProps {
 }
 
 export function NavItem({ href, active = false, children, className }: NavItemProps) {
-  return (
-    <a
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={cx(
-        "rounded-ctl px-2.5 py-[5px] text-control no-underline focus-ring tappable",
-        "transition-[background-color,color,transform] duration-300 ease-spring motion-reduce:transition-none active:scale-[.96]",
-        active ? "hairline-ring bg-shell font-bold text-ink" : "font-[550] text-muted hover:bg-shell hover:text-ink",
-        className,
-      )}
-    >
+  const classes = cx(
+    "rounded-ctl px-2.5 py-[5px] text-control no-underline focus-ring tappable",
+    "transition-[background-color,color,transform] duration-300 ease-spring motion-reduce:transition-none active:scale-[.96]",
+    active ? "hairline-ring bg-shell font-bold text-ink" : "font-[550] text-muted hover:bg-shell hover:text-ink",
+    className,
+  );
+  const ariaCurrent = active ? "page" : undefined;
+
+  return isInternalPath(href) ? (
+    <Link to={href} aria-current={ariaCurrent} className={classes}>
+      {children}
+    </Link>
+  ) : (
+    <a href={href} aria-current={ariaCurrent} className={classes}>
       {children}
     </a>
   );
@@ -67,21 +71,29 @@ export interface TabProps {
 }
 
 export function Tab({ href, active = false, icon, label, className }: TabProps) {
-  return (
-    <a
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={cx(
-        "flex flex-1 flex-col items-center gap-[3px] rounded-ctl py-1 text-[8.5px] font-[600] no-underline focus-ring tappable",
-        "transition-[color,transform] duration-300 ease-spring motion-reduce:transition-none active:scale-[.94]",
-        active ? "text-ember" : "text-faint hover:text-ink",
-        className,
-      )}
-    >
+  const classes = cx(
+    "flex flex-1 flex-col items-center gap-[3px] rounded-ctl py-1 text-[8.5px] font-[600] no-underline focus-ring tappable",
+    "transition-[color,transform] duration-300 ease-spring motion-reduce:transition-none active:scale-[.94]",
+    active ? "text-ember" : "text-faint hover:text-ink",
+    className,
+  );
+  const ariaCurrent = active ? "page" : undefined;
+  const content = (
+    <>
       <span aria-hidden="true" className="[&>svg]:h-[15px] [&>svg]:w-[15px]">
         {icon}
       </span>
       {label}
+    </>
+  );
+
+  return isInternalPath(href) ? (
+    <Link to={href} aria-current={ariaCurrent} className={classes}>
+      {content}
+    </Link>
+  ) : (
+    <a href={href} aria-current={ariaCurrent} className={classes}>
+      {content}
     </a>
   );
 }
