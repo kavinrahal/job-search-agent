@@ -1,0 +1,344 @@
+/* Slate design tokens — the single source of truth for the design system in src/ui.
+ *
+ * Tailwind v4 is CSS-first, so tokens live here in @theme rather than in a v3-style
+ * tailwind.config.js (this project has never had one). Every value below is ported from the
+ * approved Slate prototype; none of it is reinvented.
+ *
+ * Both themes are *designed*, not auto-inverted: the light values are declared in @theme and the
+ * dark values re-point the same custom properties further down. Because every utility Tailwind
+ * generates from these resolves through var(), components in src/ui carry no `dark:` variants at
+ * all — swapping the variables swaps the theme.
+ *
+ * `@theme static` (rather than plain `@theme`) forces Tailwind to emit every variable even when no
+ * utility references it, because several components read tokens through var() directly — e.g. the
+ * bezel shadows below, and Sparkline's inline bar heights.
+ */
+
+@theme static {
+  /* --- Ground and surfaces -------------------------------------------------------------
+   * bg    the page ground
+   * shell the outer half of the double bezel
+   * core  the inner half (see the surface-shell / surface-core utilities)
+   * sunk  recessed wells: inputs, segmented tracks, match-reason blocks
+   */
+  --color-bg: #f6f8fa;
+  --color-shell: #ebeff4;
+  --color-core: #ffffff;
+  --color-sunk: #e4e9ef;
+
+  /* --- Ink ----------------------------------------------------------------------------- */
+  --color-ink: #111820;
+  --color-ink-2: #333d49;
+  --color-muted: #616c7a;
+  --color-faint: #8e99a6;
+
+  /* --- Hairlines ------------------------------------------------------------------------
+   * Deliberately alpha, not solid, so a hairline reads correctly over shell, core and sunk
+   * without three separate values. inner-hi is the top highlight that gives a core its lift.
+   */
+  --color-hair: rgba(16, 32, 54, 0.1);
+  --color-hair-2: rgba(16, 32, 54, 0.17);
+  --color-inner-hi: rgba(255, 255, 255, 0.9);
+
+  /* --- Feature (the dark inverted block) ------------------------------------------------
+   * Stays dark in both themes. It is a deliberate figure against the ground, not a surface.
+   */
+  --color-feat: #1e2833;
+  --color-feat-ink: #edf1f6;
+  --color-feat-dim: rgba(237, 241, 246, 0.62);
+
+  /* --- Accents --------------------------------------------------------------------------
+   * ember  the single accent. Actions, active state, live markers.
+   * pos    affirmative: strong matches, completed steps, satisfied rules.
+   * brass  caution. The accuracy warning bar, "good" matches.
+   */
+  --color-ember: #b03a26;
+  --color-ember-hi: #962c1b;
+  --color-ember-wash: #faeae6;
+  --color-on-ember: #ffffff;
+
+  --color-pos: #2f6a56;
+  --color-pos-wash: #e8f1ee;
+
+  --color-brass: #8a6a22;
+  --color-brass-wash: #f5eedd;
+
+  /* --- Shape lock -----------------------------------------------------------------------
+   * FOUR radii exist. Nothing in src/ui may use any other value:
+   *   shell 20px  outer bezel
+   *   core  14px  inner bezel = shell minus the 6px bezel padding, so the curves stay concentric
+   *   ctl    9px  inputs, ghost/subtle buttons, small buttons, wells
+   *   pill        primary buttons, chips, badges-as-pills, avatars-as-squircles use ctl instead
+   * The 5px used on badges and status ticks is `--radius-mark`, the one deliberate exception for
+   * marks small enough that 9px would read as a circle.
+   */
+  --radius-shell: 20px;
+  --radius-core: 14px;
+  --radius-ctl: 9px;
+  --radius-mark: 5px;
+  --radius-pill: 999px;
+  /* Derived, not a fifth free choice: a segmented control is a 9px track with 3px of padding, so
+   * its thumb is 6px for exactly the same concentric reason a core is 14px inside a 20px shell. */
+  --radius-inset: 6px;
+  /* Avatars are squircles, never circles. Two sizes, each keeping roughly the same corner-to-side
+   * ratio, which is what reads as "squircle" rather than "rounded square". */
+  --radius-avatar-sm: 8px;
+  --radius-avatar-md: 12px;
+
+  /* --- Shadows --------------------------------------------------------------------------
+   * Blue-tinted to match the Slate ground. Never neutral black in light theme.
+   */
+  --shadow-e1: 0 1px 2px rgba(16, 32, 54, 0.06), 0 4px 12px -6px rgba(16, 32, 54, 0.14);
+  --shadow-e2: 0 2px 5px rgba(16, 32, 54, 0.07), 0 20px 46px -18px rgba(16, 32, 54, 0.26);
+  --shadow-sheet: 0 -8px 30px -10px rgba(16, 32, 54, 0.3);
+
+  /* --- Motion ---------------------------------------------------------------------------
+   * One easing curve for the whole system. Never `ease`, never `transition: all`.
+   */
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* --- Type scale -----------------------------------------------------------------------
+   * Named by role rather than size, and deliberately denser than Tailwind's default scale.
+   * Tailwind's own --text-xs/sm/base are left untouched so existing pages are unaffected.
+   */
+  --text-eyebrow: 10px;
+  --text-eyebrow--line-height: 1.4;
+  --text-eyebrow--letter-spacing: 0.2em;
+  --text-eyebrow--font-weight: 700;
+
+  --text-meta: 10.5px;
+  --text-meta--line-height: 1.45;
+
+  --text-caption: 11px;
+  --text-caption--line-height: 1.45;
+
+  --text-note: 11.5px;
+  --text-note--line-height: 1.5;
+
+  --text-control: 12px;
+  --text-control--line-height: 1.4;
+
+  --text-body: 12.5px;
+  --text-body--line-height: 1.55;
+
+  --text-lede: 13.5px;
+  --text-lede--line-height: 1.55;
+
+  --text-heading: 14px;
+  --text-heading--line-height: 1.3;
+  --text-heading--letter-spacing: -0.02em;
+
+  --text-display: 19px;
+  --text-display--line-height: 1.15;
+  --text-display--letter-spacing: -0.03em;
+
+  --text-stat-sm: 22px;
+  --text-stat-sm--line-height: 1;
+  --text-stat-sm--letter-spacing: -0.04em;
+
+  --text-stat: 25px;
+  --text-stat--line-height: 1;
+  --text-stat--letter-spacing: -0.04em;
+}
+
+/* Dark theme. Every value is chosen for dark, not derived from the light set.
+ *
+ * Two selectors because the app and the prototype disagree on the mechanism: index.html's
+ * theme-init.js and the existing useTheme hook toggle `html.dark`, while the prototype used
+ * `html[data-theme]`. ThemeProvider writes both, so either keeps working and the later
+ * plug-in pass has nothing to migrate.
+ */
+html.dark,
+html[data-theme="dark"],
+.slate-theme-dark {
+  --color-bg: #0a0d11;
+  --color-shell: #131820;
+  --color-core: #171d26;
+  --color-sunk: #0f141b;
+
+  --color-ink: #edf1f6;
+  --color-ink-2: #c2c9d2;
+  --color-muted: #8b95a2;
+  --color-faint: #68717d;
+
+  --color-hair: rgba(255, 255, 255, 0.07);
+  --color-hair-2: rgba(255, 255, 255, 0.13);
+  --color-inner-hi: rgba(255, 255, 255, 0.05);
+
+  --color-feat: #1a222c;
+  --color-feat-ink: #edf1f6;
+  --color-feat-dim: rgba(237, 241, 246, 0.6);
+
+  --color-ember: #e2664c;
+  --color-ember-hi: #ef7962;
+  --color-ember-wash: #2b1712;
+  --color-on-ember: #ffffff;
+
+  --color-pos: #5fa890;
+  --color-pos-wash: #12211d;
+
+  --color-brass: #c6a052;
+  --color-brass-wash: #231d0f;
+
+  /* On a near-black ground a blue tint reads as haze, so dark shadows go neutral and deeper. */
+  --shadow-e1: 0 1px 2px rgba(0, 0, 0, 0.55), 0 4px 12px -6px rgba(0, 0, 0, 0.65);
+  --shadow-e2: 0 2px 5px rgba(0, 0, 0, 0.55), 0 20px 46px -18px rgba(0, 0, 0, 0.75);
+  --shadow-sheet: 0 -8px 30px -10px rgba(0, 0, 0, 0.7);
+}
+
+/* Forces a subtree back to light inside a dark document.
+ *
+ * The canonical light values are the ones in @theme above; this block only exists because a
+ * descendant cannot un-inherit a custom property an ancestor has overridden, and the gallery shows
+ * both themes on one page. It is duplication, deliberately, and the gallery is exactly the surface
+ * that would make any drift between the two obvious on sight. */
+.slate-theme-light {
+  --color-bg: #f6f8fa;
+  --color-shell: #ebeff4;
+  --color-core: #ffffff;
+  --color-sunk: #e4e9ef;
+
+  --color-ink: #111820;
+  --color-ink-2: #333d49;
+  --color-muted: #616c7a;
+  --color-faint: #8e99a6;
+
+  --color-hair: rgba(16, 32, 54, 0.1);
+  --color-hair-2: rgba(16, 32, 54, 0.17);
+  --color-inner-hi: rgba(255, 255, 255, 0.9);
+
+  --color-feat: #1e2833;
+  --color-feat-ink: #edf1f6;
+  --color-feat-dim: rgba(237, 241, 246, 0.62);
+
+  --color-ember: #b03a26;
+  --color-ember-hi: #962c1b;
+  --color-ember-wash: #faeae6;
+  --color-on-ember: #ffffff;
+
+  --color-pos: #2f6a56;
+  --color-pos-wash: #e8f1ee;
+
+  --color-brass: #8a6a22;
+  --color-brass-wash: #f5eedd;
+
+  --shadow-e1: 0 1px 2px rgba(16, 32, 54, 0.06), 0 4px 12px -6px rgba(16, 32, 54, 0.14);
+  --shadow-e2: 0 2px 5px rgba(16, 32, 54, 0.07), 0 20px 46px -18px rgba(16, 32, 54, 0.26);
+  --shadow-sheet: 0 -8px 30px -10px rgba(16, 32, 54, 0.3);
+}
+
+/* --- The double bezel ------------------------------------------------------------------
+ * The system's single most important visual signature, and the reason these are @utility rather
+ * than a pile of arbitrary-value classes at each call site: an outer shell wrapping an inner
+ * core, curves concentric, hairline ring outside and highlight inside.
+ *
+ * Declared as whole box-shadow values rather than composed from Tailwind's shadow/inset-ring
+ * utilities so the exact stacking order from the prototype is guaranteed and cannot be
+ * accidentally overridden by a later `shadow-*` on the same element.
+ */
+@utility surface-shell {
+  background-color: var(--color-shell);
+  padding: 6px;
+  border-radius: var(--radius-shell);
+  box-shadow: inset 0 0 0 1px var(--color-hair);
+}
+
+@utility surface-shell-e1 {
+  background-color: var(--color-shell);
+  padding: 6px;
+  border-radius: var(--radius-shell);
+  box-shadow: inset 0 0 0 1px var(--color-hair), var(--shadow-e1);
+}
+
+@utility surface-shell-e2 {
+  background-color: var(--color-shell);
+  padding: 6px;
+  border-radius: var(--radius-shell);
+  box-shadow: inset 0 0 0 1px var(--color-hair), var(--shadow-e2);
+}
+
+@utility surface-core {
+  background-color: var(--color-core);
+  border-radius: var(--radius-core);
+  box-shadow: inset 0 1px 0 var(--color-inner-hi);
+}
+
+/* A recessed well: inputs, segmented-control tracks, the match-reason block. */
+@utility surface-sunk {
+  background-color: var(--color-sunk);
+  box-shadow: inset 0 0 0 1px var(--color-hair);
+}
+
+/* --- Hairline separators ----------------------------------------------------------------
+ * Inset box-shadows rather than borders so they never add to the box model and so a row can
+ * carry one without shifting by a pixel relative to its neighbours.
+ */
+@utility hairline-t {
+  box-shadow: inset 0 1px 0 var(--color-hair);
+}
+
+@utility hairline-b {
+  box-shadow: inset 0 -1px 0 var(--color-hair);
+}
+
+@utility hairline-l {
+  box-shadow: inset 1px 0 0 var(--color-hair);
+}
+
+@utility hairline-ring {
+  box-shadow: inset 0 0 0 1px var(--color-hair);
+}
+
+@utility hairline-ring-2 {
+  box-shadow: inset 0 0 0 1px var(--color-hair-2);
+}
+
+/* --- Focus ------------------------------------------------------------------------------
+ * Applied per component rather than as a global `:focus-visible` reset, which would restyle
+ * every existing page. Outline (not ring) so it is never clipped by an ancestor's overflow.
+ */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--color-ember);
+    outline-offset: 2px;
+  }
+}
+
+/* --- Touch ---------------------------------------------------------------------------------
+ * Applied to everything pressable.
+ *
+ * touch-action: manipulation removes the ~300ms delay mobile browsers hold every tap for while
+ * they wait to see whether it is a double-tap zoom. The tap highlight is cleared deliberately
+ * rather than left to the UA: every control here already has its own :active transform, and the
+ * default blue-grey flash fights the ember palette.
+ */
+@utility tappable {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --- Grain --------------------------------------------------------------------------------
+ * Fixed and pointer-events:none. Never attach this to a scrolling container: the noise would
+ * travel with the content and read as a rendering fault rather than as paper.
+ */
+@utility grain-overlay {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='150' height='150'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/><feColorMatrix type='saturate' values='0'/></filter><rect width='150' height='150' filter='url(%23n)' opacity='.05'/></svg>");
+}
+
+/* --- Skeleton pulse -----------------------------------------------------------------------
+ * Opacity only, so it composites on the GPU and never triggers layout. Reduced motion is
+ * honoured by the component via `motion-reduce:animate-none`.
+ */
+@theme static {
+  --animate-slate-pulse: slate-pulse 1.6s cubic-bezier(0.32, 0.72, 0, 1) infinite;
+
+  @keyframes slate-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+}

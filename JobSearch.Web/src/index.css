@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* The Slate design system's token layer (src/ui). Additive: it introduces new custom properties
+   and utilities and overrides none of Tailwind's defaults, so every existing page renders exactly
+   as it did before. */
+@import "./ui/tokens.css";
+
+/* On the gallery and `@source not`: main.tsx keeps the gallery's *JavaScript* out of the production
+   bundle entirely (import.meta.env.DEV folds to false, so the dynamic import is dead code and no
+   chunk is emitted). Tailwind scans source text rather than the module graph, so a handful of
+   gallery-only utilities do still reach the production stylesheet.
+
+   `@source not "./gallery"` would remove them, and was tried. It also strips them in development,
+   where the gallery then renders unstyled, because @source is not mode-aware. Measured, the leak is
+   2.6 kB raw and 0.47 kB gzipped. A working gallery is worth 470 bytes, so it stays scanned. */
+
 /* Manual toggle instead of the media-query default: dark: activates from an
    ancestor .dark class (set on <html> by useTheme), not OS preference alone. */
 @custom-variant dark (&:where(.dark, .dark *));
