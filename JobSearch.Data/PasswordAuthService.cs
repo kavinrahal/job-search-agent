@@ -51,7 +51,12 @@ public static class PasswordAuthService
         // to that same row here instead of creating a duplicate.
         var user = await UserProvisioningService.GetOrCreateAsync(db, email, signupTier);
 
-        if (user.PasswordHash is not null)
+        // Only a genuinely-registered (verified) account is rejected here. An account that
+        // already has a PasswordHash but was never verified — the original verification email
+        // was lost, expired, or never clicked — falls through below and gets a fresh token
+        // instead of being permanently stuck: the 1-hour token TTL otherwise leaves no
+        // self-service way back in.
+        if (user.PasswordHash is not null && user.EmailVerifiedAt is not null)
             return new RegisterResult { Outcome = RegisterOutcome.AlreadyHasPassword, User = user };
 
         user.PasswordHash = new PasswordHasher<User>().HashPassword(user, password);
@@ -161,6 +166,14 @@ public static class PasswordAuthService
             return new ResetPasswordResult { Outcome = ResetPasswordOutcome.InvalidToken };
 
         user.PasswordHash = new PasswordHasher<User>().HashPassword(user, newPassword);
+
+        // Completing a reset proves inbox ownership exactly as much as clicking the
+        // verification link does — without this, a user who never verified would reset their
+        // password, sign in once, and then be locked out forever by LoginAsync's NotVerified
+        // gate with no way back in. Same ??= idiom as VerifyEmailAsync so an existing
+        // verification timestamp isn't overwritten.
+        user.EmailVerifiedAt ??= DateTime.UtcNow;
+
         await db.SaveChangesAsync();
         return new ResetPasswordResult { Outcome = ResetPasswordOutcome.Success, User = user };
     }

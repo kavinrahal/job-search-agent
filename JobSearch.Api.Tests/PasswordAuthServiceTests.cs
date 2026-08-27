@@ -116,20 +116,46 @@ public class PasswordAuthServiceTests
         Assert.NotNull((await db.Users.FindAsync(googleUser.Id))!.PasswordHash);
     }
 
-    // TC06 — Registering twice for the same email (password already set) is rejected on the
-    // second attempt instead of overwriting the existing password.
+    // TC06 — Registering twice for the same, already-*verified* email is rejected on the second
+    // attempt instead of overwriting the existing password.
     [Fact]
-    public async Task RegisterAsync_EmailAlreadyHasPassword_ReturnsAlreadyHasPassword()
+    public async Task RegisterAsync_EmailAlreadyHasVerifiedPassword_ReturnsAlreadyHasPassword()
     {
         using var db = FreshDb();
         const string email = "repeat@example.com";
+        await InviteAsync(db, email);
+        var first = await PasswordAuthService.RegisterAsync(db, email, ValidPassword, OwnerEmail);
+        await PasswordAuthService.VerifyEmailAsync(db, first.VerificationToken!);
+
+        var second = await PasswordAuthService.RegisterAsync(db, email, "AnotherPass9!", OwnerEmail);
+
+        Assert.Equal(PasswordAuthService.RegisterOutcome.AlreadyHasPassword, second.Outcome);
+    }
+
+    // TC06b — Regression for the resend-verification bug: registering again for an email that
+    // already has a PasswordHash but was *never verified* (the original link was lost, expired,
+    // or never clicked) must not permanently reject the user — it re-issues a fresh verification
+    // token instead, indistinguishable from a brand-new registration, and that new token
+    // actually works.
+    [Fact]
+    public async Task RegisterAsync_EmailAlreadyHasUnverifiedPassword_ResendsVerificationInsteadOfRejecting()
+    {
+        using var db = FreshDb();
+        const string email = "unverified-repeat@example.com";
         await InviteAsync(db, email);
         var first = await PasswordAuthService.RegisterAsync(db, email, ValidPassword, OwnerEmail);
         Assert.Equal(PasswordAuthService.RegisterOutcome.VerificationSent, first.Outcome);
 
         var second = await PasswordAuthService.RegisterAsync(db, email, "AnotherPass9!", OwnerEmail);
 
-        Assert.Equal(PasswordAuthService.RegisterOutcome.AlreadyHasPassword, second.Outcome);
+        Assert.Equal(PasswordAuthService.RegisterOutcome.VerificationSent, second.Outcome);
+        Assert.NotNull(second.VerificationToken);
+        Assert.NotEqual(first.VerificationToken, second.VerificationToken);
+
+        var verifiedUser = await PasswordAuthService.VerifyEmailAsync(db, second.VerificationToken!);
+        Assert.NotNull(verifiedUser);
+        var login = await PasswordAuthService.LoginAsync(db, email, "AnotherPass9!");
+        Assert.Equal(PasswordAuthService.LoginOutcome.Success, login.Outcome);
     }
 
     // TC07 — Wrong password against a real, verified account is rejected.
@@ -338,5 +364,33 @@ public class PasswordAuthServiceTests
         var result = await PasswordAuthService.ResetPasswordAsync(db, "not-a-real-token", ValidPassword);
 
         Assert.Equal(PasswordAuthService.ResetPasswordOutcome.InvalidToken, result.Outcome);
+    }
+
+    // TC18 — Regression for the permanent-lockout bug: register, never click the verification
+    // link, then reset the password via forgot-password. The reset must itself count as proof
+    // of inbox ownership (same as clicking the verification link would) so the account isn't
+    // left permanently blocked by LoginAsync's NotVerified gate with no self-service way back in.
+    [Fact]
+    public async Task ResetPasswordAsync_NeverVerifiedAccount_VerifiesEmailSoLoginNoLongerBlocked()
+    {
+        using var db = FreshDb();
+        const string email = "neververified@example.com";
+        await InviteAsync(db, email);
+        var register = await PasswordAuthService.RegisterAsync(db, email, ValidPassword, OwnerEmail);
+        Assert.Equal(PasswordAuthService.RegisterOutcome.VerificationSent, register.Outcome);
+        // Deliberately never call VerifyEmailAsync.
+
+        var (_, resetToken) = await PasswordAuthService.RequestPasswordResetAsync(db, email);
+        Assert.NotNull(resetToken);
+
+        const string newPassword = "BrandNew9!";
+        var reset = await PasswordAuthService.ResetPasswordAsync(db, resetToken!, newPassword);
+        Assert.Equal(PasswordAuthService.ResetPasswordOutcome.Success, reset.Outcome);
+        Assert.NotNull(reset.User!.EmailVerifiedAt);
+
+        // The bug: without the fix, this second (and every subsequent) login attempt is
+        // permanently blocked by NotVerified even though the reset just proved ownership.
+        var login = await PasswordAuthService.LoginAsync(db, email, newPassword);
+        Assert.Equal(PasswordAuthService.LoginOutcome.Success, login.Outcome);
     }
 }

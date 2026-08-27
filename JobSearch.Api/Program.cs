@@ -591,7 +591,7 @@ app.MapGet("/api/v1/auth/verify-email", async (HttpContext ctx, AppDbContext db,
 
     await SignInPasswordUserAsync(ctx, user);
     return Results.Redirect(redirectBase);
-}).AllowAnonymous();
+}).RequireRateLimiting("auth").AllowAnonymous();
 
 // POST /api/v1/auth/login — { email, password }. Same generic "invalid email or password" for
 // every failure reason (unknown email, Google-only account with no password, wrong password)
@@ -661,7 +661,7 @@ app.MapPost("/api/v1/auth/reset-password", async (HttpContext ctx, ResetPassword
             await SignInPasswordUserAsync(ctx, result.User!);
             return Results.Ok();
     }
-}).AllowAnonymous();
+}).RequireRateLimiting("auth").AllowAnonymous();
 
 // ---------------------------------------------------------------------------
 // Protected data endpoints
