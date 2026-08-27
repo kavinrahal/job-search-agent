@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { BrowserRouter, Routes, Route, Link, NavLink, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
 import { DiscoveriesPage } from "./pages/DiscoveriesPage";
@@ -15,25 +14,47 @@ import { SourcesPage } from "./pages/SourcesPage";
 import { OnboardingCvPage } from "./pages/onboarding/OnboardingCvPage";
 import { OnboardingCriteriaPage } from "./pages/onboarding/OnboardingCriteriaPage";
 import { OnboardingSourcesPage } from "./pages/onboarding/OnboardingSourcesPage";
-import { ThemeToggle } from "./components/ThemeToggle";
+import {
+  AppShell,
+  TopNav,
+  NavItem,
+  BottomTabs,
+  Tab,
+  AccountMenu,
+  CreditPill,
+  ThemeToggle,
+  ActivityIcon,
+  SearchIcon,
+  DocumentIcon,
+  ChecklistIcon,
+  SlidersIcon,
+  SettingsIcon,
+  HelpIcon,
+  LifebuoyIcon,
+  SignOutIcon,
+  type AccountMenuItem,
+} from "./ui";
 import { useMe, useLogout } from "./hooks/useAuth";
 
-// Discover/Applications/Sources are Tier 2-exclusive (see the backend's matching
-// RequireTier2Async gate on those endpoints). Activity and Health used to be separate
-// nav items too — both are now sections on the Tier 2 dashboard instead, not standalone
-// pages, so there's nothing left to link to here.
-const NAV_LINKS = [
-  { to: "/",             label: "Dashboard"    },
-  { to: "/generate",     label: "Generate"     },
-  { to: "/discover",     label: "Discover",     tier2Only: true },
-  { to: "/applications", label: "Applications", tier2Only: true },
-  { to: "/sources",      label: "Sources",      tier2Only: true },
-  { to: "/profile",      label: "Profile"      },
-  { to: "/resume-builder", label: "Resume Builder" },
-  { to: "/criteria",     label: "Criteria"     },
-  { to: "/settings",     label: "Settings"     },
-  { to: "/help",         label: "Help"         },
-  { to: "/support",      label: "Support"      },
+// Daily-work destinations: the top nav on desktop, the bottom tab bar on mobile — both capped at
+// four by the design (see ui/Nav.tsx's own note on why). Discover/Applications are Tier 2-only,
+// the same gate the backend enforces on those endpoints (RequireTier2Async).
+const PRIMARY_LINKS = [
+  { to: "/",             label: "Dashboard",    Icon: ActivityIcon                  },
+  { to: "/discover",     label: "Discover",     Icon: SearchIcon,    tier2Only: true },
+  { to: "/generate",     label: "Generate",     Icon: DocumentIcon                  },
+  { to: "/applications", label: "Applications", Icon: ChecklistIcon, tier2Only: true },
+];
+
+// Setup rather than daily work, so it lives in the account menu instead — see
+// ui/AccountMenu.tsx's own doc comment, which names this exact set.
+const ACCOUNT_LINKS = [
+  { to: "/resume-builder", label: "Resume",   Icon: DocumentIcon                  },
+  { to: "/criteria",       label: "Criteria", Icon: SlidersIcon                   },
+  { to: "/sources",        label: "Sources",  Icon: SearchIcon,   tier2Only: true },
+  { to: "/settings",       label: "Settings", Icon: SettingsIcon                  },
+  { to: "/help",           label: "Help",     Icon: HelpIcon                      },
+  { to: "/support",        label: "Support",  Icon: LifebuoyIcon                  },
 ];
 
 // Routes a brand new user (blank Background, per /auth/me's needsOnboarding flag) can visit
@@ -58,84 +79,18 @@ function StepRedirect({ allowedRoutes, to }: { allowedRoutes: string[]; to: stri
   return <Navigate to={to} replace />;
 }
 
-function NavLinks({ links, onNavigate, className }: {
-  links: typeof NAV_LINKS; onNavigate?: () => void; className: (isActive: boolean) => string;
-}) {
-  return (
-    <>
-      {links.map(({ to, label }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={to === "/"}
-          onClick={onNavigate}
-          className={({ isActive }) => className(isActive)}
-        >
-          {label}
-        </NavLink>
-      ))}
-    </>
-  );
+function isActive(pathname: string, to: string): boolean {
+  return to === "/" ? pathname === "/" : pathname.startsWith(to);
 }
 
-function AccountMenu({ email, onLogout, className }: { email: string; onLogout: () => void; className: string }) {
-  return (
-    <div className={className}>
-      <span className="text-xs text-gray-400 dark:text-gray-500">{email}</span>
-      <button
-        onClick={onLogout}
-        className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-      >
-        Sign out
-      </button>
-    </div>
-  );
-}
-
-// Small gradient mark next to the wordmark — the bold/vibrant accent the rest of the app's
-// buttons and highlights echo, so the brand itself sets the palette rather than tacking
-// color on afterward.
-function Logo() {
-  return (
-    <Link to="/" className="flex items-center gap-2">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-500 text-white shadow-sm shadow-violet-600/30">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} className="h-4.5 w-4.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" />
-        </svg>
-      </div>
-      <h1 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Work Santa</h1>
-    </Link>
-  );
-}
-
-const NAV_LINK_CLASS = (isActive: boolean) =>
-  `rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
-    isActive
-      ? "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
-      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-  }`;
-
-const MOBILE_NAV_LINK_CLASS = (isActive: boolean) =>
-  `rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ${
-    isActive
-      ? "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
-      : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-  }`;
+type Me = NonNullable<ReturnType<typeof useMe>["data"]>;
 
 export default function App() {
   const { data: me, loading } = useMe();
-  const { execute: doLogout } = useLogout();
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  async function handleLogout() {
-    await doLogout();
-    window.location.href = "/";
-  }
 
   if (loading) return null;
   if (!me) return <LandingPage />;
 
-  const navLinks = NAV_LINKS.filter(l => !l.tier2Only || me.tier === "Tier2");
   // Hidden for the full forced-step onboarding flow (CV -> Criteria -> Sources), not just the
   // very first page — a nav bar full of links to pages the user hasn't set up yet (and can't
   // usefully visit, since StepRedirect just bounces them back) is noise during a guided,
@@ -145,69 +100,91 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-        {!isOnboarding && (
-          <header className="sticky top-0 z-20 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-gray-800/80 dark:bg-gray-950/80">
-            <div className="flex items-center justify-between px-4 py-4 sm:px-6">
-              <Logo />
-
-              <nav className="hidden items-center gap-1 md:flex">
-                <NavLinks links={navLinks} className={NAV_LINK_CLASS} />
-                <ThemeToggle className="ml-2" />
-                <AccountMenu
-                  email={me.email}
-                  onLogout={handleLogout}
-                  className="ml-2 flex items-center gap-3 border-l border-gray-200 pl-4 dark:border-gray-800"
-                />
-              </nav>
-
-              <div className="flex items-center gap-1 md:hidden">
-                <ThemeToggle />
-                <button
-                  onClick={() => setMenuOpen(o => !o)}
-                  aria-label={menuOpen ? "Close menu" : "Open menu"}
-                  className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-                >
-                  {menuOpen ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {menuOpen && (
-              <nav className="flex flex-col gap-1 border-t border-gray-100 px-4 py-3 dark:border-gray-800 md:hidden">
-                <NavLinks links={navLinks} onNavigate={() => setMenuOpen(false)} className={MOBILE_NAV_LINK_CLASS} />
-                <AccountMenu
-                  email={me.email}
-                  onLogout={handleLogout}
-                  className="mt-2 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-800"
-                />
-              </nav>
-            )}
-          </header>
-        )}
-
-        <PageBody me={me} />
-      </div>
+      {isOnboarding ? (
+        <div className="min-h-screen bg-bg text-ink">
+          <main className="px-4 py-8 sm:px-6">
+            <PageBody me={me} />
+          </main>
+        </div>
+      ) : (
+        <AuthedShell me={me} />
+      )}
     </BrowserRouter>
+  );
+}
+
+// Split out from App so useLocation (for nav active-state) and useLogout only run once a session
+// exists and the full chrome is actually showing.
+function AuthedShell({ me }: { me: Me }) {
+  const { execute: doLogout } = useLogout();
+  const location = useLocation();
+  const isTier2 = me.tier === "Tier2";
+
+  async function handleLogout() {
+    await doLogout();
+    window.location.href = "/";
+  }
+
+  const primaryLinks = PRIMARY_LINKS.filter(l => !l.tier2Only || isTier2);
+  const accountLinks = ACCOUNT_LINKS.filter(l => !l.tier2Only || isTier2);
+
+  const accountMenuItems: AccountMenuItem[] = [
+    ...accountLinks.map(({ to, label, Icon }) => ({ label, href: to, icon: <Icon /> })),
+    { label: "Sign out", onSelect: handleLogout, icon: <SignOutIcon />, separated: true },
+  ];
+
+  // firstName is null until a real CV/Background exists (still possible here, briefly, between
+  // onboarding finishing and the next /auth/me read) — the email is always present, so it is
+  // always a usable name for the avatar's initials even before that.
+  const accountName = me.firstName ?? me.email;
+
+  return (
+    <AppShell
+      // Fills the viewport rather than a centered column — see the earlier full-desktop-width
+      // fix this preserves. AppShell defaults to a max-w-7xl centered frame (see its own note),
+      // which is the right call for a component gallery but not for this app.
+      contentClassName="max-w-none"
+      nav={
+        <TopNav>
+          {primaryLinks.map(({ to, label, Icon }) => (
+            <NavItem key={to} href={to} active={isActive(location.pathname, to)}>
+              <span className="inline-flex items-center gap-1.5">
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </span>
+            </NavItem>
+          ))}
+        </TopNav>
+      }
+      actions={
+        <>
+          <CreditPill credits={me.creditBalance} compact className="sm:hidden" />
+          <CreditPill credits={me.creditBalance} className="max-sm:hidden" />
+          <ThemeToggle />
+          <AccountMenu name={accountName} email={me.firstName ? me.email : undefined} items={accountMenuItems} />
+        </>
+      }
+      tabs={
+        <BottomTabs>
+          {primaryLinks.map(({ to, label, Icon }) => (
+            <Tab key={to} href={to} active={isActive(location.pathname, to)} icon={<Icon />} label={label} />
+          ))}
+        </BottomTabs>
+      }
+    >
+      <PageBody me={me} />
+    </AppShell>
   );
 }
 
 // Split out so `key={location.pathname}` can retrigger the fade-in-up entrance animation on
 // every route change — a plain CSS keyframe (see index.css), not a transition library, so it
 // works identically everywhere and costs nothing when JS is otherwise idle.
-function PageBody({ me }: { me: NonNullable<ReturnType<typeof useMe>["data"]> }) {
+function PageBody({ me }: { me: Me }) {
   const location = useLocation();
 
   return (
-    <main className="px-4 py-8 sm:px-6">
+    <>
       {me.needsOnboarding && <StepRedirect allowedRoutes={ONBOARDING_ROUTES} to="/onboarding/cv" />}
       {!me.needsOnboarding && me.needsCriteria && <StepRedirect allowedRoutes={CRITERIA_ROUTES} to="/onboarding/criteria" />}
       {!me.needsOnboarding && !me.needsCriteria && me.needsSourceSelection && <StepRedirect allowedRoutes={SOURCES_ROUTES} to="/onboarding/sources" />}
@@ -239,6 +216,6 @@ function PageBody({ me }: { me: NonNullable<ReturnType<typeof useMe>["data"]> })
           <Route path="/onboarding/sources"  element={<OnboardingSourcesPage tier={me.tier} />} />
         </Routes>
       </div>
-    </main>
+    </>
   );
 }

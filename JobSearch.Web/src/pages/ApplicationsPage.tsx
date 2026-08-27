@@ -7,27 +7,35 @@ import {
   useUpdateApplicationStatus,
 } from "../hooks/useDashboardData";
 import { APPLICATION_STATUSES, type Application, type ApplicationWithEvents } from "../types";
-import { InfoTooltip } from "../components/InfoTooltip";
-import { PageTagline } from "../components/PageTagline";
-import { PRIMARY_BUTTON, PRIMARY_BUTTON_SM } from "../lib/styles";
+import {
+  Surface,
+  Button,
+  Callout,
+  EmptyState,
+  Input,
+  SegmentedControl,
+  SkeletonList,
+  Tooltip,
+  ChecklistIcon,
+  cx,
+} from "../ui";
 
-const STATUS_COLORS: Record<string, string> = {
-  Applied:      "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
-  Acknowledged: "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300",
-  Screening:    "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300",
-  Interviewing: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-  FinalRound:   "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
-  Offer:        "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
-  Rejected:     "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400",
-  Ghosted:      "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-  Withdrawn:    "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+// Same tone mapping as Tier2Dashboard's status Badge, applied directly to the native <select>
+// below rather than through Badge itself — a select needs to stay a real <select> for the
+// platform picker, so it borrows the token classes instead of the component.
+const STATUS_TONE: Record<string, string> = {
+  Applied: "bg-shell text-muted",
+  Acknowledged: "bg-shell text-muted",
+  Screening: "bg-brass-wash text-brass",
+  Interviewing: "bg-brass-wash text-brass",
+  FinalRound: "bg-pos-wash text-pos",
+  Offer: "bg-pos-wash text-pos",
+  Rejected: "bg-ember-wash text-ember",
+  Ghosted: "bg-sunk text-faint",
+  Withdrawn: "bg-sunk text-faint",
 };
 
 const STATUS_TABS = ["All", "Applied", "Acknowledged", "Screening", "Interviewing", "FinalRound", "Offer", "Rejected"];
-// Unpadded — both usages below add their own (form padding vs. empty-state padding), unlike
-// the shared CARD in lib/styles.ts which bakes in p-5 for the common case.
-const CARD = "rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900";
-const FIELD_INPUT = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-violet-500";
 
 // Fallback for anything automatic tracking misses — a plain <select> styled to still read as
 // a colored status pill. Stops propagation so picking a status doesn't also toggle the card.
@@ -40,7 +48,7 @@ function StatusSelect({ status, onChange }: { status: string; onChange: (next: s
       // status is a backend application-status enum value, and the ?? fallback already covers
       // anything outside the known set (same call as Tier2Dashboard/DiscoveriesPage's lookups).
       // eslint-disable-next-line security/detect-object-injection
-      className={`rounded-full border-0 px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[status] ?? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}
+      className={cx("rounded-pill border-0 px-2.5 py-[3px] text-caption font-[650] focus-ring", STATUS_TONE[status] ?? "bg-shell text-muted")}
     >
       {APPLICATION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
     </select>
@@ -49,20 +57,20 @@ function StatusSelect({ status, onChange }: { status: string; onChange: (next: s
 
 function EventTimeline({ data }: { data: ApplicationWithEvents }) {
   return (
-    <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Timeline</p>
+    <div className="hairline-t mt-3 pt-3">
+      <p className="mb-2 text-eyebrow font-bold tracking-[.06em] text-faint uppercase">Timeline</p>
       <ol className="space-y-2">
         {data.events.map(ev => (
-          <li key={ev.id} className="flex gap-3 text-sm">
-            <span className="mt-0.5 text-gray-300 dark:text-gray-600">•</span>
+          <li key={ev.id} className="flex gap-3 text-body">
+            <span className="mt-0.5 text-faint">•</span>
             <div>
-              <span className="font-medium text-gray-700 dark:text-gray-200">{ev.summary}</span>
+              <span className="font-[650] text-ink-2">{ev.summary}</span>
               {ev.fromStatus && ev.toStatus && (
-                <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">
+                <span className="ml-2 text-caption text-faint">
                   {ev.fromStatus} → {ev.toStatus}
                 </span>
               )}
-              <p className="text-xs text-gray-400 dark:text-gray-500">
+              <p className="text-caption text-faint">
                 {new Date(ev.occurredAt).toLocaleString("en-AU", {
                   day: "2-digit", month: "short", year: "numeric",
                   hour: "2-digit", minute: "2-digit",
@@ -97,18 +105,18 @@ function ApplicationCard({ app, onStatusChanged }: { app: Application; onStatusC
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow duration-150 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 dark:hover:shadow-none">
+    <Surface elevation="raised">
       <button
         onClick={toggle}
         className="flex w-full items-start justify-between gap-4 text-left"
       >
         <div className="min-w-0">
-          <p className="font-semibold text-gray-800 dark:text-gray-100">{app.company}</p>
-          <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-gray-400">{app.roleTitle || "-"}</p>
+          <p className="m-0 font-[650] text-ink">{app.company}</p>
+          <p className="m-0 mt-0.5 truncate text-body text-muted">{app.roleTitle || "-"}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <StatusSelect status={app.status} onChange={handleStatusChange} />
-          <span className="text-xs text-gray-400 dark:text-gray-500">
+          <span className="text-caption text-faint">
             Updated {new Date(app.updatedAt).toLocaleDateString("en-AU", {
               day: "2-digit", month: "short",
             })}
@@ -118,10 +126,10 @@ function ApplicationCard({ app, onStatusChanged }: { app: Application; onStatusC
 
       {expanded && (
         loading
-          ? <p className="mt-3 text-sm text-gray-400 dark:text-gray-500">Loading…</p>
+          ? <p className="mt-3 text-body text-faint">Loading…</p>
           : detail && <EventTimeline data={detail} />
       )}
-    </div>
+    </Surface>
   );
 }
 
@@ -155,59 +163,42 @@ function LogApplicationForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className={`${CARD} animate-fade-in-up p-4`}>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Company</label>
-          <input
-            value={company}
-            onChange={e => {
-              setCompany(e.target.value);
-              if (!companyDomain) setCompanyDomain(guessDomain(e.target.value));
-            }}
-            required
-            className={FIELD_INPUT}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Role title</label>
-          <input
-            value={roleTitle}
-            onChange={e => setRoleTitle(e.target.value)}
-            required
-            className={FIELD_INPUT}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Job URL (optional)</label>
-          <input
-            value={jobUrl}
-            onChange={e => setJobUrl(e.target.value)}
-            className={FIELD_INPUT}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
-            Company email domain (optional)
-          </label>
-          <input
-            value={companyDomain}
-            onChange={e => setCompanyDomain(e.target.value)}
-            placeholder="acmecorp.com"
-            className={FIELD_INPUT}
-          />
-          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-            Only used if you're on filter-only tracking. Installs a Gmail filter forwarding
-            mail from this domain. A rough guess, not verified, check it's right.
-          </p>
-        </div>
+    <form onSubmit={handleSubmit} className="surface-shell-e1 animate-fade-in-up">
+      <div className="surface-core grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
+        <Input
+          label="Company"
+          value={company}
+          onChange={e => {
+            setCompany(e.target.value);
+            if (!companyDomain) setCompanyDomain(guessDomain(e.target.value));
+          }}
+          required
+        />
+        <Input
+          label="Role title"
+          value={roleTitle}
+          onChange={e => setRoleTitle(e.target.value)}
+          required
+        />
+        <Input
+          label="Job URL (optional)"
+          value={jobUrl}
+          onChange={e => setJobUrl(e.target.value)}
+        />
+        <Input
+          label="Company email domain (optional)"
+          value={companyDomain}
+          onChange={e => setCompanyDomain(e.target.value)}
+          placeholder="acmecorp.com"
+          hint="Only used if you're on filter-only tracking. Installs a Gmail filter forwarding mail from this domain. A rough guess, not verified, check it's right."
+        />
       </div>
-      {error && <p className="mt-2 text-sm text-red-700 dark:text-red-400">{error}</p>}
-      <div className="mt-3 flex items-center gap-3">
-        <button type="submit" disabled={loading} className={PRIMARY_BUTTON}>
+      {error && <div className="px-4 pb-2"><Callout variant="danger" title={error} /></div>}
+      <div className="flex items-center gap-3 px-4 pb-4">
+        <Button type="submit" disabled={loading} loading={loading}>
           {loading ? "Saving…" : "Log application"}
-        </button>
-        <button type="button" onClick={onDone} className="text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+        </Button>
+        <button type="button" onClick={onDone} className="text-body text-muted transition-colors hover:text-ink">
           Cancel
         </button>
       </div>
@@ -233,53 +224,47 @@ export function ApplicationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="flex items-center text-lg font-semibold text-gray-700 dark:text-gray-200">
-          Applications
-          <InfoTooltip text="Statuses update automatically when we detect a status-changing email, in order: Applied, Acknowledged, Screening, Interviewing, FinalRound, then Offer or Rejected. Ghosted/Withdrawn are set manually. You can always change a status yourself, out of order if needed." />
-        </h2>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-400 dark:text-gray-500">{total} total</span>
+      <div className="mb-3.5 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="m-0 flex items-center text-display font-bold text-ink">
+            Applications
+            <Tooltip text="Statuses update automatically when we detect a status-changing email, in order: Applied, Acknowledged, Screening, Interviewing, FinalRound, then Offer or Rejected. Ghosted/Withdrawn are set manually. You can always change a status yourself, out of order if needed." />
+          </h1>
+          <p className="m-0 text-caption text-faint">Every application you've made, and where it stands.</p>
+        </div>
+        <div className="flex flex-none items-center gap-3">
+          <span className="text-caption text-faint">{total} total</span>
           {!showLogForm && (
-            <button onClick={() => setShowLogForm(true)} className={PRIMARY_BUTTON_SM}>
-              Log an application
-            </button>
+            <Button size="sm" onClick={() => setShowLogForm(true)}>Log an application</Button>
           )}
         </div>
       </div>
-      <PageTagline>Every application you've made, and where it stands.</PageTagline>
 
       {showLogForm && (
         <LogApplicationForm onDone={() => { setShowLogForm(false); reload(); }} />
       )}
 
-      {/* Status tabs */}
-      <div className="flex flex-wrap gap-2">
-        {STATUS_TABS.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`rounded-full px-3 py-1 text-sm font-medium transition-colors duration-150 ${
-              activeTab === tab
-                ? "bg-gradient-to-r from-violet-600 to-fuchsia-500 text-white shadow-sm shadow-violet-600/20"
-                : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        label="Filter by status"
+        segments={STATUS_TABS.map(tab => ({ value: tab, label: tab }))}
+        value={activeTab}
+        onChange={setActiveTab}
+      />
 
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">{error}</div>
-      )}
+      {error && <Callout variant="danger" title={error} />}
 
       {loading ? (
-        <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>
+        <Surface elevation="raised">
+          <SkeletonList rows={4} label="Loading applications" />
+        </Surface>
       ) : apps.length === 0 ? (
-        <div className={`${CARD} py-12 text-center text-sm text-gray-400 dark:text-gray-500`}>
-          No applications{activeTab !== "All" ? ` with status "${activeTab}"` : ""} yet.
-        </div>
+        <Surface elevation="raised">
+          <EmptyState
+            icon={<ChecklistIcon />}
+            title="No applications yet"
+            body={`No applications${activeTab !== "All" ? ` with status "${activeTab}"` : ""} yet.`}
+          />
+        </Surface>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {apps.map(app => <ApplicationCard key={app.id} app={app} onStatusChanged={reload} />)}

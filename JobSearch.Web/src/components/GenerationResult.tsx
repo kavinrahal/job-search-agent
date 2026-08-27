@@ -3,7 +3,7 @@ import { threadPdfUrl, threadDocxUrl } from "../api";
 import { useEditThread } from "../hooks/useGeneration";
 import type { GenerationResult } from "../types";
 import { ResumePdfViewer } from "./ResumePdfViewer";
-import { INPUT, SECONDARY_BUTTON } from "../lib/styles";
+import { Button, Input, WarningIcon } from "../ui";
 
 // The rendered result of a CV/cover-letter generation, extracted from GeneratePage so the
 // Discover tab's one-tap drawer shows the identical thing (same PDF preview, revision box,
@@ -12,14 +12,23 @@ import { INPUT, SECONDARY_BUTTON } from "../lib/styles";
 // Non-blocking by design (see AccuracyVerifierAgent's own comment) — the content above this
 // is already generated and downloadable either way, this just tells the user what to
 // double-check before they actually submit it somewhere.
+//
+// Hand-rolled rather than Callout, despite Callout's own doc naming this exact banner as its
+// main job in this product — Callout's title is a single bold lead-in with the rest flowing
+// inline after it, and a warning list of unknown length needs a real <ul>, which does not fit
+// inside that inline slot. Same bg-brass-wash/WarningIcon/text tokens Callout's warning variant
+// uses, so it still reads as the same notice.
 export function AccuracyWarningBanner({ warnings }: { warnings?: string[] }) {
   if (!warnings || warnings.length === 0) return null;
   return (
-    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
-      <p className="font-medium">Worth double-checking before you send this:</p>
-      <ul className="mt-1 list-inside list-disc space-y-0.5">
-        {warnings.map((w, i) => <li key={i}>{w}</li>)}
-      </ul>
+    <div className="mb-3 flex items-start gap-2.5 rounded-ctl bg-brass-wash px-3 py-2.5 text-control text-ink-2">
+      <WarningIcon className="mt-0.5 h-3.5 w-3.5 flex-none text-brass" />
+      <div className="min-w-0">
+        <p className="m-0 font-[650] text-ink">Worth double-checking before you send this:</p>
+        <ul className="m-0 mt-1 list-inside list-disc space-y-0.5 p-0">
+          {warnings.map((w, i) => <li key={i}>{w}</li>)}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -40,18 +49,19 @@ export function RevisionBox({ threadId, placeholder, onRevised }: {
 
   return (
     <div className="mt-3">
-      <div className="flex gap-2">
-        <input
+      <div className="flex items-end gap-2">
+        <Input
+          label="Revision request"
+          className="flex-1"
           value={message}
           onChange={e => setMessage(e.target.value)}
           placeholder={placeholder}
-          className={INPUT}
         />
-        <button onClick={handleSubmit} disabled={message.trim().length === 0 || loading} className={SECONDARY_BUTTON}>
+        <Button variant="subtle" onClick={handleSubmit} disabled={message.trim().length === 0 || loading} loading={loading}>
           {loading ? "Sending…" : "Send"}
-        </button>
+        </Button>
       </div>
-      {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="mt-1 text-caption text-ember">{error}</p>}
     </div>
   );
 }
@@ -74,9 +84,9 @@ export function CvResult({ result, onRevised }: {
     <>
       <AccuracyWarningBanner warnings={result.accuracyWarnings} />
       <ResumePdfViewer source={`${threadPdfUrl(result.threadId)}?r=${revision}`} />
-      <a href={threadPdfUrl(result.threadId)} className={`mt-3 inline-block ${SECONDARY_BUTTON}`}>
+      <Button href={threadPdfUrl(result.threadId)} variant="subtle" className="mt-3">
         Download PDF
-      </a>
+      </Button>
       <RevisionBox
         threadId={result.threadId}
         placeholder="Request changes (e.g. mention Docker experience)"
@@ -109,17 +119,17 @@ export function LetterResult({ result, onRevised }: {
   return (
     <>
       {copied && (
-        <p className="mb-2 text-xs text-emerald-600 dark:text-emerald-400">Copied to clipboard.</p>
+        <p className="mb-2 text-caption text-pos">Copied to clipboard.</p>
       )}
       <AccuracyWarningBanner warnings={result.accuracyWarnings} />
-      <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 dark:text-gray-300">{result.text}</pre>
+      <pre className="whitespace-pre-wrap font-sans text-body text-ink-2">{result.text}</pre>
       <div className="mt-3 flex gap-2">
-        <a href={threadPdfUrl(result.threadId)} className={`inline-block ${SECONDARY_BUTTON}`}>
+        <Button href={threadPdfUrl(result.threadId)} variant="subtle">
           Download PDF
-        </a>
-        <a href={threadDocxUrl(result.threadId)} className={`inline-block ${SECONDARY_BUTTON}`}>
+        </Button>
+        <Button href={threadDocxUrl(result.threadId)} variant="subtle">
           Download Word
-        </a>
+        </Button>
       </div>
       <RevisionBox threadId={result.threadId} placeholder="Request changes" onRevised={onRevised} />
     </>

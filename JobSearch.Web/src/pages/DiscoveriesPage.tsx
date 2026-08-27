@@ -1,10 +1,20 @@
 import { useState, Fragment } from "react";
 import { useDiscoveries } from "../hooks/useDashboardData";
 import type { DiscoveredPosting } from "../types";
-import { InfoTooltip } from "../components/InfoTooltip";
-import { PageTagline } from "../components/PageTagline";
 import { GenerationDrawer, type GenerationKind } from "../components/GenerationDrawer";
-import { PRIMARY_BUTTON_SM, SECONDARY_BUTTON } from "../lib/styles";
+import {
+  Surface,
+  Button,
+  Badge,
+  Callout,
+  EmptyState,
+  MatchReason,
+  SegmentedControl,
+  SkeletonList,
+  Tooltip,
+  SearchIcon,
+  type BadgeVariant,
+} from "../ui";
 
 // ---------------------------------------------------------------------------
 // Recommendation config
@@ -16,11 +26,11 @@ const REC_TABS = [
   { value: "weak_match",   label: "Weak Match"   },
 ] as const;
 
-const REC_STYLES: Record<string, string> = {
-  strong_match: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
-  good_match:   "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
-  weak_match:   "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-  discard:      "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400",
+const REC_BADGE: Record<string, BadgeVariant> = {
+  strong_match: "strong",
+  good_match: "good",
+  weak_match: "weak",
+  discard: "live",
 };
 
 const REC_LABELS: Record<string, string> = {
@@ -44,52 +54,42 @@ const SOURCE_LABELS: Record<string, string> = {
   adzuna:         "Adzuna",
 };
 
-const SOURCE_STYLES: Record<string, string> = {
-  seek_alert:     "bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300",
-  linkedin_alert: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
-  jora_alert:     "bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300",
-  greenhouse:     "bg-lime-50 text-lime-700 dark:bg-lime-500/10 dark:text-lime-300",
-  lever:          "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300",
-  adzuna:         "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
-};
-
 // source is a backend Source enum value (see the fetcher comment above SOURCE_LABELS), and the
 // ?? fallback already covers any value outside the known set — same call across this file's
-// other Record lookups (REC_STYLES/REC_LABELS/MATCH_STYLES below).
+// other Record lookups (REC_BADGE/REC_LABELS/MATCH_TONE below).
 function sourceLabel(source: string): string {
   // eslint-disable-next-line security/detect-object-injection
   return SOURCE_LABELS[source] ?? source.replace(/_alert$/, "").replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// Every source gets the same neutral Badge — Badge's five variants are all semantically
+// meaningful (strong/good/weak/live/neutral), and a source (Seek vs. Greenhouse) is not itself
+// a positive or negative signal, so unlike the six decorative source colours this replaces,
+// there is nothing here for a variant to say beyond "this is where it came from".
 function SourceBadge({ source }: { source: string }) {
   if (!source) return null;
-  return (
-    // eslint-disable-next-line security/detect-object-injection
-    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${SOURCE_STYLES[source] ?? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
-      {sourceLabel(source)}
-    </span>
-  );
+  return <Badge variant="neutral">{sourceLabel(source)}</Badge>;
 }
 
-const MATCH_STYLES: Record<string, string> = {
-  strong:     "text-emerald-600 dark:text-emerald-400",
-  good:       "text-blue-600 dark:text-blue-400",
-  acceptable: "text-amber-600 dark:text-amber-400",
-  weak:       "text-amber-600 dark:text-amber-400",
-  excluded:   "text-red-500 dark:text-red-400",
-  preferred:  "text-emerald-600 dark:text-emerald-400",
-  acceptable2:"text-blue-600 dark:text-blue-400",
-  missing:    "text-gray-400 dark:text-gray-500",
-  target:     "text-emerald-600 dark:text-emerald-400",
-  flagged_low:     "text-red-500 dark:text-red-400",
-  flagged_high:    "text-amber-600 dark:text-amber-400",
+const MATCH_TONE: Record<string, string> = {
+  strong: "text-pos",
+  preferred: "text-pos",
+  target: "text-pos",
+  good: "text-ink-2",
+  acceptable2: "text-ink-2",
+  acceptable: "text-brass",
+  weak: "text-brass",
+  flagged_high: "text-brass",
+  excluded: "text-ember",
+  flagged_low: "text-ember",
+  missing: "text-faint",
 };
 
 // value is a backend match-tier enum value; ?? fallback covers anything unrecognized.
-function matchStyle(value: string | null): string {
-  if (!value) return "text-gray-400 dark:text-gray-500";
+function matchTone(value: string | null): string {
+  if (!value) return "text-faint";
   // eslint-disable-next-line security/detect-object-injection
-  return MATCH_STYLES[value] ?? "text-gray-600 dark:text-gray-400";
+  return MATCH_TONE[value] ?? "text-muted";
 }
 
 // Relative for anything recent enough that "how fresh is this" is the actual question — an
@@ -114,13 +114,8 @@ function discoveredLabel(iso: string): string {
 // both lookups below fall back gracefully for anything else.
 function RecBadge({ rec }: { rec: string | null }) {
   if (!rec) return null;
-  return (
-    // eslint-disable-next-line security/detect-object-injection
-    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${REC_STYLES[rec] ?? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
-      {/* eslint-disable-next-line security/detect-object-injection */}
-      {REC_LABELS[rec] ?? rec}
-    </span>
-  );
+  // eslint-disable-next-line security/detect-object-injection
+  return <Badge variant={REC_BADGE[rec] ?? "neutral"}>{REC_LABELS[rec] ?? rec}</Badge>;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,56 +132,56 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
     || posting.salaryDetail;
 
   return (
-    <div className="flex flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow duration-150 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 dark:hover:shadow-none">
+    <Surface elevation="raised" className="flex flex-col">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <SourceBadge source={posting.source} />
-          <p className="mt-1 font-semibold leading-snug text-gray-800 dark:text-gray-100">
+          <p className="m-0 mt-1 font-[650] text-ink">
             {posting.company || "Unknown company"}
           </p>
-          <p className="mt-0.5 text-sm leading-snug text-gray-500 dark:text-gray-400">{posting.title}</p>
+          <p className="m-0 mt-0.5 text-body text-muted">{posting.title}</p>
         </div>
         <RecBadge rec={posting.recommendation} />
       </div>
 
       {/* Disqualifier note */}
       {posting.disqualifierHit && (
-        <p className="mt-2 text-xs text-red-500 dark:text-red-400">Disqualifier: {posting.disqualifierHit}</p>
+        <p className="m-0 mt-2 text-caption text-ember">Disqualifier: {posting.disqualifierHit}</p>
       )}
 
       {/* Key signals */}
       {hasDetail && (
-        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dl className="m-0 mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-body">
           {posting.locationDetail && (
             <>
-              <dt className="text-gray-400 dark:text-gray-500">Location</dt>
-              <dd className={matchStyle(posting.locationMatch)}>
+              <dt className="text-faint">Location</dt>
+              <dd className={`m-0 ${matchTone(posting.locationMatch)}`}>
                 {posting.locationDetail}
               </dd>
             </>
           )}
           {primarySkill && (
             <>
-              <dt className="text-gray-400 dark:text-gray-500">{primarySkill.dimension}</dt>
-              <dd className={matchStyle(primarySkill.match)}>
+              <dt className="text-faint">{primarySkill.dimension}</dt>
+              <dd className={`m-0 ${matchTone(primarySkill.match)}`}>
                 {primarySkill.detail || "not stated"}
               </dd>
             </>
           )}
           {posting.salaryDetail && (
             <>
-              <dt className="text-gray-400 dark:text-gray-500">Salary</dt>
-              <dd className={matchStyle(posting.salaryAssessment)}>
+              <dt className="text-faint">Salary</dt>
+              <dd className={`m-0 ${matchTone(posting.salaryAssessment)}`}>
                 {posting.salaryDetail}
               </dd>
             </>
           )}
           {!posting.salaryDetail && posting.salaryAssessment === "missing" && (
             <>
-              <dt className="text-gray-400 dark:text-gray-500">Salary</dt>
-              <dd className="text-gray-400 dark:text-gray-500">not listed</dd>
+              <dt className="text-faint">Salary</dt>
+              <dd className="m-0 text-faint">not listed</dd>
             </>
           )}
         </dl>
@@ -197,15 +192,15 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
         <div className="mt-2">
           <button
             onClick={() => setExpanded(e => !e)}
-            className="text-xs font-medium text-amber-600 transition-colors hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+            className="text-caption font-[650] text-brass hover:opacity-80"
           >
             {posting.orangeFlags.length} orange flag{posting.orangeFlags.length > 1 ? "s" : ""}
             {expanded ? " ▲" : " ▼"}
           </button>
           {expanded && (
-            <ul className="mt-1.5 space-y-0.5">
+            <ul className="m-0 mt-1.5 space-y-0.5 p-0">
               {posting.orangeFlags.map((flag, i) => (
-                <li key={i} className="text-xs text-amber-700 dark:text-amber-400">• {flag}</li>
+                <li key={i} className="text-caption text-brass">• {flag}</li>
               ))}
             </ul>
           )}
@@ -214,35 +209,35 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
 
       {/* Expanded detail */}
       {expanded && (
-        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-gray-100 pt-3 text-sm dark:border-gray-800">
+        <dl className="hairline-t m-0 mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pt-3 text-body">
           {posting.experienceDetail && (
             <>
-              <dt className="text-gray-400 dark:text-gray-500">Experience</dt>
-              <dd className={matchStyle(posting.experienceMatch)}>
+              <dt className="text-faint">Experience</dt>
+              <dd className={`m-0 ${matchTone(posting.experienceMatch)}`}>
                 {posting.experienceDetail}
               </dd>
             </>
           )}
           {otherSkills.map(skill => (
             <Fragment key={skill.dimension}>
-              <dt className="text-gray-400 dark:text-gray-500">{skill.dimension}</dt>
-              <dd className={matchStyle(skill.match)}>
+              <dt className="text-faint">{skill.dimension}</dt>
+              <dd className={`m-0 ${matchTone(skill.match)}`}>
                 {skill.detail || "not stated"}
               </dd>
             </Fragment>
           ))}
           {posting.companyAssessment && (
             <>
-              <dt className="text-gray-400 dark:text-gray-500">Company</dt>
-              <dd className={matchStyle(posting.companyAssessment)}>
+              <dt className="text-faint">Company</dt>
+              <dd className={`m-0 ${matchTone(posting.companyAssessment)}`}>
                 {posting.companyAssessment}
               </dd>
             </>
           )}
           {posting.roleTypeMatch && (
             <>
-              <dt className="text-gray-400 dark:text-gray-500">Role type</dt>
-              <dd className={matchStyle(posting.roleTypeMatch)}>
+              <dt className="text-faint">Role type</dt>
+              <dd className={`m-0 ${matchTone(posting.roleTypeMatch)}`}>
                 {posting.roleTypeMatch}
               </dd>
             </>
@@ -252,33 +247,37 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
 
       {/* Rationale */}
       {posting.rationale && (
-        <p className={`mt-3 text-sm leading-relaxed text-gray-500 dark:text-gray-400 ${!expanded ? "line-clamp-2" : ""}`}>
+        <MatchReason
+          tone={posting.recommendation === "strong_match" || posting.recommendation === "good_match" ? "why" : "held-back"}
+          heading={posting.recommendation === "strong_match" || posting.recommendation === "good_match" ? "Why this one." : "Held back."}
+          className={`mt-3 ${!expanded ? "line-clamp-2" : ""}`}
+        >
           {posting.rationale}
-        </p>
+        </MatchReason>
       )}
 
       {/* Footer */}
-      <div className="mt-auto mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
+      <div className="hairline-t mt-auto mt-3 pt-3">
         <div className="flex items-center justify-between">
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
             <a
               href={posting.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+              className="text-body font-[650] text-ember hover:text-ember-hi"
             >
               View posting
             </a>
             {(posting.rationale || hasFlags || posting.experienceDetail) && (
               <button
                 onClick={() => setExpanded(e => !e)}
-                className="text-sm text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                className="text-body text-faint transition-colors hover:text-muted"
               >
                 {expanded ? "Less" : "More"}
               </button>
             )}
           </div>
-          <span className="text-xs text-gray-400 dark:text-gray-500" title={new Date(posting.discoveredAt).toLocaleString("en-AU")}>
+          <span className="text-caption text-faint" title={new Date(posting.discoveredAt).toLocaleString("en-AU")}>
             Found {discoveredLabel(posting.discoveredAt)}
           </span>
         </div>
@@ -286,12 +285,12 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
         {/* One-tap generation — no posting URL round trip, the backend resolves this
             discovery's own cached posting text (see DiscoveredPosting.PostingText). */}
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={() => setGenerating("cv")} className={PRIMARY_BUTTON_SM}>
+          <Button size="sm" onClick={() => setGenerating("cv")}>
             Generate CV
-          </button>
-          <button onClick={() => setGenerating("letter")} className={SECONDARY_BUTTON}>
+          </Button>
+          <Button size="sm" variant="subtle" onClick={() => setGenerating("letter")}>
             Cover letter
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -304,7 +303,7 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
           onClose={() => setGenerating(null)}
         />
       )}
-    </div>
+    </Surface>
   );
 }
 
@@ -327,50 +326,46 @@ export function DiscoveriesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="flex items-center text-lg font-semibold text-gray-700 dark:text-gray-200">
-          Discoveries
-          <InfoTooltip text="Postings found automatically from your sources, ranked against your job criteria. Strong/Good match are worth a look; Weak match is a stretch; Discard didn't meet your criteria and is hidden by default." />
-        </h2>
-        <span className="text-sm text-gray-400 dark:text-gray-500">{total} total</span>
-      </div>
-      <PageTagline>Postings we've already found and ranked, so you don't have to go looking.</PageTagline>
-
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2">
-        {REC_TABS.map(tab => (
-          <button
-            key={tab.value}
-            onClick={() => setActiveTab(tab.value)}
-            className={`rounded-full px-3 py-1 text-sm font-medium transition-colors duration-150 ${
-              activeTab === tab.value
-                ? "bg-gradient-to-r from-violet-600 to-fuchsia-500 text-white shadow-sm shadow-violet-600/20"
-                : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
-          {error}
+      <div className="mb-3.5 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="m-0 flex items-center text-display font-bold text-ink">
+            Discoveries
+            <Tooltip text="Postings found automatically from your sources, ranked against your job criteria. Strong/Good match are worth a look; Weak match is a stretch; Discard didn't meet your criteria and is hidden by default." />
+          </h1>
+          <p className="m-0 text-caption text-faint">Postings we've already found and ranked, so you don't have to go looking.</p>
         </div>
-      )}
+        <span className="text-caption text-faint">{total} total</span>
+      </div>
+
+      <SegmentedControl
+        label="Filter by recommendation"
+        segments={REC_TABS.map(tab => ({ value: tab.value as string, label: tab.label }))}
+        value={activeTab}
+        onChange={setActiveTab}
+      />
+
+      {error && <Callout variant="danger" title={error} />}
 
       {loading ? (
-        <div className="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</div>
+        <Surface elevation="raised">
+          <SkeletonList rows={4} label="Loading discoveries" />
+        </Surface>
       ) : postings.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white py-12 text-center text-sm text-gray-400 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500">
-          {activeTab === ""
-            ? "No postings found yet. The agent will notify you when it finds one."
-            : activeTab === "strong_match"
-            ? "No strong matches yet. The agent will notify you when it finds one."
-            // activeTab only ever comes from clicking one of the four hardcoded REC_TABS values.
-            // eslint-disable-next-line security/detect-object-injection
-            : `No ${REC_LABELS[activeTab] ?? activeTab.replace("_", " ")} postings found.`}
-        </div>
+        <Surface elevation="raised">
+          <EmptyState
+            icon={<SearchIcon />}
+            title="Nothing here yet"
+            body={
+              activeTab === ""
+                ? "No postings found yet. The agent will notify you when it finds one."
+                : activeTab === "strong_match"
+                ? "No strong matches yet. The agent will notify you when it finds one."
+                // activeTab only ever comes from clicking one of the four hardcoded REC_TABS values.
+                // eslint-disable-next-line security/detect-object-injection
+                : `No ${REC_LABELS[activeTab] ?? activeTab.replace("_", " ")} postings found.`
+            }
+          />
+        </Surface>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {postings.map(p => <DiscoveryCard key={p.id} posting={p} />)}

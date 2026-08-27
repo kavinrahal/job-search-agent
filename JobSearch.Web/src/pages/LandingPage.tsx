@@ -6,8 +6,7 @@ import {
   useRequestPasswordReset,
   useResetPassword,
 } from "../hooks/useAuth";
-import { ThemeToggle } from "../components/ThemeToggle";
-import { INPUT, PRIMARY_BUTTON } from "../lib/styles";
+import { Button, Callout, CheckIcon, Divider, Input, PasswordRulesChecklist, Surface, ThemeToggle, cx, BrandGlyph } from "../ui";
 import { isPasswordValid, passwordRuleResults } from "../lib/passwordRules";
 
 const FEATURES = [
@@ -16,17 +15,10 @@ const FEATURES = [
   "Track applications and discover new postings automatically",
 ];
 
-// Google stays a peer sign-in option, never a lesser one — it sits below the same "or" divider
-// on both tabs and keeps full width. It's an <a>, not a button, because it's a redirect
-// round-trip through Google's consent screen rather than a fetch (see useLoginUrl).
-const GOOGLE_BUTTON =
-  "inline-flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors duration-150 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700";
-
-const SUBMIT_BUTTON = `${PRIMARY_BUTTON} w-full py-2.5`;
-
-const LINK = "font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300";
-
-const ERROR_TEXT = "mt-2 text-sm text-red-700 dark:text-red-400";
+// Google stays a peer sign-in option, never a lesser one — it sits below the same divider on
+// both tabs and keeps full width. It's an <a>, not a button, because it's a redirect round-trip
+// through Google's consent screen rather than a fetch (see useLoginUrl). Button's own `href`
+// prop renders exactly that <a>.
 
 // Plain top-level function rather than an inline `window.location.href = ...` inside the
 // components below — same reason SourcesPage extracts one: react-hooks' bundled compiler
@@ -57,96 +49,40 @@ const AUTH_ERRORS = new Map<string, string>([
 const DEFAULT_AUTH_ERROR =
   "That Google account needs an invite before it can sign in. Ask whoever invited you, or reach out via the Support page once you're in.";
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+// Sign in / Create account switch. Not a SegmentedControl: that component is explicitly a filter
+// over a list already on screen (see ui/SegmentedControl.tsx's own note), and this swaps between
+// two different forms instead — so it is hand-rolled here, but the track-plus-pill treatment is
+// the same visual language SegmentedControl and ThemeToggle use elsewhere.
+function TabSwitch({ tab, onChange }: { tab: "signin" | "register"; onChange: (tab: "signin" | "register") => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
-        active
-          ? "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
-          : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Field({
-  id, label, type, value, onChange, autoComplete, placeholder,
-}: {
-  id: string;
-  label: string;
-  type: "email" | "password";
-  value: string;
-  onChange: (value: string) => void;
-  autoComplete: string;
-  placeholder?: string;
-}) {
-  return (
-    <div className="text-left">
-      <label htmlFor={id} className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">
-        {label}
-      </label>
-      <input
-        id={id}
-        name={id}
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        autoComplete={autoComplete}
-        placeholder={placeholder}
-        spellCheck={false}
-        required
-        className={INPUT}
-      />
+    <div role="group" aria-label="Sign in or create an account" className="surface-sunk mt-6 inline-flex w-full gap-px rounded-ctl p-[3px]">
+      {(["signin", "register"] as const).map(value => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={tab === value}
+          onClick={() => onChange(value)}
+          className={cx(
+            "flex-1 rounded-inset px-3 py-1.5 text-control font-[650] tappable focus-ring",
+            "transition-[background-color,color,transform] duration-350 ease-spring motion-reduce:transition-none active:scale-[.97]",
+            tab === value ? "bg-core text-ink shadow-e1" : "text-muted hover:text-ink",
+          )}
+        >
+          {value === "signin" ? "Sign in" : "Create account"}
+        </button>
+      ))}
     </div>
-  );
-}
-
-function CheckIcon({ className }: { className: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className={className} aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20 6 9 17l-5-5" />
-    </svg>
   );
 }
 
 // Live mirror of the server's own password check (see lib/passwordRules.ts) so the rules are
 // visible while typing instead of arriving as a 400 after submitting.
-function PasswordChecklist({ password }: { password: string }) {
+function LivePasswordChecklist({ password }: { password: string }) {
   return (
-    <ul className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-left dark:border-gray-700 dark:bg-gray-800/50">
-      {passwordRuleResults(password).map(rule => (
-        <li
-          key={rule.label}
-          className={`flex items-center gap-1.5 text-xs ${
-            rule.met ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"
-          }`}
-        >
-          {rule.met ? (
-            <CheckIcon className="h-3 w-3 shrink-0" />
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3 w-3 shrink-0" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" />
-            </svg>
-          )}
-          {rule.label}
-          <span className="sr-only">{rule.met ? " — met" : " — not met yet"}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function OrDivider() {
-  return (
-    <div className="my-4 flex items-center gap-3">
-      <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-      <span className="text-xs text-gray-400 dark:text-gray-500">or</span>
-      <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-    </div>
+    <PasswordRulesChecklist
+      rules={passwordRuleResults(password).map(rule => ({ id: rule.label, ...rule }))}
+      className="mt-1"
+    />
   );
 }
 
@@ -168,15 +104,32 @@ function SignInForm({ onForgotPassword }: { onForgotPassword: () => void }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <Field id="signin-email" label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" placeholder="you@example.com" />
-      <Field id="signin-password" label="Password" type="password" value={password} onChange={setPassword} autoComplete="current-password" />
-      <button type="submit" disabled={action.loading} className={SUBMIT_BUTTON}>
+    <form onSubmit={handleSubmit} className="mt-4 space-y-3 text-left">
+      <Input
+        label="Email"
+        type="email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+        autoComplete="email"
+        placeholder="you@example.com"
+        required
+      />
+      <Input
+        label="Password"
+        type="password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+        autoComplete="current-password"
+        required
+      />
+      <Button type="submit" disabled={action.loading} loading={action.loading} fullWidth>
         {action.loading ? "Signing in…" : "Sign in"}
-      </button>
-      {action.error && <p className={ERROR_TEXT}>{action.error}</p>}
-      <p className="text-left text-xs">
-        <button type="button" onClick={onForgotPassword} className={LINK}>Forgot your password?</button>
+      </Button>
+      {action.error && <Callout variant="danger" title={action.error} />}
+      <p className="text-left">
+        <button type="button" onClick={onForgotPassword} className="text-caption font-[650] text-ember hover:text-ember-hi">
+          Forgot your password?
+        </button>
       </p>
     </form>
   );
@@ -204,33 +157,50 @@ function RegisterForm({ onVerificationSent }: { onVerificationSent: (email: stri
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <Field id="register-email" label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" placeholder="you@example.com" />
-      <Field id="register-password" label="Password" type="password" value={password} onChange={setPassword} autoComplete="new-password" />
-      <PasswordChecklist password={password} />
-      <button type="submit" disabled={action.loading || !isPasswordValid(password)} className={SUBMIT_BUTTON}>
+    <form onSubmit={handleSubmit} className="mt-4 space-y-3 text-left">
+      <Input
+        label="Email"
+        type="email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+        autoComplete="email"
+        placeholder="you@example.com"
+        required
+      />
+      <Input
+        label="Password"
+        type="password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+        autoComplete="new-password"
+        required
+      />
+      <LivePasswordChecklist password={password} />
+      <Button type="submit" disabled={action.loading || !isPasswordValid(password)} loading={action.loading} fullWidth>
         {action.loading ? "Creating account…" : "Create account"}
-      </button>
-      {action.error && <p className={ERROR_TEXT}>{action.error}</p>}
-      <p className="text-left text-xs text-gray-400 dark:text-gray-500">Invite only while in beta.</p>
+      </Button>
+      {action.error && <Callout variant="danger" title={action.error} />}
+      <p className="text-caption text-faint">Invite only while in beta.</p>
     </form>
   );
 }
 
 function CheckYourInbox({ email, onBack }: { email: string; onBack: () => void }) {
   return (
-    <div>
-      <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">
+    <div className="mt-6">
+      <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-core bg-shell text-ink-2">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v16H4zM4 7l8 6 8-6" />
         </svg>
       </div>
-      <h2 className="mt-3 text-base font-semibold text-gray-900 dark:text-white">Check your inbox</h2>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        We sent a link to <span className="font-medium text-gray-700 dark:text-gray-200">{email}</span>.
+      <h2 className="mt-3 text-heading font-bold text-ink">Check your inbox</h2>
+      <p className="mt-1 text-body text-muted">
+        We sent a link to <span className="font-[650] text-ink-2">{email}</span>.
         Click it to activate your account. The link expires in an hour.
       </p>
-      <button type="button" onClick={onBack} className={`mt-4 text-xs ${LINK}`}>Back to sign in</button>
+      <button type="button" onClick={onBack} className="mt-4 text-caption font-[650] text-ember hover:text-ember-hi">
+        Back to sign in
+      </button>
     </div>
   );
 }
@@ -253,25 +223,35 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="text-left">
-      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Forgot your password</h2>
+    <div className="mt-6 text-left">
+      <h2 className="text-heading font-bold text-ink">Forgot your password</h2>
       {sentMessage ? (
-        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{sentMessage}</p>
+        <p className="mt-2 text-body text-muted">{sentMessage}</p>
       ) : (
         <>
-          <p className="mt-1 mb-3 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-1 mb-3 text-body text-muted">
             Enter the email you signed up with and we'll send a reset link.
           </p>
           <form onSubmit={handleSubmit} className="space-y-3">
-            <Field id="forgot-email" label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" placeholder="you@example.com" />
-            <button type="submit" disabled={action.loading} className={SUBMIT_BUTTON}>
+            <Input
+              label="Email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              autoComplete="email"
+              placeholder="you@example.com"
+              required
+            />
+            <Button type="submit" disabled={action.loading} loading={action.loading} fullWidth>
               {action.loading ? "Sending…" : "Send reset link"}
-            </button>
-            {action.error && <p className={ERROR_TEXT}>{action.error}</p>}
+            </Button>
+            {action.error && <Callout variant="danger" title={action.error} />}
           </form>
         </>
       )}
-      <button type="button" onClick={onBack} className={`mt-4 text-xs ${LINK}`}>Back to sign in</button>
+      <button type="button" onClick={onBack} className="mt-4 text-caption font-[650] text-ember hover:text-ember-hi">
+        Back to sign in
+      </button>
     </div>
   );
 }
@@ -296,20 +276,36 @@ function ResetPasswordForm({ token }: { token: string }) {
   }
 
   return (
-    <div className="text-left">
-      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Set a new password</h2>
-      <p className="mt-1 mb-3 text-sm text-gray-500 dark:text-gray-400">
+    <div className="mt-6 text-left">
+      <h2 className="text-heading font-bold text-ink">Set a new password</h2>
+      <p className="mt-1 mb-3 text-body text-muted">
         The link works once and expires after an hour.
       </p>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <Field id="reset-password" label="New password" type="password" value={password} onChange={setPassword} autoComplete="new-password" />
-        <PasswordChecklist password={password} />
-        <button type="submit" disabled={action.loading || !isPasswordValid(password)} className={SUBMIT_BUTTON}>
+        <Input
+          label="New password"
+          type="password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          autoComplete="new-password"
+          required
+        />
+        <LivePasswordChecklist password={password} />
+        <Button type="submit" disabled={action.loading || !isPasswordValid(password)} loading={action.loading} fullWidth>
           {action.loading ? "Setting password…" : "Set password and sign in"}
-        </button>
-        {action.error && <p className={ERROR_TEXT}>{action.error}</p>}
+        </Button>
+        {action.error && <Callout variant="danger" title={action.error} />}
       </form>
     </div>
+  );
+}
+
+function FeatureItem({ children }: { children: ReactNode }) {
+  return (
+    <li className="flex items-start gap-2 text-body text-ink-2">
+      <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-ember" />
+      {children}
+    </li>
   );
 }
 
@@ -345,61 +341,50 @@ export function LandingPage() {
   ) : null;
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50 px-6 py-10 dark:bg-gray-950">
-      <div className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full bg-violet-400/30 blur-3xl dark:bg-violet-600/20" />
-      <div className="pointer-events-none absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-fuchsia-400/30 blur-3xl dark:bg-fuchsia-600/20" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-bg px-6 py-10">
+      <div className="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-full bg-ember/20 blur-3xl" />
+      <div className="pointer-events-none absolute -right-32 -bottom-32 h-96 w-96 rounded-full bg-brass/20 blur-3xl" />
 
-      <ThemeToggle className="absolute right-4 top-4" />
+      <ThemeToggle className="absolute top-4 right-4" />
 
-      <div className="relative w-full max-w-md animate-fade-in-up rounded-2xl border border-gray-200 bg-white/90 p-8 text-center shadow-xl shadow-gray-900/5 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/90 dark:shadow-none">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-500 text-white shadow-sm shadow-violet-600/30">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} className="h-6 w-6" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" />
-          </svg>
+      <Surface elevation="floating" padding="none" className="relative w-full max-w-md animate-fade-in-up p-8 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-core bg-ember text-on-ember">
+          <BrandGlyph className="h-6 w-6" />
         </div>
 
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">Work Santa</h1>
+        {/* translate="no" so machine translation doesn't render the wordmark as two English
+            nouns — same reasoning as ui/AppShell's Brand, which this page can't reuse directly
+            (Brand is nav-bar sized; this is a hero mark). */}
+        <h1 translate="no" className="mt-4 text-display font-bold text-ink">Work Santa</h1>
 
-        {focusedView ? (
-          <div className="mt-6">{focusedView}</div>
-        ) : (
+        {focusedView ?? (
           <>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-2 text-body text-muted">
               Evaluate job postings against your own criteria, and generate tailored CVs, cover
               letters, and application answers grounded in your real background.
             </p>
 
             <ul className="mt-6 space-y-2 text-left">
-              {FEATURES.map(feature => (
-                <li key={feature} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
-                  <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
-                  {feature}
-                </li>
-              ))}
+              {FEATURES.map(feature => <FeatureItem key={feature}>{feature}</FeatureItem>)}
             </ul>
 
             {authError && (
-              <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-left text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
-                {AUTH_ERRORS.get(authError) ?? DEFAULT_AUTH_ERROR}
-              </p>
+              <div className="mt-4 text-left">
+                <Callout variant="danger" title={AUTH_ERRORS.get(authError) ?? DEFAULT_AUTH_ERROR} />
+              </div>
             )}
 
-            <div className="mt-6 flex gap-1 rounded-lg bg-gray-100/70 p-1 dark:bg-gray-800/50">
-              <TabButton active={tab === "signin"} onClick={() => setTab("signin")}>Sign in</TabButton>
-              <TabButton active={tab === "register"} onClick={() => setTab("register")}>Create account</TabButton>
-            </div>
+            <TabSwitch tab={tab} onChange={setTab} />
 
-            <div className="mt-4">
-              {tab === "signin"
-                ? <SignInForm onForgotPassword={() => setForgotPassword(true)} />
-                : <RegisterForm onVerificationSent={setPendingVerificationEmail} />}
-            </div>
+            {tab === "signin"
+              ? <SignInForm onForgotPassword={() => setForgotPassword(true)} />
+              : <RegisterForm onVerificationSent={setPendingVerificationEmail} />}
 
-            <OrDivider />
-            <a href={loginUrl} className={GOOGLE_BUTTON}>Sign in with Google</a>
+            <Divider className="my-4">or</Divider>
+            <Button href={loginUrl} variant="ghost" fullWidth>Sign in with Google</Button>
           </>
         )}
-      </div>
+      </Surface>
     </div>
   );
 }

@@ -19,3 +19,14 @@ export function styleFor<K extends string, V>(table: Record<K, V>, key: K): V {
   // eslint-disable-next-line security/detect-object-injection -- key is a literal union of the table's own keys, see above
   return table[key];
 }
+
+/**
+ * True for an app route the client-side router owns (e.g. "/dashboard"), false for anything that
+ * needs a real, full navigation: absolute/external URLs, `mailto:`/`tel:`, protocol-relative
+ * ("//host/..."), hash fragments, and — importantly — same-origin `/api/...` URLs. Those last ones
+ * look internal but are backend resources (file downloads, OAuth redirects) that must hit the
+ * network rather than the client router; see threadPdfUrl/gmailOAuthStartUrl/useLoginUrl in api.ts.
+ */
+export function isInternalPath(href: string): boolean {
+  return href.startsWith("/") && !href.startsWith("//") && !href.startsWith("/api/");
+}

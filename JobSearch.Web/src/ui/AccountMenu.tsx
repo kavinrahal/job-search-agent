@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { cx } from "./cx";
+import { Link } from "react-router-dom";
+import { cx, isInternalPath } from "./cx";
 import { Avatar } from "./Avatar";
 
 // The avatar-triggered menu holding everything that is setup rather than daily work: Resume,
@@ -124,36 +125,36 @@ export function AccountMenu({ name, email, items, className }: AccountMenuProps)
                 className: classes,
                 onKeyDown: (e: ReactKeyboardEvent) => onItemKeyDown(e, index),
               };
+              const itemRef = (el: HTMLAnchorElement | HTMLButtonElement | null) => {
+                if (el) itemRefs.current.set(index, el);
+                else itemRefs.current.delete(index);
+              };
 
-              return item.href ? (
-                <a
-                  key={item.label}
-                  {...shared}
-                  ref={el => {
-                    if (el) itemRefs.current.set(index, el);
-                    else itemRefs.current.delete(index);
-                  }}
-                  href={item.href}
-                  onClick={() => close(false)}
-                >
+              if (!item.href) {
+                return (
+                  <button
+                    key={item.label}
+                    {...shared}
+                    ref={itemRef}
+                    type="button"
+                    onClick={() => {
+                      close(false);
+                      item.onSelect?.();
+                    }}
+                  >
+                    {content}
+                  </button>
+                );
+              }
+
+              return isInternalPath(item.href) ? (
+                <Link key={item.label} {...shared} ref={itemRef} to={item.href} onClick={() => close(false)}>
+                  {content}
+                </Link>
+              ) : (
+                <a key={item.label} {...shared} ref={itemRef} href={item.href} onClick={() => close(false)}>
                   {content}
                 </a>
-              ) : (
-                <button
-                  key={item.label}
-                  {...shared}
-                  ref={el => {
-                    if (el) itemRefs.current.set(index, el);
-                    else itemRefs.current.delete(index);
-                  }}
-                  type="button"
-                  onClick={() => {
-                    close(false);
-                    item.onSelect?.();
-                  }}
-                >
-                  {content}
-                </button>
               );
             })}
           </div>

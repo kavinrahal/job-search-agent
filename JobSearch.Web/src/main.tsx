@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App";
+import { ThemeProvider } from "./ui";
 import { initSentry } from "./sentry";
 
 // Before render, so a crash during the first paint is still captured.
@@ -28,7 +29,9 @@ if (import.meta.env.DEV && window.location.pathname === "/__gallery") {
 } else {
   root.render(
     <StrictMode>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </StrictMode>
   );
 }
