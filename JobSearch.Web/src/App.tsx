@@ -148,7 +148,7 @@ export default function App() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
         {!isOnboarding && (
           <header className="sticky top-0 z-20 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-gray-800/80 dark:bg-gray-950/80">
-            <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+            <div className="flex items-center justify-between px-4 py-4 sm:px-6">
               <Logo />
 
               <nav className="hidden items-center gap-1 md:flex">
@@ -207,7 +207,7 @@ function PageBody({ me }: { me: NonNullable<ReturnType<typeof useMe>["data"]> })
   const location = useLocation();
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+    <main className="px-4 py-8 sm:px-6">
       {me.needsOnboarding && <StepRedirect allowedRoutes={ONBOARDING_ROUTES} to="/onboarding/cv" />}
       {!me.needsOnboarding && me.needsCriteria && <StepRedirect allowedRoutes={CRITERIA_ROUTES} to="/onboarding/criteria" />}
       {!me.needsOnboarding && !me.needsCriteria && me.needsSourceSelection && <StepRedirect allowedRoutes={SOURCES_ROUTES} to="/onboarding/sources" />}
