@@ -198,12 +198,19 @@ export function Tier2Dashboard() {
 
       <GeneratePage />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* Third grid column only kicks in at xl (genuinely wide screens) so the fixed-width shell's
+          extra room gets put to use rather than just stretching two cards further apart with a
+          growing gap between them (per the approved layout prototype). ActivityFeed spans both
+          columns at lg so it still reads full-width there, matching its pre-xl position below the
+          two-card row today; it only collapses into the third column once there's genuinely a
+          third-column's worth of space. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
         <RecentApplications />
         <RecentDiscoveries />
+        <div className="lg:col-span-2 xl:col-span-1">
+          <ActivityFeed />
+        </div>
       </div>
-
-      <ActivityFeed />
     </div>
   );
 }

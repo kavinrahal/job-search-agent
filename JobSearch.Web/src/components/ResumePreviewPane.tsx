@@ -19,7 +19,7 @@ export function ResumePreviewPane({ markdown, loading, error }: {
     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
       {markdown ? (
         <div
-          className="resume-preview-document mx-auto w-[480px] shrink-0 rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-800 shadow-sm"
+          className="resume-preview-document mx-auto aspect-[210/297] w-[480px] shrink-0 rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-800 shadow-sm"
           // renderResumeMarkdown escapes all user-controlled text before wrapping it in the
           // handful of tags it controls — see that function's own comment.
           dangerouslySetInnerHTML={{ __html: renderResumeMarkdown(markdown) }}
