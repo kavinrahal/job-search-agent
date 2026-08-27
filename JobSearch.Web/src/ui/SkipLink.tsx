@@ -6,7 +6,11 @@ export function SkipLink({ href = "#main", children = "Skip to content" }: { hre
   return (
     <a
       href={href}
-      className="tappable absolute top-0 -left-[9999px] z-60 rounded-br-ctl bg-ember px-4 py-2.5 text-note font-[650] text-on-ember no-underline focus:left-0"
+      className={
+        "tappable absolute top-0 -left-[9999px] z-60 rounded-br-ctl bg-ember px-4 py-2.5 text-note font-[650] text-on-ember no-underline " +
+        // focus:left-0 *is* its focus state: it is invisible until focused, which is the point.
+        "focus:left-0 hover:bg-ember-hi active:scale-[.98] transition-[background-color,transform] duration-300 ease-spring motion-reduce:transition-none"
+      }
     >
       {children}
     </a>

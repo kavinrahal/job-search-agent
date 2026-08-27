@@ -59,7 +59,11 @@ export function AppShell({ nav, actions, tabs, children, className }: AppShellPr
 /** The mark and wordmark. Fixed content, so it takes no props beyond where it links. */
 export function Brand({ href = "/", className }: { href?: string; className?: string }) {
   return (
-    <a href={href} className={cx("flex flex-none items-center gap-2.5 no-underline focus-ring tappable", className)}>
+    <a href={href} className={cx(
+        "flex flex-none items-center gap-2.5 no-underline focus-ring tappable",
+        "transition-transform duration-400 ease-spring motion-reduce:transition-none hover:opacity-90 active:scale-[.97]",
+        className,
+      )}>
       <span
         className="grid h-[23px] w-[23px] flex-none place-items-center rounded-avatar-sm bg-ember text-on-ember"
         style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,.3), 0 1px 3px rgba(120,40,25,.35)" }}

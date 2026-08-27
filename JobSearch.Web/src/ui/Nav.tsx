@@ -31,7 +31,7 @@ export function NavItem({ href, active = false, children, className }: NavItemPr
       aria-current={active ? "page" : undefined}
       className={cx(
         "rounded-ctl px-2.5 py-[5px] text-control no-underline focus-ring tappable",
-        "transition-[background-color,color] duration-300 ease-spring motion-reduce:transition-none",
+        "transition-[background-color,color,transform] duration-300 ease-spring motion-reduce:transition-none active:scale-[.96]",
         active ? "hairline-ring bg-shell font-bold text-ink" : "font-[550] text-muted hover:bg-shell hover:text-ink",
         className,
       )}

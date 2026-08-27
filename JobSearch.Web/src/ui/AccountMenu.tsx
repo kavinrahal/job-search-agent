@@ -105,7 +105,7 @@ export function AccountMenu({ name, email, items, className }: AccountMenuProps)
             {items.map((item, index) => {
               const classes = cx(
                 "flex w-full items-center gap-2.5 px-3 py-[7px] text-left text-control text-ink-2 no-underline focus-ring tappable",
-                "transition-colors duration-300 ease-spring motion-reduce:transition-none hover:bg-shell hover:text-ink",
+                "transition-[background-color,color,transform] duration-300 ease-spring motion-reduce:transition-none hover:bg-shell hover:text-ink active:scale-[.98]",
                 item.separated && "mt-1 hairline-t",
               );
               const content = (
