@@ -1,4 +1,14 @@
-import { fetchMe, logout, cancelAccount, upgradeToTier2, inviteToTier2 } from "../api";
+import {
+  fetchMe,
+  logout,
+  cancelAccount,
+  upgradeToTier2,
+  inviteToTier2,
+  register,
+  login,
+  requestPasswordReset,
+  resetPassword,
+} from "../api";
 import { useAsyncData, useAsyncAction } from "./useAsync";
 
 export function useMe() {
@@ -26,4 +36,24 @@ export function useUpgradeToTier2() {
 
 export function useInviteToTier2() {
   return useAsyncAction(inviteToTier2);
+}
+
+// --- Email/password auth, the second login path alongside useLoginUrl's Google redirect above.
+// Named usePasswordLogin rather than useLogin so it reads as distinct from useLoginUrl at every
+// call site — the two are peers, and neither is "the" login.
+
+export function useRegister() {
+  return useAsyncAction(register);
+}
+
+export function usePasswordLogin() {
+  return useAsyncAction(login);
+}
+
+export function useRequestPasswordReset() {
+  return useAsyncAction(requestPasswordReset);
+}
+
+export function useResetPassword() {
+  return useAsyncAction(resetPassword);
 }
