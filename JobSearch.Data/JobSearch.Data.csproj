@@ -10,6 +10,10 @@
     <PackageReference Include="Anthropic" Version="12.29.0" />
     <PackageReference Include="Google.Apis.Gmail.v1" Version="1.74.0.4162" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="9.0.5" />
+    <!-- Just the password hasher (PasswordHasher<T>), not full ASP.NET Core Identity's
+         membership/UserManager/SignInManager — this app's custom User entity and cookie-auth
+         setup (Program.cs) doesn't use or need that. -->
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="9.0.5" />
     <PackageReference Include="Sentry" Version="6.9.0" />
     <!-- Direct pin: Microsoft.AspNetCore.DataProtection.EntityFrameworkCore 9.0.5 pulls in
          System.Security.Cryptography.Xml 9.0.5, which has known high-severity advisories

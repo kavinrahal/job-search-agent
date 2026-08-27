@@ -37,6 +37,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
     public DbSet<BetaInvite> BetaInvites { get; set; }
     public DbSet<CrashTriageDispatch> CrashTriageDispatches { get; set; }
+    public DbSet<UserVerificationToken> UserVerificationTokens { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -89,6 +90,15 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<BetaInvite>()
             .HasIndex(i => i.Email).IsUnique();
+
+        // No query filter — same reasoning as UserSecret: always looked up by an exact hash
+        // (pre-auth, so there's no CurrentUserId to filter by yet) or an exact UserId, never
+        // a broad list query.
+        modelBuilder.Entity<UserVerificationToken>(e =>
+        {
+            e.HasIndex(t => t.TokenHash).IsUnique();
+            e.HasIndex(t => t.UserId);
+        });
 
         modelBuilder.Entity<UserProfile>(e =>
         {

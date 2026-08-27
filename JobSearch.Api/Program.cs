@@ -169,6 +169,14 @@ builder.Services.AddAuthentication(o =>
             return;
         }
 
+        // Google already proves email ownership, so a successful Google login is itself a
+        // verification — this is what lets a later email/password registration against the
+        // same address skip re-verification (see PasswordAuthService.RegisterAsync's
+        // account-linking safety net). Purely additive: doesn't change anything else about
+        // this Google login itself, and never overwrites an already-set value. Persisted by
+        // the SaveChangesAsync below, same as the AnalyticsEvent add right after it.
+        user.EmailVerifiedAt ??= DateTime.UtcNow;
+
         // Every user needs a UserProfile row to generate against, even a blank one — this is
         // a no-op for the owner (already seeded with real content by the startup bootstrap
         // below) and creates an empty one for a real new user's first-ever login, which the
@@ -329,6 +337,17 @@ builder.Services.AddRateLimiter(o =>
     o.AddPolicy("generation", ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
             ctx.User.FindFirstValue(UserIdClaimType) ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+
+    // Password register/login/forgot-password: no authenticated user yet to partition by
+    // (unlike "generation" above), so partitioned per IP instead — the thing worth limiting
+    // is one attacker guessing passwords or spamming registrations, not one legitimate user
+    // mistyping a password a couple of times. Same fixed-window shape as "webhook", just
+    // partitioned. Not applied to verify-email/reset-password — those are already gated by a
+    // hard-to-guess, single-use token, so the token itself is the rate limit that matters.
+    o.AddPolicy("auth", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
 });
 
@@ -492,6 +511,157 @@ app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>
     await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Ok();
 }).RequireAuthorization();
+
+// ---------------------------------------------------------------------------
+// Password auth — second, fully independent login path alongside Google OAuth above.
+// Nothing here changes Google's own endpoints/handlers; the only touchpoint is
+// OnCreatingTicket now also stamping User.EmailVerifiedAt (see comment there), which is what
+// lets a password registration against an email that already logged in via Google skip
+// re-verification (the account-linking safety net — see PasswordAuthService).
+// ---------------------------------------------------------------------------
+
+// Builds the exact same UserIdClaimType claim Google's OnCreatingTicket stamps onto its own
+// identity (see const above), so every downstream CurrentUserId(ctx, UserIdClaimType) call —
+// which is how every protected endpoint, including Sources/Gmail-connect, resolves the
+// caller — behaves identically regardless of which path signed the user in.
+static Task SignInPasswordUserAsync(HttpContext ctx, User user)
+{
+    var identity = new ClaimsIdentity(CookieAuthenticationDefaults.AuthenticationScheme);
+    identity.AddClaim(new Claim(UserIdClaimType, user.Id.ToString(CultureInfo.InvariantCulture)));
+    return ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+}
+
+// POST /api/v1/auth/register — { email, password }. Gated by the same beta-invite rules
+// Google login uses (BetaAccessService) and resolves through the same GetOrCreateAsync
+// account lookup, so registering with an email that already has a Google-created row attaches
+// to that row instead of creating a duplicate. A brand-new (or previously Google-unverified)
+// account gets emailed a verification link and is NOT signed in yet; an email that already
+// proved ownership via a prior Google login is signed in immediately.
+app.MapPost("/api/v1/auth/register", async (HttpContext ctx, RegisterRequest body, AppDbContext db) =>
+{
+    var result = await PasswordAuthService.RegisterAsync(db, body.Email, body.Password, ownerEmail);
+
+    switch (result.Outcome)
+    {
+        case PasswordAuthService.RegisterOutcome.PasswordInvalid:
+            return Results.BadRequest(new { errors = result.PasswordErrors });
+
+        case PasswordAuthService.RegisterOutcome.NotInvited:
+            return Results.BadRequest(new { error = "This email hasn't been invited yet." });
+
+        case PasswordAuthService.RegisterOutcome.AlreadyHasPassword:
+            return Results.BadRequest(new { error = "This email already has a password. Log in, or use forgot password." });
+
+        case PasswordAuthService.RegisterOutcome.SignedIn:
+            await SignInPasswordUserAsync(ctx, result.User!);
+            return Results.Ok(new { status = "signed_in" });
+
+        default: // RegisterOutcome.VerificationSent — the normal case for a genuinely new user
+            var apiBase = $"{ctx.Request.Scheme}://{ctx.Request.Host}";
+            var verifyLink = $"{apiBase}/api/v1/auth/verify-email?token={result.VerificationToken}";
+            var sender = ctx.RequestServices.GetService<SendGridEmailService>();
+            if (sender is not null)
+            {
+                try
+                {
+                    await sender.SendAsync(result.User!.Email, "Verify your email for Work Santa",
+                        $"Click this link to verify your email and activate your account: {verifyLink}\n\n" +
+                        "This link expires in 1 hour.");
+                }
+                catch (Exception ex)
+                {
+                    await Console.Error.WriteLineAsync($"Failed to send verification email to {result.User!.Email}: {ex}");
+                }
+            }
+            return Results.Ok(new { status = "verification_sent" });
+    }
+}).RequireRateLimiting("auth").AllowAnonymous();
+
+// GET /api/v1/auth/verify-email?token=... — consumes the token, marks the email verified,
+// signs the user in, and redirects to the frontend root, same redirect-based pattern the
+// Google OAuth callback/failure handlers above already use — landing on "/" with a valid
+// session cookie already works today via useMe(), so no new frontend routing is needed.
+app.MapGet("/api/v1/auth/verify-email", async (HttpContext ctx, AppDbContext db, string token) =>
+{
+    var redirectBase = (frontendUrl ?? "http://localhost:5173").TrimEnd('/');
+
+    var user = await PasswordAuthService.VerifyEmailAsync(db, token);
+    if (user is null)
+        return Results.Redirect($"{redirectBase}/?authError=invalid_token");
+
+    await SignInPasswordUserAsync(ctx, user);
+    return Results.Redirect(redirectBase);
+}).AllowAnonymous();
+
+// POST /api/v1/auth/login — { email, password }. Same generic "invalid email or password" for
+// every failure reason (unknown email, Google-only account with no password, wrong password)
+// — deliberately not distinguishing which, to avoid leaking which emails have accounts.
+app.MapPost("/api/v1/auth/login", async (HttpContext ctx, LoginRequest body, AppDbContext db) =>
+{
+    var result = await PasswordAuthService.LoginAsync(db, body.Email, body.Password);
+
+    switch (result.Outcome)
+    {
+        case PasswordAuthService.LoginOutcome.InvalidCredentials:
+            return Results.BadRequest(new { error = "Invalid email or password." });
+
+        case PasswordAuthService.LoginOutcome.NotVerified:
+            return Results.BadRequest(new { error = "Verify your email first — check your inbox for the link." });
+
+        default:
+            await SignInPasswordUserAsync(ctx, result.User!);
+            return Results.Ok();
+    }
+}).RequireRateLimiting("auth").AllowAnonymous();
+
+// POST /api/v1/auth/forgot-password — { email }. Always the same generic response regardless
+// of whether the email exists or has a password set — prevents enumeration. Only sends an
+// email when there's actually a password-holding account to reset.
+app.MapPost("/api/v1/auth/forgot-password", async (HttpContext ctx, ForgotPasswordRequest body, AppDbContext db) =>
+{
+    var (user, token) = await PasswordAuthService.RequestPasswordResetAsync(db, body.Email);
+
+    if (user is not null && token is not null)
+    {
+        var redirectBase = (frontendUrl ?? "http://localhost:5173").TrimEnd('/');
+        var resetLink = $"{redirectBase}/?resetToken={token}";
+        var sender = ctx.RequestServices.GetService<SendGridEmailService>();
+        if (sender is not null)
+        {
+            try
+            {
+                await sender.SendAsync(user.Email, "Reset your Work Santa password",
+                    $"Click this link to set a new password: {resetLink}\n\nThis link expires in 1 hour. " +
+                    "If you didn't request this, you can ignore this email.");
+            }
+            catch (Exception ex)
+            {
+                await Console.Error.WriteLineAsync($"Failed to send password reset email to {user.Email}: {ex}");
+            }
+        }
+    }
+
+    return Results.Ok(new { message = "If that email has an account, we've sent a reset link." });
+}).RequireRateLimiting("auth").AllowAnonymous();
+
+// POST /api/v1/auth/reset-password — { token, newPassword }.
+app.MapPost("/api/v1/auth/reset-password", async (HttpContext ctx, ResetPasswordRequest body, AppDbContext db) =>
+{
+    var result = await PasswordAuthService.ResetPasswordAsync(db, body.Token, body.NewPassword);
+
+    switch (result.Outcome)
+    {
+        case PasswordAuthService.ResetPasswordOutcome.PasswordInvalid:
+            return Results.BadRequest(new { errors = result.PasswordErrors });
+
+        case PasswordAuthService.ResetPasswordOutcome.InvalidToken:
+            return Results.BadRequest(new { error = "This reset link is invalid or has expired." });
+
+        default:
+            await SignInPasswordUserAsync(ctx, result.User!);
+            return Results.Ok();
+    }
+}).AllowAnonymous();
 
 // ---------------------------------------------------------------------------
 // Protected data endpoints
