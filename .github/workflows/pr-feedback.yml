@@ -82,7 +82,7 @@ jobs:
           git checkout "$BRANCH"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         if: steps.pr.outputs.skip != 'true'
         with:
           dotnet-version: "10.0.x"
