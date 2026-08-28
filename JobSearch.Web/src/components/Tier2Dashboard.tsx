@@ -53,15 +53,12 @@ const statusBadge = (status: string): BadgeVariant => STATUS_BADGE[status] ?? "w
 // eslint-disable-next-line security/detect-object-injection
 const statusTick = (status: string): StatusTickState => STATUS_TICK[status] ?? "done";
 
-// The seven-point shape behind each sparkline. There's no history endpoint to plot a real trend
-// against, so this borrows the approved prototype's own mock shape (a gentle climb ending on the
-// current reading) rather than inventing a different placeholder pattern — see Sparkline's own
-// doc: the point is only ever "where does today sit against its recent history", not the
-// individual points, so a shape scaled off today's real number reads the same as real history
-// would.
-const TREND_SHAPE = [0.28, 0.5, 0.4, 0.68, 0.56, 0.86, 1];
-function mockTrend(value: number): number[] {
-  return TREND_SHAPE.map(f => Math.max(1, Math.round(value * f)));
+// Sparkline's own doc says to omit `trend` rather than pass a flat line when there is no history
+// worth showing — an empty array (e.g. summary hasn't loaded yet) hits that case. A real but
+// all-zero 7-day window (brand-new account, nothing sent yet) is fine to pass through as-is:
+// Sparkline already floors each bar to a visible baseline tick instead of vanishing.
+function trendOrUndefined(values: number[]): number[] | undefined {
+  return values.length > 0 ? values : undefined;
 }
 
 // The dark overnight panel + metrics bezel + "Worth a look"/"Needs a reply" ledgers, matching
@@ -87,6 +84,10 @@ function TodayBento() {
   const repliedCount = total - (byStatus.Applied ?? 0) - (byStatus.Acknowledged ?? 0);
   const replyRate = total > 0 ? Math.round((Math.max(0, repliedCount) / total) * 100) : 0;
 
+  // Real 7-day cumulative trend from the backend (GET /api/v1/summary), oldest first — replaces
+  // the old mockTrend() fixed climbing shape.
+  const history = summary?.history ?? [];
+
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
       <FeaturePanel
@@ -103,10 +104,10 @@ function TodayBento() {
       <Surface elevation="raised" padding="none">
         <div className="grid grid-cols-2">
           <div className="px-3.5 py-3">
-            <StatBlock value={total} label="Applications sent" trend={mockTrend(total)} />
+            <StatBlock value={total} label="Applications sent" trend={trendOrUndefined(history.map(h => h.applicationsSent))} />
           </div>
           <div className="hairline-l px-3.5 py-3">
-            <StatBlock value={replyRate} suffix="%" label="Reply rate" trend={mockTrend(replyRate)} />
+            <StatBlock value={replyRate} suffix="%" label="Reply rate" trend={trendOrUndefined(history.map(h => h.replyRate))} />
           </div>
         </div>
       </Surface>
@@ -126,7 +127,7 @@ function TodayBento() {
             {worthALook.slice(0, 4).map(posting => (
               <LedgerRow
                 key={posting.id}
-                href="/discover"
+                href={`/discover?posting=${posting.id}`}
                 // Still "live" here even though the posting has already been evaluated — Today
                 // is surfacing it as fresh and worth acting on, unlike the Discover list itself
                 // (out of this page's scope) where the same posting reads as "done".

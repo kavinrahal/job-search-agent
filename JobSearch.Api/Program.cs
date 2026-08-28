@@ -756,13 +756,65 @@ api.MapGet("/summary", async (HttpContext ctx, AppDbContext db) =>
         .Select(g => new { Status = g.Key, Count = g.Count() })
         .ToListAsync();
 
+    int total = await ownApplications.CountAsync();
+
+    // 7-day cumulative history for the Today dashboard's stat-block sparklines (real trend, not
+    // the old fixed mock shape). Per-user data volumes here are small (a personal job-tracking
+    // app, not a scale product), so this loads applications with their events eagerly and does
+    // the day-by-day computation in plain C# rather than fighting SQL for it.
+    var appsWithEvents = await ownApplications
+        .Include(a => a.Events)
+        .ToListAsync();
+
+    var today = DateTime.UtcNow.Date;
+    var history = new List<object>();
+    for (int daysAgo = 6; daysAgo >= 0; daysAgo--)
+    {
+        var day = today.AddDays(-daysAgo);
+        var existingByDay = appsWithEvents.Where(a => a.AppliedAt.Date <= day).ToList();
+        int applicationsSentThatDay = existingByDay.Count;
+
+        int repliedThatDay = 0;
+        foreach (var app in existingByDay)
+        {
+            // Status as of `day`: the most recent event with OccurredAt.Date <= day and a
+            // non-null ToStatus. Falls back to Applied if none exists yet — every application's
+            // creation path (ApplicationTracker.FindOrCreateAsync and POST /applications) always
+            // logs a creation event with ToStatus=Applied at the same moment as AppliedAt, so
+            // this fallback is only theoretical, never actually exercised in practice.
+            string statusAsOfDay = app.Events
+                .Where(e => e.OccurredAt.Date <= day && e.ToStatus != null)
+                .OrderByDescending(e => e.OccurredAt)
+                .ThenByDescending(e => e.Id)
+                .Select(e => e.ToStatus!)
+                .FirstOrDefault() ?? ApplicationStatus.Applied;
+
+            // Same "replied" definition the KPIs above use: anything past the initial
+            // "sent, no response yet" stages counts as a reply.
+            if (statusAsOfDay != ApplicationStatus.Applied && statusAsOfDay != ApplicationStatus.Acknowledged)
+                repliedThatDay++;
+        }
+
+        int replyRateThatDay = applicationsSentThatDay > 0
+            ? (int)Math.Round(repliedThatDay / (double)applicationsSentThatDay * 100, MidpointRounding.AwayFromZero)
+            : 0;
+
+        history.Add(new
+        {
+            date = day.ToString("yyyy-MM-dd"),
+            applicationsSent = applicationsSentThatDay,
+            replyRate = replyRateThatDay,
+        });
+    }
+
     return Results.Ok(new
     {
         applications = new
         {
-            total = await ownApplications.CountAsync(),
+            total,
             byStatus = appsByStatus.ToDictionary(x => x.Status, x => x.Count),
         },
+        history,
     });
 });
 

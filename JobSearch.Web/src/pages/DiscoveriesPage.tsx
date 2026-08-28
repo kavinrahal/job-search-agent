@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useDiscoveries } from "../hooks/useDashboardData";
 import type { DiscoveredPosting } from "../types";
 import { GenerationDrawer, type GenerationKind } from "../components/GenerationDrawer";
@@ -12,6 +13,7 @@ import {
   SkeletonList,
   Surface,
   SearchIcon,
+  cx,
   type BadgeVariant,
 } from "../ui";
 
@@ -34,6 +36,12 @@ const REC_TO_TIER: Record<string, Exclude<Tier, "all">> = {
 function tierOf(posting: DiscoveredPosting): Exclude<Tier, "all"> | null {
   if (!posting.recommendation) return null;
   return REC_TO_TIER[posting.recommendation] ?? null;
+}
+
+// Stable per-posting DOM id, so a Today "Worth a look" link (?posting=<id>) can scroll straight
+// to the right card once it's loaded here.
+function discoveryDomId(postingId: number): string {
+  return `discovery-${postingId}`;
 }
 
 // A real-data stand-in for the prototype's "Checked 6:12am today" — the most recent
@@ -60,14 +68,22 @@ function freshnessLabel(postings: DiscoveredPosting[]): string | null {
 // Discovery card — company/role/badge, a single "why" well, one button. Deliberately minimal:
 // no source badge, no key-signals table, no orange-flags expander, no view-posting/more row.
 // ---------------------------------------------------------------------------
-function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
+function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; highlighted?: boolean }) {
   const [generating, setGenerating] = useState<GenerationKind | null>(null);
   const tier = tierOf(posting);
   const heldBack = tier === "weak" || tier === null;
   const strong = tier === "strong";
 
   return (
-    <Surface padding="md" className="flex h-full flex-col gap-3.5">
+    <Surface
+      padding="md"
+      className={cx(
+        "flex h-full flex-col gap-3.5 transition-shadow duration-500",
+        // Brief "you're here" flash for a card linked to from Today's "Worth a look" — cleared
+        // by DiscoveriesPage a couple of seconds after landing, not a permanent state.
+        highlighted && "ring-2 ring-ember ring-offset-2 ring-offset-shell",
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="m-0 truncate text-body font-[650] tracking-[-.018em] text-ink">
@@ -111,6 +127,20 @@ function DiscoveryCard({ posting }: { posting: DiscoveredPosting }) {
 // ---------------------------------------------------------------------------
 export function DiscoveriesPage() {
   const [activeTab, setActiveTab] = useState<Tier>("all");
+  const [searchParams] = useSearchParams();
+  // Set once on mount, from the ?posting= a Today "Worth a look" row links in with. Not
+  // re-derived on every searchParams change — the deep-link only needs to act once per visit.
+  const [linkedPostingId] = useState<number | null>(() => {
+    const raw = searchParams.get("posting");
+    const parsed = raw !== null ? Number(raw) : NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  });
+  // Whether the deep-link tab pick below has run yet — guards it to exactly once per visit
+  // rather than an effect, since it only needs to react to `loading` finishing, not resync on
+  // every render (see the comment on that block for why this is done during render, not in
+  // useEffect).
+  const [deepLinkResolved, setDeepLinkResolved] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
 
   // Fetched once, unfiltered. The backend already excludes "discard" whenever no recommendation
   // filter is sent, so every item here is strong/good/weak — safe to slice by tier client-side
@@ -128,6 +158,37 @@ export function DiscoveriesPage() {
 
   const visible = activeTab === "all" ? postings : postings.filter(p => tierOf(p) === activeTab);
   const freshness = freshnessLabel(postings);
+
+  // Deep-link from Today's "Worth a look": once discoveries have loaded, pick the tab that
+  // actually shows the linked posting (a null/discard tier isn't shown by any single-tier tab,
+  // so this falls back to "all"). Adjusted directly during render rather than in a useEffect —
+  // React's documented pattern for "adjust state once new data arrives" — and gated by
+  // deepLinkResolved so it only ever fires once, not on every render. Silently resolves with no
+  // tab change if the id doesn't match anything currently in the list (e.g. already discarded).
+  if (!loading && !deepLinkResolved && linkedPostingId !== null) {
+    const target = postings.find(p => p.id === linkedPostingId);
+    if (target) {
+      const desiredTab: Tier = tierOf(target) ?? "all";
+      if (activeTab !== desiredTab) setActiveTab(desiredTab);
+    }
+    setDeepLinkResolved(true);
+  }
+
+  // Once the deep-link's tab pick above has landed, the linked card is actually in the DOM —
+  // scroll to it and briefly highlight it. No-ops if the id never matched anything. This is a
+  // genuine "synchronize with an external system" effect (DOM scroll position, a timer), not
+  // state derivable during render like the tab pick above — same legitimate case
+  // useDebouncedPreview's own effect documents.
+  useEffect(() => {
+    if (!deepLinkResolved || linkedPostingId === null) return;
+    const el = document.getElementById(discoveryDomId(linkedPostingId));
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHighlightedId(linkedPostingId);
+    const timer = setTimeout(() => setHighlightedId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [deepLinkResolved, activeTab, linkedPostingId]);
 
   return (
     <div className="space-y-3">
@@ -167,7 +228,11 @@ export function DiscoveriesPage() {
         </Surface>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map(p => <DiscoveryCard key={p.id} posting={p} />)}
+          {visible.map(p => (
+            <div key={p.id} id={discoveryDomId(p.id)}>
+              <DiscoveryCard posting={p} highlighted={p.id === highlightedId} />
+            </div>
+          ))}
         </div>
       )}
     </div>
