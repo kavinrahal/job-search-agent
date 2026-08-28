@@ -45,6 +45,7 @@ html.dark {
 }
 
 body {
+  font-family: var(--font-body);
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
@@ -55,6 +56,12 @@ body {
    same regardless of theme, same principle as ResumePdfViewer's canvas staying white. Sizing
    loosely tracks JobSearch.Api/Services/PdfRenderer.cs's own font sizes/rule colors so the
    preview reads like the real document, not just "some rendered markdown". */
+.resume-preview-document {
+  /* Stays on the system stack deliberately, not var(--font-body) — this represents the real
+     PDF output (see PdfRenderer.cs), which doesn't use the app's UI typeface either. */
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
 .resume-preview-document h1 {
   font-size: 1.375rem;
   font-weight: 700;

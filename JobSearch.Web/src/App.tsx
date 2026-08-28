@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
 import { DiscoveriesPage } from "./pages/DiscoveriesPage";
@@ -89,8 +90,46 @@ export default function App() {
   const { data: me, loading } = useMe();
 
   if (loading) return null;
-  if (!me) return <LandingPage />;
 
+  // BrowserRouter now wraps both states: the logged-out marketing/auth routes and the
+  // authenticated app. It used to mount only once a session existed, which is why the old
+  // landing page had to read its own query params off window.location by hand — there was no
+  // router to give /signin, /register or the reset link real routes.
+  return (
+    <BrowserRouter>{me ? <AuthedApp me={me} /> : <LoggedOutRoutes />}</BrowserRouter>
+  );
+}
+
+// The logged-out surface: the marketing landing page at /, and the auth screens at /signin and
+// /register. The API redirects a failed Google/activation attempt and the emailed reset link back
+// to / with a query param (see Program.cs) rather than to a dedicated path, so / reads those and
+// hands off to the auth screen when either is present.
+function LoggedOutRoutes() {
+  const params = new URLSearchParams(useLocation().search);
+  const resetToken = params.get("resetToken");
+  const authError = params.get("authError");
+
+  return (
+    <Routes>
+      <Route path="/signin" element={<AuthPage initialTab="signin" />} />
+      <Route path="/register" element={<AuthPage initialTab="register" />} />
+      <Route
+        path="/"
+        element={
+          resetToken || authError ? (
+            <AuthPage initialTab="signin" resetToken={resetToken} authError={authError} />
+          ) : (
+            <LandingPage />
+          )
+        }
+      />
+      {/* Any other path while logged out lands on the marketing page rather than a blank router. */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function AuthedApp({ me }: { me: Me }) {
   // Hidden for the full forced-step onboarding flow (CV -> Criteria -> Sources), not just the
   // very first page — a nav bar full of links to pages the user hasn't set up yet (and can't
   // usefully visit, since StepRedirect just bounces them back) is noise during a guided,
@@ -98,18 +137,14 @@ export default function App() {
   // flags come from a fresh /auth/me read after each step's save.
   const isOnboarding = me.needsOnboarding || me.needsCriteria || me.needsSourceSelection;
 
-  return (
-    <BrowserRouter>
-      {isOnboarding ? (
-        <div className="min-h-screen bg-bg text-ink">
-          <main className="px-4 py-8 sm:px-6">
-            <PageBody me={me} />
-          </main>
-        </div>
-      ) : (
-        <AuthedShell me={me} />
-      )}
-    </BrowserRouter>
+  return isOnboarding ? (
+    <div className="min-h-screen bg-bg text-ink">
+      <main className="px-4 py-8 sm:px-6">
+        <PageBody me={me} />
+      </main>
+    </div>
+  ) : (
+    <AuthedShell me={me} />
   );
 }
 
