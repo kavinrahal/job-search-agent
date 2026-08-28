@@ -41,7 +41,7 @@ import { useMe, useLogout } from "./hooks/useAuth";
 // four by the design (see ui/Nav.tsx's own note on why). Discover/Applications are Tier 2-only,
 // the same gate the backend enforces on those endpoints (RequireTier2Async).
 const PRIMARY_LINKS = [
-  { to: "/",             label: "Dashboard",    Icon: ActivityIcon                  },
+  { to: "/",             label: "Today",        Icon: ActivityIcon                  },
   { to: "/discover",     label: "Discover",     Icon: SearchIcon,    tier2Only: true },
   { to: "/generate",     label: "Generate",     Icon: DocumentIcon                  },
   { to: "/applications", label: "Applications", Icon: ChecklistIcon, tier2Only: true },
