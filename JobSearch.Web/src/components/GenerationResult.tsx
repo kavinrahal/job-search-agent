@@ -57,7 +57,7 @@ export function RevisionBox({ threadId, placeholder, onRevised }: {
           onChange={e => setMessage(e.target.value)}
           placeholder={placeholder}
         />
-        <Button variant="subtle" onClick={handleSubmit} disabled={message.trim().length === 0 || loading} loading={loading}>
+        <Button variant="ghost" size="sm" onClick={handleSubmit} disabled={message.trim().length === 0 || loading} loading={loading}>
           {loading ? "Sending…" : "Send"}
         </Button>
       </div>
@@ -84,7 +84,7 @@ export function CvResult({ result, onRevised }: {
     <>
       <AccuracyWarningBanner warnings={result.accuracyWarnings} />
       <ResumePdfViewer source={`${threadPdfUrl(result.threadId)}?r=${revision}`} />
-      <Button href={threadPdfUrl(result.threadId)} variant="subtle" className="mt-3">
+      <Button href={threadPdfUrl(result.threadId)} variant="ghost" size="sm" className="mt-3">
         Download PDF
       </Button>
       <RevisionBox
@@ -124,10 +124,10 @@ export function LetterResult({ result, onRevised }: {
       <AccuracyWarningBanner warnings={result.accuracyWarnings} />
       <pre className="whitespace-pre-wrap font-sans text-body text-ink-2">{result.text}</pre>
       <div className="mt-3 flex gap-2">
-        <Button href={threadPdfUrl(result.threadId)} variant="subtle">
+        <Button href={threadPdfUrl(result.threadId)} variant="ghost" size="sm">
           Download PDF
         </Button>
-        <Button href={threadDocxUrl(result.threadId)} variant="subtle">
+        <Button href={threadDocxUrl(result.threadId)} variant="ghost" size="sm">
           Download Word
         </Button>
       </div>

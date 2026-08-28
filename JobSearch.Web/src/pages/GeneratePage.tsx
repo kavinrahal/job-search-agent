@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { useGenerateCv, useGenerateLetter, useAskQuestion, useSearchPostingCandidates } from "../hooks/useGeneration";
+import { useGenerateCv, useGenerateLetter, useSearchPostingCandidates } from "../hooks/useGeneration";
 import type { GenerationResult, PostingCandidate } from "../types";
 import { GeneratingIndicator } from "../components/GeneratingIndicator";
-import { AccuracyWarningBanner, CvResult, LetterResult, RevisionBox } from "../components/GenerationResult";
-import { Surface, Well, Button, Callout, Input, Textarea, IconButton, CloseIcon, cx } from "../ui";
+import { CvResult, LetterResult } from "../components/GenerationResult";
+import { Surface, Well, Button, Callout, Input, Textarea, IconButton, CloseIcon, DocumentPage, cx } from "../ui";
 
 type Mode = "url" | "text";
 
@@ -39,22 +39,19 @@ export function GeneratePage() {
   const [postingText, setPostingText] = useState("");
   const [postingTitle, setPostingTitle] = useState("");
   const [postingCompany, setPostingCompany] = useState("");
-  const [question, setQuestion] = useState("");
   const [cvResult, setCvResult] = useState<GenerationResult | null>(null);
   const [letterResult, setLetterResult] = useState<GenerationResult | null>(null);
-  const [answerResult, setAnswerResult] = useState<GenerationResult | null>(null);
   const [candidates, setCandidates] = useState<PostingCandidate[] | null>(null);
 
   const generateCv = useGenerateCv();
   const generateLetter = useGenerateLetter();
-  const askQuestion = useAskQuestion();
   const searchCandidates = useSearchPostingCandidates();
 
   const postingInput = mode === "url"
     ? { postingUrl, postingTitle: postingTitle || undefined, postingCompany: postingCompany || undefined }
     : { postingText };
   const canSubmitPosting = mode === "url" ? postingUrl.trim().length > 0 : postingText.trim().length > 0;
-  const error = generateCv.error ?? generateLetter.error ?? askQuestion.error ?? searchCandidates.error;
+  const error = generateCv.error ?? generateLetter.error ?? searchCandidates.error;
   // A URL fetch failure is the only case title/company help with — reveal the fields once
   // that's happened rather than cluttering the common case where the link just works.
   const showHintFields = mode === "url" && (error !== null || postingTitle.length > 0);
@@ -66,7 +63,7 @@ export function GeneratePage() {
   // Uses the candidate's own PostingText (built from the search result itself) rather than
   // re-fetching candidate.url — a site that blocked the original link will just as readily
   // block this URL too, even though it's the same listing. Switching to text mode makes that
-  // switch visible rather than silently sending different content than the "Paste URL" tab
+  // switch visible rather than silently sending different content than the "Paste link" tab
   // still shows.
   function handlePickCandidate(candidate: PostingCandidate) {
     setPostingText(candidate.postingText);
@@ -82,173 +79,164 @@ export function GeneratePage() {
     setLetterResult(await generateLetter.execute(postingInput));
   }
 
-  async function handleAskQuestion() {
-    setAnswerResult(await askQuestion.execute({
-      question,
-      postingUrl: mode === "url" ? postingUrl : undefined,
-      postingTitle: mode === "url" ? (postingTitle || undefined) : undefined,
-      postingCompany: mode === "url" ? (postingCompany || undefined) : undefined,
-    }));
-  }
-
   return (
     <div className="space-y-6">
       <div>
         <h2 className="m-0 text-lede font-bold text-ink">Generate</h2>
-        <p className="m-0 text-caption text-faint">Paste a posting, get a tailored CV, cover letter, or answer back in seconds.</p>
+        <p className="m-0 text-caption text-faint">Paste a posting, get a tailored CV or cover letter back in seconds.</p>
       </div>
 
-      <Surface elevation="raised">
-        <div className="surface-sunk mb-4 inline-flex gap-px rounded-ctl p-[3px]">
-          <ModeTab active={mode === "url"} onClick={() => setMode("url")}>Paste URL</ModeTab>
-          <ModeTab active={mode === "text"} onClick={() => setMode("text")}>Paste description</ModeTab>
-        </div>
-
-        {mode === "url" ? (
-          <div className="space-y-2">
-            <div className="relative">
-              <Input
-                label="Job posting URL"
-                value={postingUrl}
-                onChange={e => setPostingUrl(e.target.value)}
-                placeholder="https://…"
-                className={postingUrl.length > 0 ? "pr-9" : undefined}
-              />
-              {postingUrl.length > 0 && (
-                <IconButton
-                  aria-label="Clear URL"
-                  size="sm"
-                  onClick={() => setPostingUrl("")}
-                  className="absolute top-[26px] right-1.5"
-                >
-                  <CloseIcon className="h-3.5 w-3.5" />
-                </IconButton>
-              )}
+      {/* Form left, live A4 preview right — matching the approved prototype's layout (see
+          ResumeBuilderPage's own form-rail + sticky-preview split for the same pattern). Stacks
+          to a single column below lg, where the preview simply follows the form in source order
+          rather than needing a separate mobile toggle (there is nothing to switch away from). */}
+      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[.9fr_1.1fr]">
+        <div className="space-y-3.5">
+          <Surface elevation="raised">
+            <div className="surface-sunk mb-4 inline-flex gap-px rounded-ctl p-[3px]">
+              <ModeTab active={mode === "url"} onClick={() => setMode("url")}>Paste link</ModeTab>
+              <ModeTab active={mode === "text"} onClick={() => setMode("text")}>Paste description</ModeTab>
             </div>
-            {showHintFields && (
-              <Well className="space-y-2 p-3">
-                <p className="m-0 text-caption text-muted">Couldn't fetch that link directly. Search for it instead.</p>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                  <Input
-                    label="Job title"
-                    className="flex-1"
-                    value={postingTitle}
-                    onChange={e => { setPostingTitle(e.target.value); setCandidates(null); }}
-                    placeholder="Required"
-                  />
-                  <Input
-                    label="Company"
-                    className="flex-1"
-                    value={postingCompany}
-                    onChange={e => { setPostingCompany(e.target.value); setCandidates(null); }}
-                    placeholder="Optional"
-                  />
-                  <Button
-                    variant="subtle"
-                    onClick={handleSearchCandidates}
-                    disabled={postingTitle.trim().length === 0 || searchCandidates.loading}
-                    className="shrink-0"
-                  >
-                    {searchCandidates.loading ? "Searching…" : "Search Jora/Adzuna"}
-                  </Button>
-                </div>
-              </Well>
-            )}
 
-            {candidates && (
-              candidates.length === 0 ? (
-                <div className="space-y-1.5">
-                  <p className="m-0 text-caption text-faint">No results for that search.</p>
-                  <PasteInsteadLink label="Paste the job description instead →" onClick={() => setMode("text")} />
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <p className="m-0 text-caption text-faint">Pick the one you meant.</p>
-                  {candidates.map(c => (
-                    <button
-                      key={c.url}
-                      onClick={() => handlePickCandidate(c)}
-                      className="hairline-ring flex w-full items-center justify-between rounded-ctl px-3 py-2 text-left text-body tappable transition-colors duration-300 hover:bg-shell"
+            {mode === "url" ? (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Input
+                    label="Job posting link"
+                    value={postingUrl}
+                    onChange={e => setPostingUrl(e.target.value)}
+                    placeholder="https://…"
+                    className={postingUrl.length > 0 ? "pr-9" : undefined}
+                  />
+                  {postingUrl.length > 0 && (
+                    <IconButton
+                      aria-label="Clear link"
+                      size="sm"
+                      onClick={() => setPostingUrl("")}
+                      className="absolute top-[26px] right-1.5"
                     >
-                      <span className="min-w-0">
-                        <span className="block truncate font-[650] text-ink">{c.title}</span>
-                        <span className="block truncate text-caption text-faint">{c.company} · {c.location}</span>
-                      </span>
-                      <span className="ml-2 shrink-0 rounded-pill bg-shell px-2 py-0.5 text-caption text-faint">{c.source}</span>
-                    </button>
-                  ))}
-                  <PasteInsteadLink label="None of these? Paste the job description instead →" onClick={() => setMode("text")} />
+                      <CloseIcon className="h-3.5 w-3.5" />
+                    </IconButton>
+                  )}
                 </div>
-              )
+                {showHintFields && (
+                  <Well className="space-y-2 p-3">
+                    <p className="m-0 text-caption text-muted">Couldn't fetch that link directly. Search for it instead.</p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                      <Input
+                        label="Job title"
+                        className="flex-1"
+                        value={postingTitle}
+                        onChange={e => { setPostingTitle(e.target.value); setCandidates(null); }}
+                        placeholder="Required"
+                      />
+                      <Input
+                        label="Company"
+                        className="flex-1"
+                        value={postingCompany}
+                        onChange={e => { setPostingCompany(e.target.value); setCandidates(null); }}
+                        placeholder="Optional"
+                      />
+                      <Button
+                        variant="subtle"
+                        onClick={handleSearchCandidates}
+                        disabled={postingTitle.trim().length === 0 || searchCandidates.loading}
+                        className="shrink-0"
+                      >
+                        {searchCandidates.loading ? "Searching…" : "Search Jora/Adzuna"}
+                      </Button>
+                    </div>
+                  </Well>
+                )}
+
+                {candidates && (
+                  candidates.length === 0 ? (
+                    <div className="space-y-1.5">
+                      <p className="m-0 text-caption text-faint">No results for that search.</p>
+                      <PasteInsteadLink label="Paste the job description instead →" onClick={() => setMode("text")} />
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <p className="m-0 text-caption text-faint">Pick the one you meant.</p>
+                      {candidates.map(c => (
+                        <button
+                          key={c.url}
+                          onClick={() => handlePickCandidate(c)}
+                          className="hairline-ring flex w-full items-center justify-between rounded-ctl px-3 py-2 text-left text-body tappable transition-colors duration-300 hover:bg-shell"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-[650] text-ink">{c.title}</span>
+                            <span className="block truncate text-caption text-faint">{c.company} · {c.location}</span>
+                          </span>
+                          <span className="ml-2 shrink-0 rounded-pill bg-shell px-2 py-0.5 text-caption text-faint">{c.source}</span>
+                        </button>
+                      ))}
+                      <PasteInsteadLink label="None of these? Paste the job description instead →" onClick={() => setMode("text")} />
+                    </div>
+                  )
+                )}
+              </div>
+            ) : (
+              <Textarea
+                label="Job description"
+                value={postingText}
+                onChange={e => setPostingText(e.target.value)}
+                placeholder="Paste the job description here…"
+                rows={8}
+              />
             )}
-          </div>
-        ) : (
-          <Textarea
-            label="Job description"
-            value={postingText}
-            onChange={e => setPostingText(e.target.value)}
-            placeholder="Paste the job description here…"
-            rows={8}
-          />
-        )}
 
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Button onClick={handleGenerateCv} disabled={!canSubmitPosting || generateCv.loading} loading={generateCv.loading}>
-            {generateCv.loading ? "Generating…" : "Generate CV"}
-          </Button>
-          <Button onClick={handleGenerateLetter} disabled={!canSubmitPosting || generateLetter.loading} loading={generateLetter.loading}>
-            {generateLetter.loading ? "Generating…" : "Generate cover letter"}
-          </Button>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button cap onClick={handleGenerateCv} disabled={!canSubmitPosting || generateCv.loading} loading={generateCv.loading}>
+                {generateCv.loading ? "Generating…" : "Generate CV"}
+              </Button>
+              <Button variant="ghost" onClick={handleGenerateLetter} disabled={!canSubmitPosting || generateLetter.loading} loading={generateLetter.loading}>
+                {generateLetter.loading ? "Generating…" : "Cover letter"}
+              </Button>
+            </div>
+            <p className="m-0 mt-2.5 text-caption text-faint">Each generation uses 1 credit.</p>
+          </Surface>
+
+          {/* Persistent, not tied to a specific result — the same proactive reminder the
+              prototype shows in the form's default state, before anything has been generated.
+              A generated CV/letter's own specific accuracy warnings still surface inline with
+              that result below (AccuracyWarningBanner), this is the general-purpose companion. */}
+          <Callout variant="warning" title="Worth checking before you send.">
+            Always double-check names, dates, and specific claims before you send anything generated.
+          </Callout>
         </div>
-      </Surface>
 
-      {generateCv.loading && <GeneratingIndicator kind="cv" />}
-      {/* Discard the previous CV the moment a regenerate starts, rather than leaving a stale,
-          fully-interactive result (download link, revision box) on screen next to the
-          "generating" indicator for the whole duration of the new call — that's what read as
-          "two cards" even though cvResult itself is always a single value that gets replaced,
-          never appended to. */}
-      {cvResult && !generateCv.loading && (
-        <Surface elevation="raised" className="animate-fade-in-up">
-          <p className="m-0 mb-2 text-body font-[650] text-ink-2">CV ready</p>
-          <CvResult result={cvResult} onRevised={setCvResult} />
-        </Surface>
-      )}
+        {/* The live CV preview. Mirrors ResumePreviewPane/ResumePdfViewer's own "fixed A4 page,
+            never reflows" convention (DocumentPage, ui) — empty until a CV exists for this
+            posting, then the real generated document, kept in sync through regenerates and
+            revisions. */}
+        <div className="lg:sticky lg:top-4">
+          {generateCv.loading ? (
+            <GeneratingIndicator kind="cv" />
+          ) : cvResult ? (
+            <Surface elevation="raised" className="animate-fade-in-up">
+              <p className="m-0 mb-2 text-body font-[650] text-ink-2">CV ready</p>
+              <CvResult result={cvResult} onRevised={setCvResult} />
+            </Surface>
+          ) : (
+            <DocumentPage>
+              <div className="flex h-full items-center justify-center p-8 text-center">
+                <p className="m-0 text-caption text-[#8a8f99]">Your tailored CV will appear here once you generate one.</p>
+              </div>
+            </DocumentPage>
+          )}
+        </div>
+      </div>
 
       {generateLetter.loading && <GeneratingIndicator kind="letter" />}
-      {/* Same reasoning as cvResult above. */}
+      {/* Discarded the moment a regenerate starts, same reasoning as the CV panel above — no
+          stale, fully-interactive letter sitting next to the "generating" indicator. */}
       {letterResult && !generateLetter.loading && (
         <Surface elevation="raised" className="animate-fade-in-up">
           <p className="m-0 mb-2 text-body font-[650] text-ink-2">Cover letter</p>
           <LetterResult result={letterResult} onRevised={setLetterResult} />
         </Surface>
       )}
-
-      <Surface elevation="raised">
-        <Input
-          label="Ask a question about this application"
-          value={question}
-          onChange={e => setQuestion(e.target.value)}
-          placeholder="Why do you want to work here?"
-        />
-        <Button onClick={handleAskQuestion} disabled={question.trim().length === 0 || askQuestion.loading} loading={askQuestion.loading} className="mt-3">
-          {askQuestion.loading ? "Asking…" : "Ask"}
-        </Button>
-        {answerResult && (
-          <Well className="mt-4 animate-fade-in-up p-3 text-body text-ink-2">
-            {answerResult.mode === "ask_followup" && (
-              <p className="m-0 mb-1 text-caption font-[650] text-brass">Needs more context:</p>
-            )}
-            <AccuracyWarningBanner warnings={answerResult.accuracyWarnings} />
-            <p className="m-0 whitespace-pre-wrap">{answerResult.content}</p>
-            <RevisionBox
-              threadId={answerResult.threadId}
-              placeholder={answerResult.mode === "ask_followup" ? "Your answer to the question above" : "Request changes"}
-              onRevised={setAnswerResult}
-            />
-          </Well>
-        )}
-      </Surface>
 
       {error && <Callout variant="danger" title={error} />}
     </div>
