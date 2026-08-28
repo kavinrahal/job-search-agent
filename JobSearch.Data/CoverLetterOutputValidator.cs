@@ -34,31 +34,6 @@ public static class CoverLetterOutputValidator
         "to the hiring manager,",
     ];
 
-    // Phrases that show up in the model narrating its own reasoning/limitations rather than
-    // writing the letter itself. Matched case-insensitively anywhere in the text, not just the
-    // opening, since a refusal can still open with a salutation-shaped line and then explain
-    // itself in the body.
-    private static readonly string[] RefusalSignals =
-    [
-        "i notice the",
-        "i can't write",
-        "i cannot write",
-        "i don't have enough",
-        "i do not have enough",
-        "i don't know whose",
-        "i do not know whose",
-        "the background file",
-        "the skill's",
-        "the skill instructions",
-        "these don't match",
-        "these do not match",
-        "as an ai",
-        "i'm an ai",
-        "i am an ai",
-        "system prompt",
-        "candidate background provided",
-    ];
-
     public static bool LooksLikeCoverLetter(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
@@ -70,7 +45,7 @@ public static class CoverLetterOutputValidator
         var wordCount = trimmed.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
         if (wordCount < MinWords || wordCount > MaxWords) return false;
 
-        if (RefusalSignals.Any(lower.Contains)) return false;
+        if (RefusalSignalPhrases.AnyMatch(lower)) return false;
 
         return true;
     }

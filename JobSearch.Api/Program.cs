@@ -2192,7 +2192,14 @@ api.MapPost("/threads/{id:int}/edit", async (
         string? answerContent = null;
 
         if (thread.ArtifactType == AgentThreadType.Cv)
+        {
             text = await cvAgent.ReviseAsync(profile, resume!, history);
+            // Same free-text-refusal risk as CoverLetterAgent.ReviseAsync below — see
+            // CvRevisionOutputValidator.
+            if (!CvRevisionOutputValidator.LooksLikeRevisedResume(text))
+                return await InvalidOutputResult(db, userId,
+                    "Couldn't revise the CV — try rephrasing your feedback, or add more detail to your profile.");
+        }
         else if (thread.ArtifactType == AgentThreadType.CoverLetter)
         {
             text = await letterAgent.ReviseAsync(profile, history);
