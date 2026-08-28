@@ -42,15 +42,19 @@ export function GeneratingIndicator({ kind }: { kind: "cv" | "letter" }) {
   }, []);
 
   return (
-    <Surface elevation="raised" className="animate-fade-in-up flex items-center gap-3">
-      <div className="flex h-9 w-9 shrink-0 animate-pulse items-center justify-center rounded-core bg-ember text-on-ember">
-        <BrandGlyph className="h-5 w-5" />
+    <Surface elevation="raised" className="animate-fade-in-up">
+      {/* Surface's `className` lands on its outer shell div (one child: the padded core), so
+          the row layout has to live on a wrapper inside the actual children instead. */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 animate-pulse items-center justify-center rounded-core bg-ember text-on-ember">
+          <BrandGlyph className="h-5 w-5" />
+        </div>
+        <p key={index} className="animate-fade-in text-body text-muted">
+          {/* index = tick % messages.length, always in [0, messages.length - 1]. */}
+          {/* eslint-disable-next-line security/detect-object-injection */}
+          {messages[index]}
+        </p>
       </div>
-      <p key={index} className="animate-fade-in text-body text-muted">
-        {/* index = tick % messages.length, always in [0, messages.length - 1]. */}
-        {/* eslint-disable-next-line security/detect-object-injection */}
-        {messages[index]}
-      </p>
     </Surface>
   );
 }

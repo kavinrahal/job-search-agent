@@ -15,6 +15,7 @@ import { SourcesPage } from "./pages/SourcesPage";
 import { OnboardingCvPage } from "./pages/onboarding/OnboardingCvPage";
 import { OnboardingCriteriaPage } from "./pages/onboarding/OnboardingCriteriaPage";
 import { OnboardingSourcesPage } from "./pages/onboarding/OnboardingSourcesPage";
+import { SettingsShell } from "./components/SettingsShell";
 import {
   AppShell,
   TopNav,
@@ -235,20 +236,52 @@ function PageBody({ me }: { me: Me }) {
           <Route path="/generate"           element={<GeneratePage />} />
           <Route path="/discover"           element={<DiscoveriesPage />} />
           <Route path="/applications"       element={<ApplicationsPage />} />
-          <Route path="/sources"            element={<SourcesPage />} />
+          <Route
+            path="/sources"
+            element={
+              <SettingsShell activeKey="sources" title="Choose your sources" tagline="Tell us where to look, and how you want applications tracked.">
+                <SourcesPage hideHeader />
+              </SettingsShell>
+            }
+          />
           {/* A user who already has a real background (needsOnboarding false — see the flag's
               definition in Program.cs) shouldn't see the blank build-from-scratch/upload intake
               here; that only makes sense for a genuinely new user. Settings is the actual
               "edit your existing info" page for everyone else. */}
           <Route path="/profile"            element={me.needsOnboarding ? <ResumeIntakePage /> : <Navigate to="/settings" replace />} />
           <Route path="/resume-builder"     element={<ResumeBuilderPage />} />
-          <Route path="/criteria"           element={<JobCriteriaPage />} />
+          <Route
+            path="/criteria"
+            element={
+              <SettingsShell
+                activeKey="criteria"
+                title="Job criteria"
+                tagline="What you're actually looking for, precise enough to tell a good match from a bad one."
+              >
+                <JobCriteriaPage hideHeader />
+              </SettingsShell>
+            }
+          />
           <Route path="/settings"           element={<SettingsPage />} />
-          <Route path="/help"               element={<HelpPage />} />
+          <Route
+            path="/help"
+            element={
+              <SettingsShell
+                activeKey="help"
+                title="How it works"
+                tagline="Short answers to what people ask most. If yours is not here, the support form goes straight to a real inbox."
+              >
+                <HelpPage hideHeader />
+              </SettingsShell>
+            }
+          />
           <Route path="/support"            element={<SupportPage />} />
           <Route path="/onboarding/cv"       element={<OnboardingCvPage tier={me.tier} />} />
           <Route path="/onboarding/criteria" element={<OnboardingCriteriaPage tier={me.tier} />} />
           <Route path="/onboarding/sources"  element={<OnboardingSourcesPage tier={me.tier} />} />
+          {/* Logged-out-only paths (/signin, /register) and anything else unknown land here
+              instead of a blank <main> — LoggedOutRoutes already has this same catch-all. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </>
