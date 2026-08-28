@@ -15,7 +15,7 @@ export function ProjectOverrideEditor({ background, value, onChange }: {
   if (background.length === 0) return null;
 
   return (
-    <TopicCard title="Projects">
+    <TopicCard title="Projects" count={`${background.length} listed`}>
       <p className="text-note text-faint">
         Fine-tune how each project from your background is shown on this resume. To edit the
         project itself, use the Profile page.
