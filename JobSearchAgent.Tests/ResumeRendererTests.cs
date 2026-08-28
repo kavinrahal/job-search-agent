@@ -27,10 +27,25 @@ public class ResumeRendererTests
         Assert.StartsWith("# Jordan Rivers\n\njordan@example.com | 555-0100 | Remote | linkedin.com/in/jordan | github.com/jordan\n", output);
     }
 
+    // Display path (the resume builder preview, the saved/tailored resume) — a blank Summary
+    // must never leak the LLM prompt instruction as if it were the user's actual content. See
+    // the "Resume Builder preview leaks a raw LLM-prompt instruction" bug.
     [Fact]
-    public void Render_BlankSummary_FallsBackToPlaceholder()
+    public void Render_BlankSummary_DisplayPath_OmitsSectionEntirely()
     {
         var output = ResumeRenderer.Render(MinimalBackground(), EmptyResume());
+
+        Assert.DoesNotContain("Summary", output);
+        Assert.DoesNotContain("[Fresh summary", output);
+    }
+
+    // Prompt-context path (CvTailorAgent's system prompt, and the accuracy-verifier source
+    // material that deliberately mirrors it) — the instruction placeholder is genuinely useful
+    // here, telling the model there's no current summary to preserve.
+    [Fact]
+    public void Render_BlankSummary_PromptContextPath_UsesInstructionPlaceholder()
+    {
+        var output = ResumeRenderer.Render(MinimalBackground(), EmptyResume(), isPromptContext: true);
 
         Assert.Contains("## Summary\n\n[Fresh summary specific to this role; see tailoring instructions]", output);
     }

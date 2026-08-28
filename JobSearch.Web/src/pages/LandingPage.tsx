@@ -348,23 +348,28 @@ export function LandingPage() {
       <ThemeToggle className="absolute top-4 right-4" />
 
       <Surface elevation="floating" padding="none" className="relative w-full max-w-md animate-fade-in-up p-8 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-core bg-ember text-on-ember">
-          <BrandGlyph className="h-6 w-6" />
+        {/* Icon and heading shrink to a small brand mark below the `sm` breakpoint — the
+            prototype's mobile mock (section 12, sign in and create account) goes straight from a
+            small mark into the tab switch and form, with no hero-sized marketing copy above it. */}
+        <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-core bg-ember text-on-ember sm:h-12 sm:w-12">
+          <BrandGlyph className="h-4 w-4 sm:h-6 sm:w-6" />
         </div>
 
         {/* translate="no" so machine translation doesn't render the wordmark as two English
             nouns — same reasoning as ui/AppShell's Brand, which this page can't reuse directly
             (Brand is nav-bar sized; this is a hero mark). */}
-        <h1 translate="no" className="mt-4 text-display font-bold text-ink">Work Santa</h1>
+        <h1 translate="no" className="mt-2 text-body font-bold text-ink sm:mt-4 sm:text-display">Work Santa</h1>
 
         {focusedView ?? (
           <>
-            <p className="mt-2 text-body text-muted">
+            {/* Description and feature bullets are desktop-only marketing copy — hidden below
+                `sm` so the mobile card goes straight to the sign-in/create-account tabs. */}
+            <p className="mt-2 hidden text-body text-muted sm:block">
               Evaluate job postings against your own criteria, and generate tailored CVs, cover
               letters, and application answers grounded in your real background.
             </p>
 
-            <ul className="mt-6 space-y-2 text-left">
+            <ul className="mt-6 hidden space-y-2 text-left sm:block">
               {FEATURES.map(feature => <FeatureItem key={feature}>{feature}</FeatureItem>)}
             </ul>
 

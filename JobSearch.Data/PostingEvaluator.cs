@@ -29,12 +29,12 @@ public class PostingEvaluator
                 {
                     ["company"]              = Prop("string", "Company name."),
                     ["role_title"]           = Prop("string", "Job title."),
-                    ["source_url"]           = Prop("string", "Source URL, or null."),
+                    ["source_url"]           = Prop("string", "Source URL. Omit this field entirely if there is none — never the literal string \"null\".", nullable: true),
                     ["recommendation"]       = PropEnum("Recommendation tier.",
                                                   "strong_match", "good_match", "weak_match", "discard"),
-                    ["disqualifier_hit"]     = Prop("string", "Disqualifier id that triggered, or null."),
+                    ["disqualifier_hit"]     = Prop("string", "Disqualifier id that triggered. Omit this field entirely if none triggered — never the literal string \"null\".", nullable: true),
                     ["sponsorship_verdict"]  = PropEnum("Sponsorship stance.", "pass", "discard"),
-                    ["sponsorship_evidence"] = Prop("string", "Exact quoted phrase, or null."),
+                    ["sponsorship_evidence"] = Prop("string", "Exact quoted phrase. Omit this field entirely if there is none — never the literal string \"null\".", nullable: true),
                     ["location_match"]       = PropEnum("Location fit.", "preferred", "acceptable", "weak"),
                     ["location_detail"]      = Prop("string", "City and arrangement."),
                     ["experience_match"]     = PropEnum("Experience fit.", "ideal", "acceptable", "excluded"),
@@ -45,7 +45,7 @@ public class PostingEvaluator
                                                   "fixed fields, the dimensions come from the criteria itself."),
                     ["salary_assessment"]    = PropEnum("Salary fit.",
                                                   "target", "acceptable", "flagged_low", "flagged_high", "missing"),
-                    ["salary_detail"]        = Prop("string", "Quoted salary figure or range, or null."),
+                    ["salary_detail"]        = Prop("string", "Quoted salary figure or range. Omit this field entirely if not stated — never the literal string \"null\".", nullable: true),
                     ["company_assessment"]   = PropEnum("Company fit.",
                                                   "preferred", "acceptable", "weaker", "excluded"),
                     ["role_type_match"]      = PropEnum("Role type fit.",
@@ -103,34 +103,46 @@ public class PostingEvaluator
         foreach (var block in response.Content)
         {
             if (block.TryPickToolUse(out ToolUseBlock? toolUse))
-            {
-                var i = toolUse.Input;
-                return new PostingEvaluation
-                {
-                    Company             = i["company"].GetString() ?? "",
-                    RoleTitle           = i["role_title"].GetString() ?? "",
-                    SourceUrl           = i.TryGetValue("source_url", out var su) ? su.GetString() : sourceUrl,
-                    Recommendation      = i["recommendation"].GetString() ?? "",
-                    DisqualifierHit     = i.TryGetValue("disqualifier_hit", out var dq) ? dq.GetString() : null,
-                    SponsorshipVerdict  = i["sponsorship_verdict"].GetString() ?? "",
-                    SponsorshipEvidence = i.TryGetValue("sponsorship_evidence", out var se) ? se.GetString() : null,
-                    LocationMatch       = i["location_match"].GetString() ?? "",
-                    LocationDetail      = i["location_detail"].GetString() ?? "",
-                    ExperienceMatch     = i["experience_match"].GetString() ?? "",
-                    ExperienceDetail    = i["experience_detail"].GetString() ?? "",
-                    SkillMatches        = GetSkillMatches(i, "skill_matches"),
-                    SalaryAssessment    = i["salary_assessment"].GetString() ?? "",
-                    SalaryDetail        = i.TryGetValue("salary_detail", out var sd) ? sd.GetString() : null,
-                    CompanyAssessment   = i["company_assessment"].GetString() ?? "",
-                    RoleTypeMatch       = i["role_type_match"].GetString() ?? "",
-                    OrangeFlags         = GetStringArray(i, "orange_flags"),
-                    Rationale           = i["rationale"].GetString() ?? "",
-                };
-            }
+                return ParseEvaluation(toolUse.Input, sourceUrl);
         }
 
         throw new InvalidOperationException("Evaluator did not return a tool use block.");
     }
+
+    // Split out from EvaluateAsync so the tool-input-to-DTO mapping (including the literal-"null"
+    // normalization below) is unit-testable without a live API call — see
+    // PostingEvaluatorParsingTests.
+    internal static PostingEvaluation ParseEvaluation(IReadOnlyDictionary<string, JsonElement> i, string? fallbackSourceUrl)
+    {
+        return new PostingEvaluation
+        {
+            Company             = i["company"].GetString() ?? "",
+            RoleTitle           = i["role_title"].GetString() ?? "",
+            SourceUrl           = i.TryGetValue("source_url", out var su) ? NullIfLiteralNull(su.GetString()) : fallbackSourceUrl,
+            Recommendation      = i["recommendation"].GetString() ?? "",
+            DisqualifierHit     = i.TryGetValue("disqualifier_hit", out var dq) ? NullIfLiteralNull(dq.GetString()) : null,
+            SponsorshipVerdict  = i["sponsorship_verdict"].GetString() ?? "",
+            SponsorshipEvidence = i.TryGetValue("sponsorship_evidence", out var se) ? NullIfLiteralNull(se.GetString()) : null,
+            LocationMatch       = i["location_match"].GetString() ?? "",
+            LocationDetail      = i["location_detail"].GetString() ?? "",
+            ExperienceMatch     = i["experience_match"].GetString() ?? "",
+            ExperienceDetail    = i["experience_detail"].GetString() ?? "",
+            SkillMatches        = GetSkillMatches(i, "skill_matches"),
+            SalaryAssessment    = i["salary_assessment"].GetString() ?? "",
+            SalaryDetail        = i.TryGetValue("salary_detail", out var sd) ? NullIfLiteralNull(sd.GetString()) : null,
+            CompanyAssessment   = i["company_assessment"].GetString() ?? "",
+            RoleTypeMatch       = i["role_type_match"].GetString() ?? "",
+            OrangeFlags         = GetStringArray(i, "orange_flags"),
+            Rationale           = i["rationale"].GetString() ?? "",
+        };
+    }
+
+    // The model occasionally emits the literal string "null" for an optional field instead of
+    // omitting it or using a real JSON null (observed live: "Disqualifier: null" / "Salary: null"
+    // rendering on discovery cards). Don't rely on prompt/schema tightening alone to prevent this
+    // — normalize defensively at the boundary where the value leaves the LLM response.
+    private static string? NullIfLiteralNull(string? value) =>
+        value is null || value.Trim().Equals("null", StringComparison.OrdinalIgnoreCase) ? null : value;
 
     private static string[] GetStringArray(IReadOnlyDictionary<string, JsonElement> input, string key)
     {
@@ -149,8 +161,10 @@ public class PostingEvaluator
             e.TryGetProperty("detail", out var det) ? det.GetString() ?? "" : ""))];
     }
 
-    private static JsonElement Prop(string type, string description) =>
-        JsonSerializer.SerializeToElement(new { type, description });
+    private static JsonElement Prop(string type, string description, bool nullable = false) =>
+        nullable
+            ? JsonSerializer.SerializeToElement(new { type = new[] { type, "null" }, description })
+            : JsonSerializer.SerializeToElement(new { type, description });
 
     private static JsonElement PropEnum(string description, params string[] values) =>
         JsonSerializer.SerializeToElement(new { type = "string", description, @enum = values });

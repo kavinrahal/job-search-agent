@@ -75,7 +75,9 @@ export function Button({
   const classes = cx(
     BASE,
     styleFor(VARIANT, variant),
-    variant === "primary" ? styleFor(SIZE, size).primary : styleFor(SIZE, size).other,
+    // The asymmetric "primary" padding only reads correctly when the cap is actually present to
+    // balance it optically; a capless primary button uses the same symmetric padding as ghost/subtle.
+    variant === "primary" && showCap ? styleFor(SIZE, size).primary : styleFor(SIZE, size).other,
     // A full-width button with a cap pushes the cap to the far edge, which is what makes it read
     // as "and then this happens" rather than as a centred label that happens to have a circle.
     fullWidth && (showCap ? "w-full justify-between" : "w-full justify-center"),

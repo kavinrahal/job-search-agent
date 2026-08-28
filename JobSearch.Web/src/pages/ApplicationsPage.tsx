@@ -261,8 +261,12 @@ export function ApplicationsPage() {
         <Surface elevation="raised">
           <EmptyState
             icon={<ChecklistIcon />}
-            title="No applications yet"
-            body={`No applications${activeTab !== "All" ? ` with status "${activeTab}"` : ""} yet.`}
+            title="Nothing tracked yet"
+            body={
+              activeTab === "All"
+                ? "Log your first application to start tracking it here."
+                : `Nothing with status "${activeTab}" yet — it'll show up here once an application reaches that stage.`
+            }
           />
         </Surface>
       ) : (

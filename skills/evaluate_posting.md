@@ -63,7 +63,9 @@ Write a 2-3 sentence rationale covering the key factors that determined the reco
 
 ## Output
 
-Return a single JSON object. No prose outside the JSON.
+Return a single JSON object. No prose outside the JSON. For any field marked "or null" below,
+omit the field entirely (or use a real JSON `null`) when there's nothing to report — never write
+the literal string `"null"`.
 
 ```json
 {

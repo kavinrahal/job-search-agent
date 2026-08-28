@@ -104,7 +104,7 @@ public class CvTailorAgent
         {backgroundYaml}
 
         --- CURRENT RESUME ---
-        {ResumeRenderer.Render(background, resume)}
+        {ResumeRenderer.Render(background, resume, isPromptContext: true)}
         """;
 
     public static string BuildInitialUserContent(string postingText, string evaluationJson) => $"""
