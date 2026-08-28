@@ -78,35 +78,40 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
     <Surface
       padding="md"
       className={cx(
-        "flex h-full flex-col gap-3.5 transition-shadow duration-500",
+        "h-full transition-shadow duration-500",
         // Brief "you're here" flash for a card linked to from Today's "Worth a look" — cleared
         // by DiscoveriesPage a couple of seconds after landing, not a permanent state.
         highlighted && "ring-2 ring-ember ring-offset-2 ring-offset-shell",
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="m-0 truncate text-body font-[650] tracking-[-.018em] text-ink">
-            {posting.company || "Unknown company"}
-          </p>
-          <p className="m-0 mt-2 text-caption leading-snug text-muted">{posting.title}</p>
+      {/* Surface's `className` lands on its outer shell div, which has exactly one child (the
+          padded core) — a flex/gap there does nothing for spacing *between* these three blocks.
+          This wrapper is what the header/well/button actually need to lay out against. */}
+      <div className="flex h-full flex-col gap-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="m-0 truncate text-body font-[650] tracking-[-.018em] text-ink">
+              {posting.company || "Unknown company"}
+            </p>
+            <p className="m-0 mt-2 text-caption leading-snug text-muted">{posting.title}</p>
+          </div>
+          {/* eslint-disable-next-line security/detect-object-injection -- tier is Exclude<Tier, "all"> | null, not arbitrary input */}
+          {tier && <Badge variant={TIER_BADGE[tier]}>{TIER_LABEL[tier]}</Badge>}
         </div>
-        {/* eslint-disable-next-line security/detect-object-injection -- tier is Exclude<Tier, "all"> | null, not arbitrary input */}
-        {tier && <Badge variant={TIER_BADGE[tier]}>{TIER_LABEL[tier]}</Badge>}
-      </div>
 
-      <MatchReason tone={heldBack ? "held-back" : "why"} heading={heldBack ? "Held back." : "Why this one."}>
-        {posting.rationale ?? "No rationale recorded for this posting."}
-      </MatchReason>
+        <MatchReason tone={heldBack ? "held-back" : "why"} heading={heldBack ? "Held back." : "Why this one."}>
+          {posting.rationale ?? "No rationale recorded for this posting."}
+        </MatchReason>
 
-      <div className="mt-auto">
-        {strong ? (
-          <Button fullWidth cap onClick={() => setGenerating("cv")}>Generate CV</Button>
-        ) : (
-          <Button variant="ghost" fullWidth onClick={() => setGenerating("cv")}>
-            {heldBack ? "Generate anyway" : "Generate CV"}
-          </Button>
-        )}
+        <div className="mt-auto">
+          {strong ? (
+            <Button fullWidth cap onClick={() => setGenerating("cv")}>Generate CV</Button>
+          ) : (
+            <Button variant="ghost" fullWidth onClick={() => setGenerating("cv")}>
+              {heldBack ? "Generate anyway" : "Generate CV"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {generating && (

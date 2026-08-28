@@ -34,7 +34,9 @@ import type { Profile } from "../types";
 //    shown anywhere in the source design would be guessing.
 type SettingsTab = "account" | "resume" | "billing";
 
-const SUB_NAV_ITEMS: SettingsSubNavItem[] = [
+// Exported so SettingsShell (the wrapper Criteria/Sources/Help render themselves in) can show
+// the exact same nav instead of duplicating this list.
+export const SUB_NAV_ITEMS: SettingsSubNavItem[] = [
   { key: "account", label: "Account" },
   { key: "resume", label: "Resume" },
   { key: "criteria", label: "Criteria", href: "/criteria" },

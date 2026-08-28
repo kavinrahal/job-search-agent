@@ -29,13 +29,15 @@ const FAQS: { question: string; answer: string; icon: React.ReactNode }[] = [
   },
 ];
 
-export function HelpPage() {
+export function HelpPage({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   return (
     <div className="max-w-[640px] space-y-6">
-      <PageHeader
-        title="How it works"
-        tagline="Short answers to what people ask most. If yours is not here, the support form goes straight to a real inbox."
-      />
+      {!hideHeader && (
+        <PageHeader
+          title="How it works"
+          tagline="Short answers to what people ask most. If yours is not here, the support form goes straight to a real inbox."
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {FAQS.map(faq => (

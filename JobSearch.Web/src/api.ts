@@ -27,6 +27,17 @@ export class InsufficientCreditsError extends Error {}
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { ...options, credentials: "include" });
   if (res.status === 402) throw new InsufficientCreditsError("Insufficient credits");
+  // Every protected endpoint 401s via the same RequireAuthorization() cookie challenge (see
+  // Program.cs) — mid-visit, that only means the session cookie died (expired, cleared,
+  // cancelled elsewhere), which no page can recover from on its own (each page's hook has no way
+  // to tell App.tsx's `me` is now stale). Hard-navigate rather than throw, same "full reload, not
+  // a client navigate" pattern logout/cancel/upgrade already use, so the next /auth/me read
+  // starts clean. /auth/me itself is exempt: a 401 there is the normal signal for "not logged in
+  // yet" on first load, not a dead session, and redirecting on it would loop at "/".
+  if (res.status === 401 && path !== "/auth/me") {
+    window.location.href = "/";
+    return new Promise<T>(() => {});
+  }
   if (!res.ok) {
     const errBody = await res.json().catch(() => null);
     // Two error shapes exist server-side: the usual `{ error: "..." }` single message, and
