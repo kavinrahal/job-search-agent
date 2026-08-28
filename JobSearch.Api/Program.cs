@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
+using Google.Apis.Auth.OAuth2.Responses;
 using JobSearch.Api;
 using JobSearch.Api.Services;
 using JobSearch.Data;
@@ -1475,7 +1476,18 @@ api.MapGet("/gmail-forwarding-status", async (HttpContext ctx, AppDbContext db, 
         return Results.BadRequest(new { error = "Connect Gmail first." });
 
     var address = await InboundEmailService.GetOrCreateAddressAsync(db, user.Id, sendGridInboundDomain);
-    var status = await gmailSettings.GetForwardingStatusAsync(refreshToken, address);
+
+    string status;
+    try
+    {
+        status = await gmailSettings.GetForwardingStatusAsync(refreshToken, address);
+    }
+    catch (TokenResponseException)
+    {
+        // Google invalidates the stored refresh token if the user revokes access in their
+        // Google Account or it simply goes stale — an expected condition, not a server error.
+        return Results.BadRequest(new { error = "Gmail access has expired or been revoked. Please reconnect Gmail." });
+    }
 
     bool filterInstalled = false;
     if (status == GmailForwardingStatus.Verified)
