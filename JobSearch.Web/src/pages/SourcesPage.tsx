@@ -4,7 +4,7 @@ import { useSources, useUpdateSources, useUpdateGmailTrackingMode, useGmailForwa
 import { useSyncedState } from "../hooks/useSyncedState";
 import { gmailOAuthStartUrl } from "../api";
 import type { SourcesResponse } from "../types";
-import { PageHeader, Surface, Well, Button, Chip, Tooltip, Callout } from "../ui";
+import { PageHeader, Surface, Well, Button, Eyebrow, Callout, SourceStatusTile } from "../ui";
 
 const LABEL = "mb-2 flex items-center text-body font-[650] text-ink-2";
 
@@ -17,14 +17,6 @@ const LABEL = "mb-2 flex items-center text-body font-[650] text-ink-2";
 // actual mutation into a plain function outside the component sidesteps it for real.
 function hardNavigateHome() {
   window.location.href = "/";
-}
-
-function SourceToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <Chip role="checkbox" selected={active} onClick={onClick}>
-      {label}
-    </Chip>
-  );
 }
 
 // Only ever rendered once Gmail is connected — see useGmailForwardingStatus. Gmail won't
@@ -80,32 +72,25 @@ function GmailForwardingSetup() {
   );
 }
 
+// Trimmed to the prototype's terse one-liners. The fuller privacy disclosure this used to carry
+// (AI-provider classification, the cancel-time delete/keep choice) still lives on the page: the
+// Danger zone card covers the cancel-time choice, and the "read only" claim below is the one
+// piece of that disclosure worth keeping inline no matter how short this gets.
 const TRACKING_MODES: { value: "full" | "filter" | "manual"; label: string; description: string }[] = [
   {
     value: "full",
     label: "Full inbox access",
-    description:
-      "We read your inbox to catch application status changes automatically, regardless of " +
-      "which company emails you. This access is read-only — we can never send, delete, or " +
-      "change anything in your inbox — and we only keep what's actually job-related; " +
-      "everything else is cleared right after we check it. Classifying a message briefly " +
-      "sends a few lines of it to our AI provider, for every email we fetch, not just the " +
-      "ones we keep. If you ever cancel, you choose whether that data is deleted or kept for " +
-      "if you come back.",
+    description: "Read only. We keep only job related mail and clear the rest straight after checking.",
   },
   {
     value: "filter",
-    label: "Filter only (no inbox access)",
-    description:
-      "We never read your inbox. When you log an application, we install a Gmail filter that " +
-      "simply forwards mail from that company's domain to your in-app address, the same " +
-      "mechanism your job alerts already use. Less automatic: misses anything from a " +
-      "different domain, and can't tell a rejection from an interview invite by content alone.",
+    label: "Filter only",
+    description: "We never read your inbox. A Gmail filter forwards mail from companies you have applied to.",
   },
   {
     value: "manual",
     label: "Manual only",
-    description: "No automatic tracking at all. You log applications and update their status yourself.",
+    description: "No automatic tracking. You log applications and set status yourself.",
   },
 ];
 
@@ -123,15 +108,9 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
 
   return (
     <Surface padding="lg">
-      <label className={LABEL}>
-        Application status tracking
-        <Tooltip text="This choice only affects how status changes (like a rejection or an interview invite) get detected automatically. You can always update statuses yourself either way." />
-      </label>
-      <p className="mb-3 text-body text-muted">
-        How should we track the status of jobs you've applied to? Pick whichever you're
-        comfortable with.
-      </p>
-      <div className="space-y-2">
+      <Eyebrow className="mb-[3px]">Application tracking</Eyebrow>
+      <p className="mb-3 text-note text-faint">How we notice when a status changes. Pick whichever you are comfortable with.</p>
+      <div className="grid grid-cols-1 gap-[9px] sm:grid-cols-3">
         {TRACKING_MODES.map(m => (
           <button
             key={m.value}
@@ -218,11 +197,6 @@ export function SourcesPage({ hideHeader = false, onboarding = false }: { hideHe
       {!hideHeader && (
         <PageHeader title="Choose your sources" tagline="Tell us where to look, and how you want applications tracked." />
       )}
-      <p className="text-body text-muted">
-        Pick where job postings should come from. Automatic sources need nothing from you.
-        Alert-based sources need a job alert set up on that platform, forwarded in once you
-        connect Gmail. That's the next step.
-      </p>
 
       {gmailStatus === "connected" && (
         <div className="rounded-core bg-pos-wash p-4 text-body text-pos">Gmail connected.</div>
@@ -230,25 +204,27 @@ export function SourcesPage({ hideHeader = false, onboarding = false }: { hideHe
       {gmailStatus === "error" && <Callout variant="danger" title="Couldn't connect Gmail. Please try again." />}
 
       <Surface padding="lg">
-        <label className={LABEL}>
-          Automatic
-          <Tooltip text="Runs on its own, nothing to set up. We search these directly for postings matching your criteria." />
-        </label>
-        <div className="flex flex-wrap gap-2">
+        <Eyebrow className="mb-[3px]">Automatic</Eyebrow>
+        <p className="mb-3 text-note text-faint">These need nothing from you. They run every night.</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {automatic.map(s => (
-            <SourceToggle key={s.key} label={s.label} active={selected.includes(s.key)} onClick={() => toggle(s.key)} />
+            <SourceStatusTile key={s.key} label={s.label} active={selected.includes(s.key)} onClick={() => toggle(s.key)} />
           ))}
         </div>
       </Surface>
 
       <Surface padding="lg">
-        <label className={LABEL}>
-          Alert-based, needs setup
-          <Tooltip text="You need a saved job alert already set up on that platform. Forward its emails to us via Gmail (next step) and we'll extract the postings from it." />
-        </label>
-        <div className="flex flex-wrap gap-2">
+        <Eyebrow className="mb-[3px]">Alert based</Eyebrow>
+        <p className="mb-3 text-note text-faint">Set an alert on the platform, then connect Gmail so it forwards in.</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {alertBased.map(s => (
-            <SourceToggle key={s.key} label={s.label} active={selected.includes(s.key)} onClick={() => toggle(s.key)} />
+            <SourceStatusTile
+              key={s.key}
+              label={s.label}
+              active={selected.includes(s.key)}
+              offLabel="Needs setup"
+              onClick={() => toggle(s.key)}
+            />
           ))}
         </div>
       </Surface>
