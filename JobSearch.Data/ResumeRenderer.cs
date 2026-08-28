@@ -42,16 +42,35 @@ public static class ResumeRenderer
         new("volunteering", true),
     ];
 
-    public static string Render(BackgroundData background, UserResume resume)
+    // isPromptContext distinguishes the two real consumers of this renderer: building LLM prompt
+    // context (CvTailorAgent's system prompt, and the accuracy-verifier source material that
+    // deliberately mirrors it) vs. rendering for an actual human to look at (resume builder
+    // preview, saved/tailored resume, backfill diagnostics). A blank Summary means different
+    // things to each: the LLM needs the "write one, see tailoring instructions" nudge; a person
+    // just needs to know the section is empty so far.
+    public static string Render(BackgroundData background, UserResume resume, bool isPromptContext = false)
     {
         var sb = new StringBuilder();
 
         sb.Append("# ").Append(background.Personal.Name).Append('\n').Append('\n');
         sb.Append(ContactLine(background.Personal)).Append('\n').Append('\n');
-        sb.Append("## Summary").Append('\n').Append('\n');
-        sb.Append(string.IsNullOrWhiteSpace(resume.Summary)
-            ? "[Fresh summary specific to this role; see tailoring instructions]"
-            : resume.Summary).Append('\n');
+
+        if (string.IsNullOrWhiteSpace(resume.Summary))
+        {
+            if (isPromptContext)
+            {
+                sb.Append("## Summary").Append('\n').Append('\n');
+                sb.Append("[Fresh summary specific to this role; see tailoring instructions]").Append('\n');
+            }
+            // Display path: omit the Summary section entirely rather than show a prompt
+            // instruction or an empty heading — the resume builder preview surfaces its own
+            // "add a summary" empty state around this markdown, so nothing to render here.
+        }
+        else
+        {
+            sb.Append("## Summary").Append('\n').Append('\n');
+            sb.Append(resume.Summary).Append('\n');
+        }
 
         var sectionConfig = ParseOrDefault(resume.SectionConfigJson);
         foreach (var section in sectionConfig)

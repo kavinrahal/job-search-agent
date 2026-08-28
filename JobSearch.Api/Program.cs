@@ -2003,7 +2003,7 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
     var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
     // Matches CvTailorAgent.BuildSystemPrompt's own context exactly — verifying against
     // anything less (or more) would misrepresent what the generator actually had to work with.
-    var sourceMaterial = $"{profile.Background}\n\n--- BASE CV ---\n{ResumeRenderer.Render(BackgroundYamlParser.Parse(profile.Background), resume)}";
+    var sourceMaterial = $"{profile.Background}\n\n--- BASE CV ---\n{ResumeRenderer.Render(BackgroundYamlParser.Parse(profile.Background), resume, isPromptContext: true)}";
     return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, verifier, sourceMaterial, userId,
         body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingTitle, body.PostingCompany,
         AgentThreadType.Cv,
@@ -2188,7 +2188,7 @@ api.MapPost("/threads/{id:int}/edit", async (
         else
         {
             var sourceMaterial = thread.ArtifactType == AgentThreadType.Cv
-                ? $"{profile.Background}\n\n--- BASE CV ---\n{ResumeRenderer.Render(BackgroundYamlParser.Parse(profile.Background), resume!)}"
+                ? $"{profile.Background}\n\n--- BASE CV ---\n{ResumeRenderer.Render(BackgroundYamlParser.Parse(profile.Background), resume!, isPromptContext: true)}"
                 : profile.Background;
             warnings = await verifier.VerifyAsync(userId, sourceMaterial, finalText);
         }

@@ -92,7 +92,7 @@ function RecentApplications() {
         <Link to="/applications" className="text-caption font-[650] text-ember hover:text-ember-hi">View all</Link>
       </div>
       {items.length === 0 ? (
-        <p className="px-3.5 pb-3.5 text-caption text-faint">No applications logged yet.</p>
+        <p className="px-3.5 pb-3.5 text-caption text-faint">Log an application to see it here.</p>
       ) : (
         <Ledger className="pb-1.5">
           {items.map(app => (
@@ -121,7 +121,7 @@ function RecentDiscoveries() {
         <Link to="/discover" className="text-caption font-[650] text-ember hover:text-ember-hi">View all</Link>
       </div>
       {items.length === 0 ? (
-        <p className="px-3.5 pb-3.5 text-caption text-faint">No postings discovered yet.</p>
+        <p className="px-3.5 pb-3.5 text-caption text-faint">The agent will list new postings here as it finds them.</p>
       ) : (
         <Ledger className="pb-1.5">
           {items.map(posting => (
@@ -173,7 +173,7 @@ function ActivityFeed() {
       {loading ? (
         <p className="px-3.5 py-8 text-center text-caption text-faint">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="px-3.5 py-8 text-center text-caption text-faint">No activity yet.</p>
+        <p className="px-3.5 py-8 text-center text-caption text-faint">Activity will appear here as things happen.</p>
       ) : (
         <ol className="flex flex-col">
           {items.map((item, i) => (
