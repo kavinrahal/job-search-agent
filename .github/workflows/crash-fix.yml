@@ -63,7 +63,7 @@ jobs:
           # (the default) so the agent's own later `git push`/`gh` calls inherit it.
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
