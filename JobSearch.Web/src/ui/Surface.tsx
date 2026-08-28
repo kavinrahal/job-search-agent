@@ -24,6 +24,7 @@ const PADDING = {
   sm: "p-3",
   md: "p-3.5",
   lg: "p-4",
+  xl: "p-8",
 } as const;
 
 export interface SurfaceProps {

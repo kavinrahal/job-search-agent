@@ -347,7 +347,7 @@ export function LandingPage() {
 
       <ThemeToggle className="absolute top-4 right-4" />
 
-      <Surface elevation="floating" padding="none" className="relative w-full max-w-md animate-fade-in-up p-8 text-center">
+      <Surface elevation="floating" padding="xl" className="relative w-full max-w-md animate-fade-in-up text-center">
         {/* Icon and heading shrink to a small brand mark below the `sm` breakpoint — the
             prototype's mobile mock (section 12, sign in and create account) goes straight from a
             small mark into the tab switch and form, with no hero-sized marketing copy above it. */}
