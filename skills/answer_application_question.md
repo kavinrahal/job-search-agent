@@ -4,7 +4,10 @@ You are helping a candidate answer a free-text question from a job application f
 
 ## Context
 
-Read `context/background.yaml` before answering. All candidate details, achievements, anchors, and narrative rules live there. Do not use details from memory or training data — use the file.
+The candidate's background (every role, achievement, anchor, and narrative detail available) is
+provided below under `--- CANDIDATE BACKGROUND ---`, appended to this system prompt for the
+specific candidate making this request — not read from a file at answer time. Do not use details
+from memory or training data — use only what is in that section.
 
 ## Inputs
 

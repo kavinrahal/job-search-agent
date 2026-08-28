@@ -1920,13 +1920,28 @@ static async Task<IResult> WithCreditAsync(AppDbContext db, int userId, Func<Tas
     }
 }
 
+// Refunds the credit WithCreditAsync already spent and returns a clean 422, without persisting
+// anything. Used wherever a free-text writing agent's output fails validation instead of
+// throwing — see CoverLetterOutputValidator's own comment for why that needs a separate check
+// rather than relying on WithCreditAsync's exception-based refund.
+static async Task<IResult> InvalidOutputResult(AppDbContext db, int userId, string error)
+{
+    await CreditService.RefundCreditAsync(db, userId);
+    return Results.Json(new { error }, statusCode: StatusCodes.Status422UnprocessableEntity);
+}
+
 static async Task<IResult> GenerateArtifactAsync(
     AppDbContext db, JobPostingFetcher fetcher, CrossCheckDeps crossCheck, CompanyExtractorAgent companyExtractor,
     AccuracyVerifierAgent verifier, string sourceMaterial,
     int userId, int? discoveryId, string? postingText, string? postingUrl, string? postingTitle, string? postingCompany,
     string artifactType,
     Func<string, string, Task<string>> generate,
-    Func<string, string, string> buildInitialUserContent)
+    Func<string, string, string> buildInitialUserContent,
+    // Only /letter passes this — /cv's CvTailorAgent.GenerateAsync is a forced tool-use call
+    // (see architecture-conventions.md), so a refusal there already surfaces as a thrown
+    // exception WithCreditAsync refunds on, not a 200 response that needs a content check.
+    Func<string, bool>? isValidOutput = null,
+    string invalidOutputError = "Couldn't generate this document — try again, or add more detail to your profile.")
 {
     var (resolvedText, evalJson, company, error) = await ResolvePostingTextAsync(
         db, fetcher, crossCheck, userId, discoveryId, postingText, postingUrl, postingTitle, postingCompany);
@@ -1949,6 +1964,14 @@ static async Task<IResult> GenerateArtifactAsync(
     return await WithCreditAsync(db, userId, async () =>
     {
         var text = await generate(resolvedText, evalJson);
+
+        // A 200 response with prose isn't necessarily a valid artifact — a free-text writing
+        // agent can hand back a refusal instead of the document itself, and that never throws.
+        // Catch it here, before it's ever saved as a Complete thread or served via the PDF/Word
+        // download endpoints.
+        if (isValidOutput is not null && !isValidOutput(text))
+            return await InvalidOutputResult(db, userId, invalidOutputError);
+
         // Non-blocking: a flagged claim doesn't stop the credit spend or hide the result, it
         // just gets surfaced for the user to review — see AccuracyVerifierAgent's own comment.
         var warnings = await verifier.VerifyAsync(userId, sourceMaterial, text);
@@ -2029,7 +2052,9 @@ api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContex
         body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingTitle, body.PostingCompany,
         AgentThreadType.CoverLetter,
         (text, evalJson) => letterAgent.GenerateAsync(profile, text, evalJson),
-        CoverLetterAgent.BuildInitialUserContent);
+        CoverLetterAgent.BuildInitialUserContent,
+        CoverLetterOutputValidator.LooksLikeCoverLetter,
+        "Couldn't generate a cover letter — your background details may be too sparse for this role. Try adding more to your profile.");
 }).RequireRateLimiting("generation");
 
 // POST /api/v1/answer — body: { question: string, discoveryId?: int, postingUrl?: string, postingTitle?: string, postingCompany?: string }
@@ -2167,9 +2192,23 @@ api.MapPost("/threads/{id:int}/edit", async (
         string? answerContent = null;
 
         if (thread.ArtifactType == AgentThreadType.Cv)
+        {
             text = await cvAgent.ReviseAsync(profile, resume!, history);
+            // Same free-text-refusal risk as CoverLetterAgent.ReviseAsync below — see
+            // CvRevisionOutputValidator.
+            if (!CvRevisionOutputValidator.LooksLikeRevisedResume(text))
+                return await InvalidOutputResult(db, userId,
+                    "Couldn't revise the CV — try rephrasing your feedback, or add more detail to your profile.");
+        }
         else if (thread.ArtifactType == AgentThreadType.CoverLetter)
+        {
             text = await letterAgent.ReviseAsync(profile, history);
+            // Same free-text-refusal risk as the initial /letter generation — see
+            // GenerateArtifactAsync/CoverLetterOutputValidator.
+            if (!CoverLetterOutputValidator.LooksLikeCoverLetter(text))
+                return await InvalidOutputResult(db, userId,
+                    "Couldn't revise the cover letter — try rephrasing your feedback, or add more detail to your profile.");
+        }
         else
             (answerMode, answerContent) = await answerAgent.RespondAsync(profile, history);
 
