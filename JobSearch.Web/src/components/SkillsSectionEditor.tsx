@@ -30,7 +30,7 @@ export function SkillsSectionEditor({ value, onChange }: {
   }
 
   return (
-    <TopicCard title="Skills">
+    <TopicCard title="Skills" count={`${value.length} group${value.length === 1 ? "" : "s"}`}>
       <p className="text-note text-faint">
         The Skills section as it actually renders on your resume — one row per group, in order.
       </p>

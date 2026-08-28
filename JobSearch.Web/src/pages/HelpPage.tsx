@@ -1,86 +1,63 @@
-import { PageHeader, Surface, Badge } from "../ui";
+import { PageHeader, Surface, Button } from "../ui";
+import { IconTile } from "../ui/IconTile";
 
-function Section({ title, tier2, children }: { title: string; tier2?: boolean; children: React.ReactNode }) {
-  return (
-    <Surface padding="lg">
-      <h3 className="mb-2 flex items-center gap-2 text-lede font-[650] text-ink-2">
-        {title}
-        {tier2 && <Badge variant="live">Tier 2</Badge>}
-      </h3>
-      <div className="space-y-2 text-body text-muted">{children}</div>
-    </Surface>
-  );
-}
+const FAQS: { question: string; answer: string; icon: React.ReactNode }[] = [
+  {
+    question: "When does it run?",
+    answer: "Every night. Anything matching your criteria is waiting on Today by the morning.",
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v4l3 2" />
+      </>
+    ),
+  },
+  {
+    question: "What uses a credit?",
+    answer: "One credit per CV, cover letter, answer, or revision. Discovery and tracking are free.",
+    icon: <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />,
+  },
+  {
+    question: "Do you read my email?",
+    answer: "Only if you pick full inbox access, and only read only. Filter and manual modes never touch it.",
+    icon: <path d="M4 4h16v16H4zM4 7l8 6 8-6" />,
+  },
+  {
+    question: "Can it invent things?",
+    answer: "Everything is written from your background. Anything we cannot trace back gets flagged before you send it.",
+    icon: <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />,
+  },
+];
 
 export function HelpPage() {
   return (
-    <div className="space-y-6">
-      <PageHeader title="Help" tagline="How everything fits together, in plain language." />
+    <div className="max-w-[640px] space-y-6">
+      <PageHeader
+        title="How it works"
+        tagline="Short answers to what people ask most. If yours is not here, the support form goes straight to a real inbox."
+      />
 
-      <Section title="Getting started">
-        <p>
-          Your Background (work history, education, skills) drives every CV, cover letter, and
-          answer we generate, keep it complete and up to date on the Profile page. Job Criteria
-          (what you're looking for) matters most on Tier 2, it's what automatic discovery
-          matching is evaluated against.
-        </p>
-      </Section>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {FAQS.map(faq => (
+          <Surface key={faq.question} padding="md">
+            <IconTile>{faq.icon}</IconTile>
+            <div className="mb-1 text-body font-bold text-ink">{faq.question}</div>
+            <p className="m-0 text-caption text-muted">{faq.answer}</p>
+          </Surface>
+        ))}
+      </div>
 
-      <Section title="Generating a CV, cover letter, or answer">
-        <p>
-          Paste a job posting's URL, or paste the description text directly if the link can't
-          be fetched (common on Seek/LinkedIn/Jora). "Ask a question" answers a specific
-          application question (e.g. "Why do you want to work here?") using your background
-          and the posting.
-        </p>
-        <p>
-          Once generated, you can ask for changes in plain language, revising counts as
-          another generation.
-        </p>
-      </Section>
-
-      <Section title="Choosing sources and connecting Gmail" tier2>
-        <p>
-          Automatic sources need no setup, we search them directly. Alert-based sources need
-          a job alert already saved on that platform, forwarded to us via Gmail.
-        </p>
-        <p>
-          Connecting Gmail only grants filter/settings management, never inbox reading,
-          unless you separately choose full-access tracking below.
-        </p>
-      </Section>
-
-      <Section title="Application tracking modes" tier2>
-        <p>
-          Three choices, on the Sources page: <strong>Full inbox access</strong> reads your
-          inbox to catch any status change automatically. <strong>Filter only</strong> never
-          reads your inbox, it just forwards mail from a company's domain once you log an
-          application. <strong>Manual</strong> means no automation at all, you track everything
-          yourself. You can change this anytime.
-        </p>
-      </Section>
-
-      <Section title="Discoveries and recommendations" tier2>
-        <p>
-          Postings found automatically, ranked against your criteria. Strong/Good match are
-          worth reviewing, Weak match is a stretch, Discard didn't meet your criteria and is
-          hidden by default.
-        </p>
-      </Section>
-
-      <Section title="Application statuses" tier2>
-        <p>
-          Applied, Acknowledged, Screening, Interviewing, FinalRound, then Offer or Rejected,
-          in that order for automatic updates. Ghosted and Withdrawn are set manually. You can
-          change any application's status yourself at any time, including out of order.
-        </p>
-      </Section>
-
-      <Section title="Credits">
-        <p>
-          Generating or revising a CV, cover letter, or answer uses one credit each time.
-        </p>
-      </Section>
+      <Surface padding="md">
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <div className="text-body font-[650] text-ink-2">Still stuck?</div>
+            <div className="text-caption text-faint">We answer from a real inbox, usually same day.</div>
+          </div>
+          <Button href="/support" cap className="flex-none">
+            Contact support
+          </Button>
+        </div>
+      </Surface>
     </div>
   );
 }
