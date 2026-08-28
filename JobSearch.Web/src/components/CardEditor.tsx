@@ -50,8 +50,11 @@ export function Field({ label, value, onChange, multiline, type = "text", min, m
 // The outer "topic" grouping — stays expanded by default, since this is the structure
 // itself, not dense content within it. No ready-made accordion exists in the design system, so
 // this stays a bespoke composite, but built from Surface and the shared tokens rather than raw
-// gray/dark: strings.
-export function TopicCard({ title, children, defaultOpen = true }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
+// gray/dark: strings. `count` is an optional short summary (e.g. "4 roles") shown next to the
+// collapse chevron — matches the prototype's collapsed-row counts for Experience/Skills/Projects
+// on the resume builder (see #s5 in worksanta-slate.html); omit it for topics where a count
+// doesn't make sense (Personal, Location, ...).
+export function TopicCard({ title, children, defaultOpen = true, count }: { title: string; children: ReactNode; defaultOpen?: boolean; count?: string }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <Surface padding="none" clip>
@@ -62,7 +65,10 @@ export function TopicCard({ title, children, defaultOpen = true }: { title: stri
         className="flex w-full items-center justify-between p-4 text-left focus-ring"
       >
         <span className="text-lede font-[650] text-ink-2">{title}</span>
-        <ChevronDownIcon className={cx("h-3.5 w-3.5 flex-none text-faint transition-transform duration-300", open && "rotate-180")} />
+        <span className="flex items-center gap-2">
+          {count && <span className="text-meta text-faint">{count}</span>}
+          <ChevronDownIcon className={cx("h-3.5 w-3.5 flex-none text-faint transition-transform duration-300", open && "rotate-180")} />
+        </span>
       </button>
       {open && <div className="animate-fade-in-up hairline-t space-y-4 p-4">{children}</div>}
     </Surface>

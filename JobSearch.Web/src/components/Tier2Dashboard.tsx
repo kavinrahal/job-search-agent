@@ -1,36 +1,37 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   useSummary,
   useApplications,
   useDiscoveries,
   useActivity,
 } from "../hooks/useDashboardData";
-import type { Summary } from "../types";
-import { GeneratePage } from "../pages/GeneratePage";
-import { Surface, StatBlock, Badge, Ledger, LedgerRow, Select, type BadgeVariant } from "../ui";
+import { Surface, FeaturePanel, StatBlock, Badge, Ledger, LedgerRow, Select, type BadgeVariant } from "../ui";
 import type { StatusTickState } from "../ui";
 
-// Both lookups fall back gracefully for any backend enum value outside the known set — same
-// call as ApplicationsPage/DiscoveriesPage's identical status/recommendation lookups.
+// Keyed off the backend's application-status enum (see ApplicationsPage's matching lookup).
+// Only the "waiting on you" stages get the ember "live" tick/badge — everything else (both the
+// still-passive early stages and the closed/ended ones, win or lose) reads as "done": a stage
+// that's been logged, not one still in motion. Matches the approved prototype's Today and
+// Applications mockups exactly: Offer is brass/"good" (not green), Rejected is the same neutral
+// grey as Applied (not ember) — a rejection isn't "live", it's closed.
 const STATUS_BADGE: Record<string, BadgeVariant> = {
-  Applied: "neutral",
-  Acknowledged: "neutral",
-  Screening: "good",
-  Interviewing: "good",
-  FinalRound: "strong",
-  Offer: "strong",
-  Rejected: "live",
-  Ghosted: "weak",
-  Withdrawn: "weak",
+  Screening: "live",
+  Interviewing: "live",
+  FinalRound: "live",
+  Offer: "good",
 };
-
 const STATUS_TICK: Record<string, StatusTickState> = {
-  Offer: "done",
-  Rejected: "pending",
-  Ghosted: "pending",
-  Withdrawn: "pending",
+  Screening: "live",
+  Interviewing: "live",
+  FinalRound: "live",
 };
+// "Waiting on you": active interview stages plus a fresh offer that needs a decision. Applied/
+// Acknowledged/Screening-not-yet-booked are waiting on the company, not on the user, so they're
+// excluded even though the process is technically still open.
+const NEEDS_REPLY_STATUSES = new Set(["Screening", "Interviewing", "FinalRound", "Offer"]);
+// "Still in play": everything short of a final outcome.
+const LIVE_STATUSES = new Set(["Applied", "Acknowledged", "Screening", "Interviewing", "FinalRound"]);
 
 const REC_BADGE: Record<string, BadgeVariant> = {
   strong_match: "strong",
@@ -39,107 +40,137 @@ const REC_BADGE: Record<string, BadgeVariant> = {
   discard: "live",
 };
 
-const REC_TICK: Record<string, StatusTickState> = {
-  strong_match: "done",
-  discard: "pending",
-  weak_match: "pending",
-};
-
 const EVENT_BADGE: Record<string, BadgeVariant> = {
   StatusChanged: "good",
   EmailReceived: "neutral",
   ManualUpdate: "weak",
 };
 
-// Shared between KpiStrip and RecentApplications below. The other lookups (STATUS_TICK/
-// REC_BADGE/REC_TICK/EVENT_BADGE) each have exactly one call site, so they're read inline there
-// instead — a named wrapper for a lookup used once is one more thing to name, not less code.
 // Each keys off a backend enum value (see ApplicationsPage/DiscoveriesPage's matching lookups),
 // and the ?? fallback already covers any value outside the known set.
 // eslint-disable-next-line security/detect-object-injection
-const statusBadge = (status: string): BadgeVariant => STATUS_BADGE[status] ?? "neutral";
+const statusBadge = (status: string): BadgeVariant => STATUS_BADGE[status] ?? "weak";
+// eslint-disable-next-line security/detect-object-injection
+const statusTick = (status: string): StatusTickState => STATUS_TICK[status] ?? "done";
 
-// Tier2-only — application status counts are the user's own tracked-application records,
-// not inbox content, so they're fine to show here (unlike the removed email-category
-// breakdown, which was a direct view into inbox content).
-function KpiStrip({ summary, onStatusClick }: { summary: Summary; onStatusClick: (status: string) => void }) {
-  if (summary.applications.total === 0) return null;
-
-  return (
-    <Surface elevation="raised">
-      <StatBlock value={summary.applications.total} label="applications tracked" className="mb-3" />
-      <div className="flex flex-wrap gap-2">
-        {Object.entries(summary.applications.byStatus)
-          .sort((a, b) => b[1] - a[1])
-          .map(([status, count]) => (
-            <button key={status} type="button" onClick={() => onStatusClick(status)} className="transition-transform active:scale-[.97]">
-              <Badge variant={statusBadge(status)}>{status}: {count}</Badge>
-            </button>
-          ))}
-      </div>
-    </Surface>
-  );
+// Sparkline's own doc says to omit `trend` rather than pass a flat line when there is no history
+// worth showing — an empty array (e.g. summary hasn't loaded yet) hits that case. A real but
+// all-zero 7-day window (brand-new account, nothing sent yet) is fine to pass through as-is:
+// Sparkline already floors each bar to a visible baseline tick instead of vanishing.
+function trendOrUndefined(values: number[]): number[] | undefined {
+  return values.length > 0 ? values : undefined;
 }
 
-function RecentApplications() {
-  const { data } = useApplications({ pageSize: 5 });
-  const items = data?.items ?? [];
+// The dark overnight panel + metrics bezel + "Worth a look"/"Needs a reply" ledgers, matching
+// the approved prototype's Today bento exactly (FeaturePanel/StatBlock/Ledger, ui). Tier 2's
+// whole reason to exist over Tier 1 is the automatic overnight discovery run, so this is the
+// page's lead content, not a KPI strip above someone else's form.
+function TodayBento() {
+  const { data: summary } = useSummary();
+  const { data: discoveries } = useDiscoveries({ pageSize: 20 });
+  const { data: applications } = useApplications({ pageSize: 20 });
+
+  const byStatus = summary?.applications.byStatus ?? {};
+  const total = summary?.applications.total ?? 0;
+  const liveApplications = Object.entries(byStatus).reduce((sum, [status, count]) => sum + (LIVE_STATUSES.has(status) ? count : 0), 0);
+  const needsReplyCount = Object.entries(byStatus).reduce((sum, [status, count]) => sum + (NEEDS_REPLY_STATUSES.has(status) ? count : 0), 0);
+
+  const worthALook = (discoveries?.items ?? []).filter(p => p.recommendation === "strong_match" || p.recommendation === "good_match");
+  const needsReply = (applications?.items ?? []).filter(a => NEEDS_REPLY_STATUSES.has(a.status));
+
+  // RepliedCount = anything that moved past the initial "sent, no response yet" stages —
+  // there's no dedicated reply-rate field on Summary, so this is derived the same way
+  // NEEDS_REPLY/LIVE are: from the same byStatus breakdown, not a second guess at the number.
+  const repliedCount = total - (byStatus.Applied ?? 0) - (byStatus.Acknowledged ?? 0);
+  const replyRate = total > 0 ? Math.round((Math.max(0, repliedCount) / total) * 100) : 0;
+
+  // Real 7-day cumulative trend from the backend (GET /api/v1/summary), oldest first — replaces
+  // the old mockTrend() fixed climbing shape.
+  const history = summary?.history ?? [];
 
   return (
-    <Surface elevation="raised" padding="none" clip>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 pt-3.5 pb-2">
-        <p className="m-0 text-body font-[650] text-ink-2">Recent applications</p>
-        <Link to="/applications" className="text-caption font-[650] text-ember hover:text-ember-hi">View all</Link>
-      </div>
-      {items.length === 0 ? (
-        <p className="px-3.5 pb-3.5 text-caption text-faint">Log an application to see it here.</p>
-      ) : (
-        <Ledger className="pb-1.5">
-          {items.map(app => (
-            <LedgerRow
-              key={app.id}
-              tick={STATUS_TICK[app.status] ?? "live"}
-              title={app.company}
-              subtitle={app.roleTitle || "-"}
-              meta={<Badge variant={statusBadge(app.status)}>{app.status}</Badge>}
-            />
-          ))}
-        </Ledger>
-      )}
-    </Surface>
-  );
-}
+    <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
+      <FeaturePanel
+        eyebrow="While you were asleep"
+        title={`${discoveries?.total ?? 0} postings checked. ${worthALook.length} worth a look.`}
+        subtitle="Last run overnight. Next run tonight."
+        stats={[
+          { value: worthALook.length, label: "Strong matches" },
+          { value: liveApplications, label: "Live applications" },
+          { value: needsReplyCount, label: "Need a reply" },
+        ]}
+      />
 
-function RecentDiscoveries() {
-  const { data } = useDiscoveries({ pageSize: 5 });
-  const items = data?.items ?? [];
+      <Surface elevation="raised" padding="none">
+        <div className="grid grid-cols-2">
+          <div className="px-3.5 py-3">
+            <StatBlock value={total} label="Applications sent" trend={trendOrUndefined(history.map(h => h.applicationsSent))} />
+          </div>
+          <div className="hairline-l px-3.5 py-3">
+            <StatBlock value={replyRate} suffix="%" label="Reply rate" trend={trendOrUndefined(history.map(h => h.replyRate))} />
+          </div>
+        </div>
+      </Surface>
 
-  return (
-    <Surface elevation="raised" padding="none" clip>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 pt-3.5 pb-2">
-        <p className="m-0 text-body font-[650] text-ink-2">Recent discoveries</p>
-        <Link to="/discover" className="text-caption font-[650] text-ember hover:text-ember-hi">View all</Link>
-      </div>
-      {items.length === 0 ? (
-        <p className="px-3.5 pb-3.5 text-caption text-faint">The agent will list new postings here as it finds them.</p>
-      ) : (
-        <Ledger className="pb-1.5">
-          {items.map(posting => (
-            <LedgerRow
-              key={posting.id}
-              tick={posting.recommendation ? (REC_TICK[posting.recommendation] ?? "live") : "pending"}
-              title={posting.company || "Unknown company"}
-              subtitle={posting.title}
-              meta={posting.recommendation && (
-                <Badge variant={REC_BADGE[posting.recommendation] ?? "neutral"}>
-                  {posting.recommendation.replace("_", " ")}
-                </Badge>
-              )}
-            />
-          ))}
-        </Ledger>
-      )}
-    </Surface>
+      <Surface elevation="raised" padding="none" clip>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 px-3.5 pt-3 pb-1">
+          <div>
+            <p className="m-0 text-body font-[650] text-ink-2">Worth a look</p>
+            <p className="m-0 text-caption text-faint">Filtered against your criteria</p>
+          </div>
+          <Link to="/discover" className="text-caption font-[650] text-ember hover:text-ember-hi">Discover</Link>
+        </div>
+        {worthALook.length === 0 ? (
+          <p className="px-3.5 pb-3.5 text-caption text-faint">The agent will list new postings here as it finds them.</p>
+        ) : (
+          <Ledger className="mt-1.5 pb-1.5">
+            {worthALook.slice(0, 4).map(posting => (
+              <LedgerRow
+                key={posting.id}
+                href={`/discover?posting=${posting.id}`}
+                // Still "live" here even though the posting has already been evaluated — Today
+                // is surfacing it as fresh and worth acting on, unlike the Discover list itself
+                // (out of this page's scope) where the same posting reads as "done".
+                tick="live"
+                title={posting.company || "Unknown company"}
+                subtitle={posting.title}
+                meta={posting.recommendation && (
+                  <Badge variant={REC_BADGE[posting.recommendation] ?? "neutral"}>
+                    {posting.recommendation.replace("_match", "")}
+                  </Badge>
+                )}
+              />
+            ))}
+          </Ledger>
+        )}
+      </Surface>
+
+      <Surface elevation="raised" padding="none" clip>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 px-3.5 pt-3 pb-1">
+          <div>
+            <p className="m-0 text-body font-[650] text-ink-2">Needs a reply</p>
+            <p className="m-0 text-caption text-faint">Waiting on you</p>
+          </div>
+          <Link to="/applications" className="text-caption font-[650] text-ember hover:text-ember-hi">All</Link>
+        </div>
+        {needsReply.length === 0 ? (
+          <p className="px-3.5 pb-3.5 text-caption text-faint">Nothing waiting on you right now.</p>
+        ) : (
+          <Ledger className="mt-1.5 pb-1.5">
+            {needsReply.slice(0, 4).map(app => (
+              <LedgerRow
+                key={app.id}
+                href="/applications"
+                tick={statusTick(app.status)}
+                title={app.company}
+                subtitle={app.roleTitle || "-"}
+                meta={<Badge variant={statusBadge(app.status)}>{app.status}</Badge>}
+              />
+            ))}
+          </Ledger>
+        )}
+      </Surface>
+    </div>
   );
 }
 
@@ -204,28 +235,13 @@ function ActivityFeed() {
 }
 
 export function Tier2Dashboard() {
-  const navigate = useNavigate();
-  const { data: summary } = useSummary();
-
   return (
     <div className="space-y-6">
-      {summary && <KpiStrip summary={summary} onStatusClick={status => navigate(`/applications?status=${status}`)} />}
+      <TodayBento />
 
-      <GeneratePage />
-
-      {/* Third grid column only kicks in at xl (genuinely wide screens) so the fixed-width shell's
-          extra room gets put to use rather than just stretching two cards further apart with a
-          growing gap between them (per the approved layout prototype). ActivityFeed spans both
-          columns at lg so it still reads full-width there, matching its pre-xl position below the
-          two-card row today; it only collapses into the third column once there's genuinely a
-          third-column's worth of space. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
-        <RecentApplications />
-        <RecentDiscoveries />
-        <div className="lg:col-span-2 xl:col-span-1">
-          <ActivityFeed />
-        </div>
-      </div>
+      {/* No separate route/nav item for Activity (see its own comment above) — it stays here,
+          full width, below the bento the approved prototype's Today mockup actually shows. */}
+      <ActivityFeed />
     </div>
   );
 }

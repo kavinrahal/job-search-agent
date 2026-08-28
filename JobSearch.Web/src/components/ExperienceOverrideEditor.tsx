@@ -17,7 +17,7 @@ export function ExperienceOverrideEditor({ background, value, onChange }: {
   if (background.length === 0) return null;
 
   return (
-    <TopicCard title="Experience">
+    <TopicCard title="Experience" count={`${background.length} role${background.length === 1 ? "" : "s"}`}>
       <p className="text-note text-faint">
         Fine-tune how each role from your background is shown on this resume — what's included,
         the wording, and the order of bullets. To edit the role, company, or dates themselves,

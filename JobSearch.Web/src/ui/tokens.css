@@ -14,7 +14,33 @@
  * bezel shadows below, and Sparkline's inline bar heights.
  */
 
+/* Self-hosted rather than a Google Fonts <link> — no external request at runtime, and it
+ * doesn't depend on whatever CSP the app ends up with. Both are variable fonts, so one file
+ * each covers the whole weight range used below. */
+@font-face {
+  font-family: "Unbounded";
+  src: url("/fonts/unbounded.woff2") format("woff2");
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/manrope.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme static {
+  /* --- Type faces -------------------------------------------------------------------
+   * display  headings and stat numbers (text-heading/display/stat-sm/stat below)
+   * body     everything else — running text, controls, labels
+   */
+  --font-display: "Unbounded", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Manrope", ui-sans-serif, system-ui, sans-serif;
+
   /* --- Ground and surfaces -------------------------------------------------------------
    * bg    the page ground
    * shell the outer half of the double bezel
@@ -139,6 +165,16 @@
   --text-stat: 25px;
   --text-stat--line-height: 1;
   --text-stat--letter-spacing: -0.04em;
+}
+
+/* Display face on headings and stat numbers only — not a --text-*--font-family theme companion
+ * (Tailwind v4 doesn't support one; line-height/letter-spacing/font-weight above are the only
+ * documented companions), so this targets the generated utility classes directly instead. */
+.text-heading,
+.text-display,
+.text-stat-sm,
+.text-stat {
+  font-family: var(--font-display);
 }
 
 /* Dark theme. Every value is chosen for dark, not derived from the light set.

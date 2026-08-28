@@ -1,8 +1,17 @@
+// One day of the 7-day cumulative trend behind the Today dashboard's stat-block sparklines
+// (see GET /api/v1/summary). date is oldest-first, "yyyy-MM-dd".
+export interface SummaryHistoryDay {
+  date: string;
+  applicationsSent: number;
+  replyRate: number;
+}
+
 export interface Summary {
   applications: {
     total: number;
     byStatus: Record<string, number>;
   };
+  history: SummaryHistoryDay[];
 }
 
 export interface Application {

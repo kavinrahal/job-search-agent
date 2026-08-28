@@ -1,136 +1,68 @@
 import { useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useApplications, useCreateApplication } from "../hooks/useDashboardData";
+import type { Application } from "../types";
 import {
-  useApplications,
-  useApplicationEvents,
-  useCreateApplication,
-  useUpdateApplicationStatus,
-} from "../hooks/useDashboardData";
-import { APPLICATION_STATUSES, type Application, type ApplicationWithEvents } from "../types";
-import {
-  Surface,
+  Badge,
   Button,
   Callout,
   EmptyState,
   Input,
+  Ledger,
+  LedgerGroup,
+  LedgerRow,
   SegmentedControl,
   SkeletonList,
-  Tooltip,
+  Surface,
   ChecklistIcon,
-  cx,
+  PlusIcon,
+  type BadgeVariant,
+  type StatusTickState,
 } from "../ui";
 
-// Same tone mapping as Tier2Dashboard's status Badge, applied directly to the native <select>
-// below rather than through Badge itself — a select needs to stay a real <select> for the
-// platform picker, so it borrows the token classes instead of the component.
-const STATUS_TONE: Record<string, string> = {
-  Applied: "bg-shell text-muted",
-  Acknowledged: "bg-shell text-muted",
-  Screening: "bg-brass-wash text-brass",
-  Interviewing: "bg-brass-wash text-brass",
-  FinalRound: "bg-pos-wash text-pos",
-  Offer: "bg-pos-wash text-pos",
-  Rejected: "bg-ember-wash text-ember",
-  Ghosted: "bg-sunk text-faint",
-  Withdrawn: "bg-sunk text-faint",
+// ---------------------------------------------------------------------------
+// Status grouping — the three semantic buckets the filter (and the prototype's
+// "All 12 / Live 3 / Interviewing 2 / Closed 7") key off. Every APPLICATION_STATUSES
+// value lands in exactly one.
+// ---------------------------------------------------------------------------
+type Tab = "all" | "live" | "interviewing" | "closed";
+
+const TAB_LABEL: Record<Tab, string> = { all: "All", live: "Live", interviewing: "Interviewing", closed: "Closed" };
+
+const INTERVIEWING_STATUSES = new Set(["Screening", "Interviewing", "FinalRound"]);
+const CLOSED_STATUSES = new Set(["Offer", "Rejected", "Ghosted", "Withdrawn"]);
+
+function tabFor(status: string): Exclude<Tab, "all"> {
+  if (INTERVIEWING_STATUSES.has(status)) return "interviewing";
+  if (CLOSED_STATUSES.has(status)) return "closed";
+  return "live"; // Applied, Acknowledged, and anything unrecognized
+}
+
+// Offer is the one "closed" status that reads as good news, so it gets the brass "good"
+// treatment the prototype gives it; every other status (including the rest of "closed") is the
+// neutral grey "weak" variant, and the interview funnel is the ember "live" one.
+const STATUS_BADGE: Record<string, BadgeVariant> = {
+  Offer: "good",
+  Screening: "live",
+  Interviewing: "live",
+  FinalRound: "live",
 };
-
-const STATUS_TABS = ["All", "Applied", "Acknowledged", "Screening", "Interviewing", "FinalRound", "Offer", "Rejected"];
-
-// Fallback for anything automatic tracking misses — a plain <select> styled to still read as
-// a colored status pill. Stops propagation so picking a status doesn't also toggle the card.
-function StatusSelect({ status, onChange }: { status: string; onChange: (next: string) => void }) {
-  return (
-    <select
-      value={status}
-      onClick={e => e.stopPropagation()}
-      onChange={e => onChange(e.target.value)}
-      // status is a backend application-status enum value, and the ?? fallback already covers
-      // anything outside the known set (same call as Tier2Dashboard/DiscoveriesPage's lookups).
-      // eslint-disable-next-line security/detect-object-injection
-      className={cx("rounded-pill border-0 px-2.5 py-[3px] text-caption font-[650] focus-ring", STATUS_TONE[status] ?? "bg-shell text-muted")}
-    >
-      {APPLICATION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-    </select>
-  );
+function statusBadge(status: string): BadgeVariant {
+  // eslint-disable-next-line security/detect-object-injection
+  return STATUS_BADGE[status] ?? "weak";
 }
 
-function EventTimeline({ data }: { data: ApplicationWithEvents }) {
-  return (
-    <div className="hairline-t mt-3 pt-3">
-      <p className="mb-2 text-eyebrow font-bold tracking-[.06em] text-faint uppercase">Timeline</p>
-      <ol className="space-y-2">
-        {data.events.map(ev => (
-          <li key={ev.id} className="flex gap-3 text-body">
-            <span className="mt-0.5 text-faint">•</span>
-            <div>
-              <span className="font-[650] text-ink-2">{ev.summary}</span>
-              {ev.fromStatus && ev.toStatus && (
-                <span className="ml-2 text-caption text-faint">
-                  {ev.fromStatus} → {ev.toStatus}
-                </span>
-              )}
-              <p className="text-caption text-faint">
-                {new Date(ev.occurredAt).toLocaleString("en-AU", {
-                  day: "2-digit", month: "short", year: "numeric",
-                  hour: "2-digit", minute: "2-digit",
-                })}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
+// The tick reads "settled" vs. "actively moving" rather than "good" vs. "bad" — only the
+// interview funnel counts as live; applied-and-waiting and every closed outcome are stable.
+function statusTick(status: string): StatusTickState {
+  return INTERVIEWING_STATUSES.has(status) ? "live" : "done";
 }
 
-function ApplicationCard({ app, onStatusChanged }: { app: Application; onStatusChanged: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const [detail, setDetail] = useState<ApplicationWithEvents | null>(null);
-  const { execute, loading } = useApplicationEvents();
-  const { execute: updateStatus } = useUpdateApplicationStatus();
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-AU", { day: "2-digit", month: "short" });
+}
 
-  async function toggle() {
-    if (!expanded && !detail) {
-      setDetail(await execute(app.id));
-    }
-    setExpanded(e => !e);
-  }
-
-  async function handleStatusChange(next: string) {
-    if (next === app.status) return;
-    await updateStatus(app.id, next);
-    setDetail(null); // stale timeline — refetched next time the card expands
-    onStatusChanged();
-  }
-
-  return (
-    <Surface elevation="raised">
-      <button
-        onClick={toggle}
-        className="flex w-full items-start justify-between gap-4 text-left"
-      >
-        <div className="min-w-0">
-          <p className="m-0 font-[650] text-ink">{app.company}</p>
-          <p className="m-0 mt-0.5 truncate text-body text-muted">{app.roleTitle || "-"}</p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <StatusSelect status={app.status} onChange={handleStatusChange} />
-          <span className="text-caption text-faint">
-            Updated {new Date(app.updatedAt).toLocaleDateString("en-AU", {
-              day: "2-digit", month: "short",
-            })}
-          </span>
-        </div>
-      </button>
-
-      {expanded && (
-        loading
-          ? <p className="mt-3 text-body text-faint">Loading…</p>
-          : detail && <EventTimeline data={detail} />
-      )}
-    </Surface>
-  );
+function isThisWeek(iso: string) {
+  return Date.now() - new Date(iso).getTime() < 7 * 24 * 60 * 60 * 1000;
 }
 
 function LogApplicationForm({ onDone }: { onDone: () => void }) {
@@ -174,17 +106,8 @@ function LogApplicationForm({ onDone }: { onDone: () => void }) {
           }}
           required
         />
-        <Input
-          label="Role title"
-          value={roleTitle}
-          onChange={e => setRoleTitle(e.target.value)}
-          required
-        />
-        <Input
-          label="Job URL (optional)"
-          value={jobUrl}
-          onChange={e => setJobUrl(e.target.value)}
-        />
+        <Input label="Role title" value={roleTitle} onChange={e => setRoleTitle(e.target.value)} required />
+        <Input label="Job URL (optional)" value={jobUrl} onChange={e => setJobUrl(e.target.value)} />
         <Input
           label="Company email domain (optional)"
           value={companyDomain}
@@ -206,50 +129,66 @@ function LogApplicationForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-export function ApplicationsPage() {
-  const [searchParams] = useSearchParams();
-  const initialStatus = searchParams.get("status") ?? "All";
-
-  const [activeTab, setActiveTab] = useState(
-    STATUS_TABS.includes(initialStatus) ? initialStatus : "All"
+// Read-only: status and date only. Editing a status belongs in a per-application detail view,
+// which doesn't exist yet — this list only ever displays where things stand.
+function ApplicationRow({ app }: { app: Application }) {
+  return (
+    <LedgerRow
+      tick={statusTick(app.status)}
+      title={app.company}
+      subtitle={app.roleTitle || undefined}
+      meta={
+        <>
+          <Badge variant={statusBadge(app.status)}>{app.status}</Badge>
+          <span className="text-meta whitespace-nowrap text-faint">{shortDate(app.updatedAt)}</span>
+        </>
+      }
+    />
   );
+}
+
+export function ApplicationsPage() {
+  const [activeTab, setActiveTab] = useState<Tab>("all");
   const [showLogForm, setShowLogForm] = useState(false);
 
-  const { data, error, loading, reload } = useApplications({
-    status: activeTab === "All" ? undefined : activeTab,
-    pageSize: 100,
-  });
-  const apps = data?.items ?? [];
-  const total = data?.total ?? 0;
+  // Fetched once, unfiltered — the semantic tabs (Live/Interviewing/Closed) each combine several
+  // raw statuses, which a single server-side status filter can't express, so counting and
+  // filtering both happen client-side against the one list.
+  const { data, error, loading, reload } = useApplications({ pageSize: 100 });
+  const all = data?.items ?? [];
+
+  const counts = {
+    all: all.length,
+    live: all.filter(a => tabFor(a.status) === "live").length,
+    interviewing: all.filter(a => tabFor(a.status) === "interviewing").length,
+    closed: all.filter(a => tabFor(a.status) === "closed").length,
+  };
+
+  const visible = activeTab === "all" ? all : all.filter(a => tabFor(a.status) === activeTab);
+  const sorted = [...visible].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  const thisWeek = sorted.filter(a => isThisWeek(a.updatedAt));
+  const earlier = sorted.filter(a => !isThisWeek(a.updatedAt));
 
   return (
-    <div className="space-y-6">
-      <div className="mb-3.5 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="m-0 flex items-center text-display font-bold text-ink">
-            Applications
-            <Tooltip text="Statuses update automatically when we detect a status-changing email, in order: Applied, Acknowledged, Screening, Interviewing, FinalRound, then Offer or Rejected. Ghosted/Withdrawn are set manually. You can always change a status yourself, out of order if needed." />
-          </h1>
-          <p className="m-0 text-caption text-faint">Every application you've made, and where it stands.</p>
-        </div>
-        <div className="flex flex-none items-center gap-3">
-          <span className="text-caption text-faint">{total} total</span>
-          {!showLogForm && (
-            <Button size="sm" onClick={() => setShowLogForm(true)}>Log an application</Button>
-          )}
-        </div>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SegmentedControl
+          label="Filter applications"
+          segments={[
+            { value: "all", label: "All", count: counts.all },
+            { value: "live", label: "Live", count: counts.live },
+            { value: "interviewing", label: "Interviewing", count: counts.interviewing },
+            { value: "closed", label: "Closed", count: counts.closed },
+          ]}
+          value={activeTab}
+          onChange={setActiveTab}
+        />
+        <Button size="sm" cap={<PlusIcon className="h-2.5 w-2.5" />} onClick={() => setShowLogForm(s => !s)}>
+          Log application
+        </Button>
       </div>
 
-      {showLogForm && (
-        <LogApplicationForm onDone={() => { setShowLogForm(false); reload(); }} />
-      )}
-
-      <SegmentedControl
-        label="Filter by status"
-        segments={STATUS_TABS.map(tab => ({ value: tab, label: tab }))}
-        value={activeTab}
-        onChange={setActiveTab}
-      />
+      {showLogForm && <LogApplicationForm onDone={() => { setShowLogForm(false); reload(); }} />}
 
       {error && <Callout variant="danger" title={error} />}
 
@@ -257,22 +196,40 @@ export function ApplicationsPage() {
         <Surface elevation="raised">
           <SkeletonList rows={4} label="Loading applications" />
         </Surface>
-      ) : apps.length === 0 ? (
+      ) : all.length === 0 ? (
         <Surface elevation="raised">
           <EmptyState
             icon={<ChecklistIcon />}
             title="Nothing tracked yet"
-            body={
-              activeTab === "All"
-                ? "Log your first application to start tracking it here."
-                : `Nothing with status "${activeTab}" yet — it'll show up here once an application reaches that stage.`
-            }
+            body="Log your first application to start tracking it here."
+          />
+        </Surface>
+      ) : sorted.length === 0 ? (
+        <Surface elevation="raised">
+          <EmptyState
+            icon={<ChecklistIcon />}
+            title="Nothing here"
+            // eslint-disable-next-line security/detect-object-injection -- activeTab is the Tab union, not arbitrary input
+            body={`Nothing in "${TAB_LABEL[activeTab]}" right now — it'll show up here once an application reaches that stage.`}
           />
         </Surface>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {apps.map(app => <ApplicationCard key={app.id} app={app} onStatusChanged={reload} />)}
-        </div>
+        <Surface elevation="raised" padding="none" clip>
+          <Ledger>
+            {thisWeek.length > 0 && (
+              <>
+                <LedgerGroup>This week</LedgerGroup>
+                {thisWeek.map(app => <ApplicationRow key={app.id} app={app} />)}
+              </>
+            )}
+            {earlier.length > 0 && (
+              <>
+                <LedgerGroup>Earlier</LedgerGroup>
+                {earlier.map(app => <ApplicationRow key={app.id} app={app} />)}
+              </>
+            )}
+          </Ledger>
+        </Surface>
       )}
     </div>
   );
