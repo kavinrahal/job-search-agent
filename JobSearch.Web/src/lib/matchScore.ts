@@ -7,29 +7,29 @@ import type { BadgeVariant } from "../ui";
 //
 // There is no server-side score field. The score is a priority-weighted average of the
 // per-dimension fit tiers the evaluator already stored, each tier mapped to a 0–1 weight. A
-// dimension the evaluator recorded as "missing" (silent — no signal either way), or whose tier
-// isn't recognised, is excluded from the average entirely rather than counted as zero.
+// dimension the evaluator recorded as "missing" (the posting is silent on it) counts as a low
+// weight — missing information counts against a posting — while only a genuinely unrecognised tier
+// string is excluded from the average.
 
 // ---------------------------------------------------------------------------
-// Tier mapping — the recommendation tiers the filter, card badge, and modal label all key off.
-// "discard" (and any unrecognized/missing recommendation) maps to no tier: it never gets its own
-// tab and shows no badge, folding into the "held back" treatment wherever one is still needed.
+// Tier mapping — the qualitative tier (Strong/Good/Weak) the filter, card badge, and modal label
+// all key off. The score is the source of truth: the tier is derived from it by threshold, so the
+// number and the label can never disagree. A posting with no assessable dimensions at all (score
+// null) maps to no tier — no badge, and the "held back" treatment wherever one is needed.
 // ---------------------------------------------------------------------------
 export type Tier = "all" | "strong" | "good" | "weak";
 
 export const TIER_LABEL: Record<Tier, string> = { all: "All", strong: "Strong", good: "Good", weak: "Weak" };
 export const TIER_BADGE: Record<Exclude<Tier, "all">, BadgeVariant> = { strong: "strong", good: "good", weak: "weak" };
 
-export const REC_TO_TIER: Record<string, Exclude<Tier, "all">> = {
-  strong_match: "strong",
-  good_match: "good",
-  weak_match: "weak",
-};
-
-// The tier a posting's recommendation maps to, or null for discard/unrecognized/absent.
+// The posting's qualitative tier, derived from its match score: ≥75 strong, ≥50 good, else weak.
+// Null only when the score itself is null (nothing assessable — see computeMatchScore).
 export function tierOf(posting: DiscoveredPosting): Exclude<Tier, "all"> | null {
-  if (!posting.recommendation) return null;
-  return REC_TO_TIER[posting.recommendation] ?? null;
+  const score = computeMatchScore(posting);
+  if (score === null) return null;
+  if (score >= 75) return "strong";
+  if (score >= 50) return "good";
+  return "weak";
 }
 
 // ---------------------------------------------------------------------------
@@ -57,17 +57,20 @@ export interface MatchRow {
   label: string;
   detail: string;
   tier: string;
-  // Tier weight (0–1), or null when the dimension is "missing"/unmapped and so excluded from the score.
+  // Tier weight (0–1), or null when the tier string is unrecognised and so excluded from the score.
   weight: number | null;
   // Dimension priority multiplier applied in the weighted average.
   priority: number;
 }
 
-// One place decides that "missing" (and any unrecognised tier) contributes no weight, applied
-// uniformly to every dimension — so the "missing is always excluded, never scored as zero" rule is
-// visible here rather than an implicit fallthrough at each call site.
+// "Missing" — the posting is silent on a dimension — counts as a low signal, roughly the weakest
+// non-excluded tier (matching location.weak): missing information should pull a posting's score
+// down, not be waved through. Applied uniformly to every dimension here, so there's no per-field
+// special case. Null is reserved for a genuinely unrecognised tier string, which is excluded.
+const MISSING_WEIGHT = 0.25;
+
 function tierWeight(table: Record<string, number>, tier: string): number | null {
-  if (tier === "missing") return null;
+  if (tier === "missing") return MISSING_WEIGHT;
   // eslint-disable-next-line security/detect-object-injection -- tier comes from the backend's fixed enum, not user input
   return tier in table ? table[tier] : null;
 }
@@ -133,8 +136,8 @@ export function buildMatchRows(posting: DiscoveredPosting): MatchRow[] {
 }
 
 // Priority-weighted average of the scoreable rows: Σ(tierWeight × priority) / Σ(priority), summing
-// only over rows whose tier weight isn't null (missing/unmapped excluded from both sides). Returns
-// null when nothing scoreable was assessed.
+// only over rows whose tier weight isn't null (an unrecognised tier is excluded from both sides).
+// Returns null when nothing scoreable was assessed.
 export function scoreFromRows(rows: MatchRow[]): number | null {
   let weightedSum = 0;
   let prioritySum = 0;
