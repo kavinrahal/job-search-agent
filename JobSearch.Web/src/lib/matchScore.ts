@@ -63,6 +63,16 @@ export interface MatchRow {
   priority: number;
 }
 
+// The evaluator occasionally emits the literal string "null" for an optional detail field instead
+// of omitting it (same gotcha PostingEvaluator.cs's NullIfLiteralNull guards against server-side —
+// this covers older rows evaluated before that existed, and is a harmless no-op for everything
+// evaluated after). `??`/`.length` checks don't catch a real 4-character string, only a real null.
+export function cleanDetail(value: string | null | undefined, fallback: string): string {
+  if (!value) return fallback;
+  const trimmed = value.trim();
+  return trimmed.length === 0 || trimmed.toLowerCase() === "null" ? fallback : trimmed;
+}
+
 // "Missing" — the posting is silent on a dimension — counts as a low signal, roughly the weakest
 // non-excluded tier (matching location.weak): missing information should pull a posting's score
 // down, not be waved through. Applied uniformly to every dimension here, so there's no per-field
@@ -81,7 +91,7 @@ export function buildMatchRows(posting: DiscoveredPosting): MatchRow[] {
   if (posting.locationMatch)
     rows.push({
       label: "Location",
-      detail: posting.locationDetail ?? "—",
+      detail: cleanDetail(posting.locationDetail, "—"),
       tier: posting.locationMatch,
       weight: tierWeight(WEIGHT.location, posting.locationMatch),
       priority: PRIORITY.location,
@@ -90,7 +100,7 @@ export function buildMatchRows(posting: DiscoveredPosting): MatchRow[] {
   if (posting.experienceMatch)
     rows.push({
       label: "Experience",
-      detail: posting.experienceDetail ?? "—",
+      detail: cleanDetail(posting.experienceDetail, "—"),
       tier: posting.experienceMatch,
       weight: tierWeight(WEIGHT.experience, posting.experienceMatch),
       priority: PRIORITY.experience,
@@ -99,7 +109,7 @@ export function buildMatchRows(posting: DiscoveredPosting): MatchRow[] {
   for (const skill of posting.skillMatches)
     rows.push({
       label: skill.dimension,
-      detail: skill.detail.length > 0 ? skill.detail : "not stated",
+      detail: cleanDetail(skill.detail, "not stated"),
       tier: skill.match,
       weight: tierWeight(WEIGHT.skill, skill.match),
       priority: PRIORITY.skill,
@@ -108,7 +118,7 @@ export function buildMatchRows(posting: DiscoveredPosting): MatchRow[] {
   if (posting.salaryAssessment)
     rows.push({
       label: "Salary",
-      detail: posting.salaryDetail ?? "not stated",
+      detail: cleanDetail(posting.salaryDetail, "not stated"),
       tier: posting.salaryAssessment,
       weight: tierWeight(WEIGHT.salary, posting.salaryAssessment),
       priority: PRIORITY.salary,
