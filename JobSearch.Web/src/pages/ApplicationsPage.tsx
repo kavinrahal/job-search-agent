@@ -21,7 +21,6 @@ import {
   ClosedStatusIcon,
   SuccessfulStatusIcon,
   type BadgeVariant,
-  type StatusTickState,
 } from "../ui";
 
 // ---------------------------------------------------------------------------
@@ -85,12 +84,6 @@ const BUCKET_ICON: Record<Exclude<Tab, "all">, (p: { className?: string }) => Re
 function statusIcon(status: string, className?: string): ReactNode {
   const Glyph = BUCKET_ICON[tabFor(status)];
   return <Glyph className={className} />;
-}
-
-// The tick reads "settled" vs. "actively moving" rather than "good" vs. "bad" — only the
-// interview funnel counts as live; applied-and-waiting and every closed outcome are stable.
-function statusTick(status: string): StatusTickState {
-  return INTERVIEWING_STATUSES.has(status) ? "live" : "done";
 }
 
 function shortDate(iso: string) {
@@ -184,12 +177,11 @@ function ApplicationRow({ app, reload }: { app: Application; reload: () => void 
 
   return (
     <LedgerRow
-      tick={statusTick(app.status)}
+      tickIcon={statusIcon(app.status, cx("h-4 w-4", statusSelectTextClass(app.status)))}
       title={app.company}
       subtitle={app.roleTitle || undefined}
       meta={
         <>
-          {statusIcon(app.status, cx("h-3.5 w-3.5 shrink-0", statusSelectTextClass(app.status)))}
           <Select
             label={`Status for ${app.company}`}
             hideLabel
