@@ -1,3 +1,4 @@
+using JobSearch.Api;
 using JobSearch.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -5,7 +6,8 @@ namespace JobSearch.Api.Tests;
 
 // Regression coverage for the explicit per-record ownership checks added to Program.cs
 // (GET /applications, /summary, /applications/{id}/events, PATCH /applications/{id},
-// GET /discoveries, POST /threads/{id}/edit, GET /threads/{id}/pdf, GET /threads/{id}/docx).
+// GET /discoveries, POST /threads/{id}/edit, GET /threads/{id}, GET /threads/{id}/pdf,
+// GET /threads/{id}/docx), plus the shape ThreadStateResponse projects for GET /threads/{id}.
 //
 // AppDbContext.OnModelCreating already defines a global EF Core query filter
 // (HasQueryFilter(x => x.UserId == CurrentUserId)) on Application, DiscoveredPosting, and
@@ -113,10 +115,11 @@ public class OwnedRecordOwnershipCheckTests
         Assert.Equal(["Acme"], items.Select(d => d.Company));
     }
 
-    // TC05 — POST /threads/{id}/edit, GET /threads/{id}/pdf, GET /threads/{id}/docx: the
-    // explicit `thread is null || thread.UserId != userId` check must reject another user's
-    // thread id. This is the case behind the most severe finding — a cross-tenant thread-id
-    // guess must not let one user revise or download another user's CV/cover letter.
+    // TC05 — POST /threads/{id}/edit, GET /threads/{id}, GET /threads/{id}/pdf,
+    // GET /threads/{id}/docx: the explicit `thread is null || thread.UserId != userId` check must
+    // reject another user's thread id. This is the case behind the most severe finding — a
+    // cross-tenant thread-id guess must not let one user revise, restore, or download another
+    // user's CV/cover letter.
     [Fact]
     public async Task ThreadOwnershipCheck_ThreadBelongsToOtherUser_TreatedAsNotFound()
     {
@@ -178,5 +181,52 @@ public class OwnedRecordOwnershipCheckTests
         bool wouldBeNotFound = thread2 is null || thread2.UserId != OwnerUserId;
 
         Assert.False(wouldBeNotFound);
+    }
+
+    // TC07 — GET /threads/{id} response shape: a Complete thread projects to mode "final_answer",
+    // text = CurrentContent, and the deserialized accuracy warnings — the shape the frontend drops
+    // straight back into its result state to restore a just-generated CV/cover letter.
+    [Fact]
+    public void ThreadStateResponse_CompleteThread_ProjectsGenerationResultShape()
+    {
+        var thread = new AgentThread
+        {
+            Id = 42,
+            UserId = OwnerUserId,
+            ArtifactType = AgentThreadType.CoverLetter,
+            CurrentContent = "Dear hiring manager, ...",
+            AccuracyWarningsJson = "[\"Check the claimed years of experience\"]",
+            Status = AgentThreadStatus.Complete,
+        };
+
+        var response = ThreadStateResponse.From(thread);
+
+        Assert.Equal(42, response.ThreadId);
+        Assert.Equal("final_answer", response.Mode);
+        Assert.Equal("Dear hiring manager, ...", response.Text);
+        Assert.Equal(["Check the claimed years of experience"], response.AccuracyWarnings);
+    }
+
+    // TC08 — the not-yet-final cases: an AwaitingContext thread is "ask_followup", and a thread
+    // that has never been verified (null AccuracyWarningsJson) yields an empty array, not null, so
+    // the frontend never has to special-case it.
+    [Fact]
+    public void ThreadStateResponse_AwaitingContextOrUnverified_UsesFollowupModeAndEmptyWarnings()
+    {
+        var thread = new AgentThread
+        {
+            Id = 7,
+            UserId = OwnerUserId,
+            ArtifactType = AgentThreadType.Answer,
+            CurrentContent = null,
+            AccuracyWarningsJson = null,
+            Status = AgentThreadStatus.AwaitingContext,
+        };
+
+        var response = ThreadStateResponse.From(thread);
+
+        Assert.Equal("ask_followup", response.Mode);
+        Assert.Null(response.Text);
+        Assert.Empty(response.AccuracyWarnings);
     }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { threadPdfUrl, threadDocxUrl } from "../api";
 import { useEditThread } from "../hooks/useGeneration";
+import { useMeContext } from "../hooks/useMeContext";
 import type { GenerationResult } from "../types";
 import { ResumePdfViewer } from "./ResumePdfViewer";
 import { Button, Input, WarningIcon } from "../ui";
@@ -41,10 +42,13 @@ export function RevisionBox({ threadId, placeholder, onRevised }: {
 }) {
   const [message, setMessage] = useState("");
   const { execute, loading, error } = useEditThread();
+  const { reloadMe } = useMeContext();
 
   async function handleSubmit() {
     onRevised(await execute(threadId, message));
     setMessage("");
+    // A revision/follow-up spends a credit — refresh the header balance right away.
+    reloadMe();
   }
 
   return (

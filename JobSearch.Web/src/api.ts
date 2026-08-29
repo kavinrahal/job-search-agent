@@ -311,6 +311,13 @@ export async function editThread(threadId: number, message: string): Promise<Gen
   return request(`/threads/${threadId}/edit`, { method: "POST", ...json({ message }) });
 }
 
+// The thread's current persisted state, in the same shape as a fresh generation — used to
+// restore a just-generated CV/cover letter after an accidental refresh. 404s if the thread is
+// gone or isn't the caller's.
+export async function fetchThread(threadId: number): Promise<GenerationResult> {
+  return request(`/threads/${threadId}`);
+}
+
 // Works for both CV and cover-letter threads — the endpoint renders based on the thread's
 // own stored artifact type.
 export function threadPdfUrl(threadId: number): string {

@@ -2338,6 +2338,18 @@ static async Task<string?> GetApplicantNameAsync(AppDbContext db, int userId)
     return ExtractApplicantName(profile?.Background);
 }
 
+// GET /api/v1/threads/{id} — the thread's current persisted state, so the frontend can restore
+// a just-generated CV/cover letter after an accidental refresh (see ThreadStateResponse).
+api.MapGet("/threads/{id:int}", async (int id, HttpContext ctx, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    // Explicit ownership check, defense-in-depth (see /applications/{id}/events above).
+    var thread = await db.AgentThreads.FindAsync(id);
+    if (thread is null || thread.UserId != userId) return Results.NotFound();
+
+    return Results.Ok(ThreadStateResponse.From(thread));
+});
+
 // GET /api/v1/threads/{id}/pdf — renders a completed CV or cover-letter thread as a PDF
 api.MapGet("/threads/{id:int}/pdf", async (int id, HttpContext ctx, AppDbContext db) =>
 {

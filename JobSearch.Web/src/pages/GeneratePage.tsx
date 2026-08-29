@@ -1,11 +1,19 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useGenerateCv, useGenerateLetter, useSearchPostingCandidates } from "../hooks/useGeneration";
+import { useMeContext } from "../hooks/useMeContext";
+import { fetchThread } from "../api";
+import { rememberThread, recallThread, forgetThread } from "../lib/lastGeneration";
 import type { GenerationResult, PostingCandidate } from "../types";
 import { GeneratingIndicator } from "../components/GeneratingIndicator";
 import { CvResult, LetterResult } from "../components/GenerationResult";
 import { Surface, Well, Button, Callout, Input, Textarea, IconButton, CloseIcon, DocumentPage, cx } from "../ui";
 
 type Mode = "url" | "text";
+
+// localStorage keys for the last CV/letter generated here, so an accidental refresh restores the
+// result (see lib/lastGeneration). One per artifact type — a page can hold one of each at once.
+const CV_THREAD_KEY = "lastCvThreadId";
+const LETTER_THREAD_KEY = "lastLetterThreadId";
 
 function PasteInsteadLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -46,6 +54,18 @@ export function GeneratePage() {
   const generateCv = useGenerateCv();
   const generateLetter = useGenerateLetter();
   const searchCandidates = useSearchPostingCandidates();
+  const { reloadMe } = useMeContext();
+
+  // Restore the most recent CV/letter (if generated within the last 24h) after an accidental
+  // refresh, so the user lands back on their result rather than an empty form. A dropped/expired
+  // thread just clears its key and leaves the form empty. Mount-only — this reacts to a fresh page
+  // load, not to any changing state.
+  useEffect(() => {
+    const cvId = recallThread(CV_THREAD_KEY);
+    if (cvId !== null) fetchThread(cvId).then(setCvResult).catch(() => forgetThread(CV_THREAD_KEY));
+    const letterId = recallThread(LETTER_THREAD_KEY);
+    if (letterId !== null) fetchThread(letterId).then(setLetterResult).catch(() => forgetThread(LETTER_THREAD_KEY));
+  }, []);
 
   const postingInput = mode === "url"
     ? { postingUrl, postingTitle: postingTitle || undefined, postingCompany: postingCompany || undefined }
@@ -72,11 +92,17 @@ export function GeneratePage() {
   }
 
   async function handleGenerateCv() {
-    setCvResult(await generateCv.execute(postingInput));
+    const result = await generateCv.execute(postingInput);
+    setCvResult(result);
+    rememberThread(CV_THREAD_KEY, result.threadId);
+    reloadMe();
   }
 
   async function handleGenerateLetter() {
-    setLetterResult(await generateLetter.execute(postingInput));
+    const result = await generateLetter.execute(postingInput);
+    setLetterResult(result);
+    rememberThread(LETTER_THREAD_KEY, result.threadId);
+    reloadMe();
   }
 
   return (
