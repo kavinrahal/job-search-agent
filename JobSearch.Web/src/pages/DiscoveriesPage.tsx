@@ -4,12 +4,12 @@ import { useDiscoveries } from "../hooks/useDashboardData";
 import type { DiscoveredPosting } from "../types";
 import { GenerationDrawer, type GenerationKind } from "../components/GenerationDrawer";
 import { MatchBreakdownModal } from "../components/MatchBreakdownModal";
+import { computeMatchScore, matchSummaryLine } from "../lib/matchScore";
 import {
   Badge,
   Button,
   Callout,
   EmptyState,
-  MatchReason,
   SegmentedControl,
   SkeletonList,
   Surface,
@@ -27,6 +27,14 @@ type Tier = "all" | "strong" | "good" | "weak";
 
 const TIER_LABEL: Record<Tier, string> = { all: "All", strong: "Strong", good: "Good", weak: "Weak" };
 const TIER_BADGE: Record<Exclude<Tier, "all">, BadgeVariant> = { strong: "strong", good: "good", weak: "weak" };
+
+// The card meter's fill + percentage colour, keyed off the same tier the badge uses: strong reads
+// pos/green, good brass/amber, weak (and a null/discard tier) faint/grey — all existing tokens.
+const TIER_METER: Record<Exclude<Tier, "all">, { fill: string; text: string }> = {
+  strong: { fill: "bg-pos", text: "text-pos" },
+  good: { fill: "bg-brass", text: "text-brass" },
+  weak: { fill: "bg-faint", text: "text-faint" },
+};
 
 const REC_TO_TIER: Record<string, Exclude<Tier, "all">> = {
   strong_match: "strong",
@@ -66,8 +74,9 @@ function freshnessLabel(postings: DiscoveredPosting[]): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Discovery card — company/role/badge, a single "why" well, one button. Deliberately minimal:
-// no source badge, no key-signals table, no orange-flags expander, no view-posting/more row.
+// Discovery card — company/role/badge, a tier-coloured match meter + one-line read, then the
+// generate and "Read more" buttons. The full per-dimension breakdown lives behind "Read more"
+// (MatchBreakdownModal), so the card itself stays deliberately minimal.
 // ---------------------------------------------------------------------------
 function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; highlighted?: boolean }) {
   const [generating, setGenerating] = useState<GenerationKind | null>(null);
@@ -75,6 +84,8 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
   const tier = tierOf(posting);
   const heldBack = tier === "weak" || tier === null;
   const strong = tier === "strong";
+  const score = computeMatchScore(posting);
+  const meter = TIER_METER[tier ?? "weak"];
 
   return (
     <Surface
@@ -101,9 +112,27 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
           {tier && <Badge variant={TIER_BADGE[tier]}>{TIER_LABEL[tier]}</Badge>}
         </div>
 
-        <MatchReason tone={heldBack ? "held-back" : "why"} heading={heldBack ? "Held back." : "Why this one."}>
-          {posting.rationale ?? "No rationale recorded for this posting."}
-        </MatchReason>
+        <div className="flex flex-col gap-2.5">
+          {score !== null && (
+            <div className="flex items-center gap-2.5">
+              <div className="surface-sunk h-[3px] flex-1 overflow-hidden rounded-pill">
+                <span
+                  aria-hidden="true"
+                  className={cx(
+                    "block h-full w-full origin-left rounded-pill transition-transform duration-500 ease-spring motion-reduce:transition-none",
+                    meter.fill,
+                  )}
+                  style={{ transform: `scaleX(${score / 100})` }}
+                />
+              </div>
+              <span className={cx("text-caption font-[650] tabular-nums leading-none", meter.text)}>{score}%</span>
+            </div>
+          )}
+          <p className="m-0 text-caption leading-snug text-muted">
+            <b className="font-[650] text-ink">{heldBack ? "Held back." : "Why this one."}</b>{" "}
+            {matchSummaryLine(posting.rationale)}
+          </p>
+        </div>
 
         <div className="mt-auto flex flex-col gap-2">
           {strong ? (

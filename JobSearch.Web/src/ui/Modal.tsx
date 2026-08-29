@@ -129,7 +129,7 @@ export function Modal({ open, onClose, title, description, children, footer, cla
             </IconButton>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 pb-3.5">{children}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 pb-3.5 slate-scroll">{children}</div>
 
           {footer && <div className="hairline-t flex flex-col gap-2 px-3.5 py-3">{footer}</div>}
         </div>
