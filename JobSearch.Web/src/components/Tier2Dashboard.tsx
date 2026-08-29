@@ -8,6 +8,7 @@ import {
 } from "../hooks/useDashboardData";
 import { Surface, FeaturePanel, StatBlock, Badge, Ledger, LedgerRow, Select, type BadgeVariant } from "../ui";
 import type { StatusTickState } from "../ui";
+import { tierOf, TIER_BADGE, TIER_LABEL } from "../lib/matchScore";
 
 // Keyed off the backend's application-status enum (see ApplicationsPage's matching lookup).
 // Only the "waiting on you" stages get the ember "live" tick/badge — everything else (both the
@@ -32,13 +33,6 @@ const STATUS_TICK: Record<string, StatusTickState> = {
 const NEEDS_REPLY_STATUSES = new Set(["Screening", "Interviewing", "FinalRound", "Offer"]);
 // "Still in play": everything short of a final outcome.
 const LIVE_STATUSES = new Set(["Applied", "Acknowledged", "Screening", "Interviewing", "FinalRound"]);
-
-const REC_BADGE: Record<string, BadgeVariant> = {
-  strong_match: "strong",
-  good_match: "good",
-  weak_match: "weak",
-  discard: "live",
-};
 
 const EVENT_BADGE: Record<string, BadgeVariant> = {
   StatusChanged: "good",
@@ -75,7 +69,7 @@ function TodayBento() {
   const liveApplications = Object.entries(byStatus).reduce((sum, [status, count]) => sum + (LIVE_STATUSES.has(status) ? count : 0), 0);
   const needsReplyCount = Object.entries(byStatus).reduce((sum, [status, count]) => sum + (NEEDS_REPLY_STATUSES.has(status) ? count : 0), 0);
 
-  const worthALook = (discoveries?.items ?? []).filter(p => p.recommendation === "strong_match" || p.recommendation === "good_match");
+  const worthALook = (discoveries?.items ?? []).filter(p => tierOf(p) === "strong" || tierOf(p) === "good");
   const needsReply = (applications?.items ?? []).filter(a => NEEDS_REPLY_STATUSES.has(a.status));
 
   // RepliedCount = anything that moved past the initial "sent, no response yet" stages —
@@ -124,23 +118,28 @@ function TodayBento() {
           <p className="px-3.5 pb-3.5 text-caption text-faint">The agent will list new postings here as it finds them.</p>
         ) : (
           <Ledger className="mt-1.5 pb-1.5">
-            {worthALook.slice(0, 4).map(posting => (
-              <LedgerRow
-                key={posting.id}
-                href={`/discover?posting=${posting.id}`}
-                // Still "live" here even though the posting has already been evaluated — Today
-                // is surfacing it as fresh and worth acting on, unlike the Discover list itself
-                // (out of this page's scope) where the same posting reads as "done".
-                tick="live"
-                title={posting.company || "Unknown company"}
-                subtitle={posting.title}
-                meta={posting.recommendation && (
-                  <Badge variant={REC_BADGE[posting.recommendation] ?? "neutral"}>
-                    {posting.recommendation.replace("_match", "")}
-                  </Badge>
-                )}
-              />
-            ))}
+            {worthALook.slice(0, 4).map(posting => {
+              const tier = tierOf(posting);
+              return (
+                <LedgerRow
+                  key={posting.id}
+                  href={`/discover?posting=${posting.id}`}
+                  // Still "live" here even though the posting has already been evaluated — Today
+                  // is surfacing it as fresh and worth acting on, unlike the Discover list itself
+                  // (out of this page's scope) where the same posting reads as "done".
+                  tick="live"
+                  title={posting.company || "Unknown company"}
+                  subtitle={posting.title}
+                  meta={tier && (
+                    // eslint-disable-next-line security/detect-object-injection -- tier is Exclude<Tier, "all">, not arbitrary input
+                    <Badge variant={TIER_BADGE[tier]}>
+                      {/* eslint-disable-next-line security/detect-object-injection -- tier is Exclude<Tier, "all">, not arbitrary input */}
+                      {TIER_LABEL[tier]}
+                    </Badge>
+                  )}
+                />
+              );
+            })}
           </Ledger>
         )}
       </Surface>

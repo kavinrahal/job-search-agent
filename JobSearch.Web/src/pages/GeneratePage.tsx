@@ -220,8 +220,8 @@ export function GeneratePage() {
 
           {/* Persistent, not tied to a specific result — the same proactive reminder the
               prototype shows in the form's default state, before anything has been generated.
-              A generated CV/letter's own specific accuracy warnings still surface inline with
-              that result below (AccuracyWarningBanner), this is the general-purpose companion. */}
+              The only accuracy reminder shown; the per-result dynamic warning breakdown that
+              used to also render inline with the result below was removed as redundant. */}
           <Callout variant="warning" title="Worth checking before you send.">
             Always double-check names, dates, and specific claims before you send anything generated.
           </Callout>

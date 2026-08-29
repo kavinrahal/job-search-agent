@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useProfile, useUpdateProfile, useParseResumePdf, useUploadResumePdf } from "../hooks/useProfile";
 import { useMe, useCancelAccount, useUpgradeToTier2, useInviteToTier2 } from "../hooks/useAuth";
 import { useSyncedState } from "../hooks/useSyncedState";
@@ -6,6 +7,7 @@ import { resumePdfUrl } from "../api";
 import { BackgroundEditor } from "../components/BackgroundEditor";
 import { ResumePdfViewer } from "../components/ResumePdfViewer";
 import { parseBackgroundYaml, serializeBackgroundYaml, type BackgroundParseResult } from "../lib/backgroundYaml";
+import { isSettingsTab, type SettingsTab } from "../lib/settingsTab";
 import {
   PageHeader,
   Surface,
@@ -32,7 +34,8 @@ import type { Profile } from "../types";
 //    fourth panel: the only billing-relevant content that exists — Plan, Credits, the Tier 2
 //    upgrade/invite cards — already lives in Account, and inventing separate Billing content not
 //    shown anywhere in the source design would be guessing.
-type SettingsTab = "account" | "resume" | "billing";
+// (SettingsTab itself, and the ?tab= query-param guard isSettingsTab, live in lib/settingsTab.ts
+// so the guard can be unit-tested without dragging in this page's whole component tree.)
 
 // Exported so SettingsShell (the wrapper Criteria/Sources/Help render themselves in) can show
 // the exact same nav instead of duplicating this list.
@@ -68,7 +71,16 @@ export function SettingsPage() {
   // skipped, and "your data is gone unless you explicitly ask to keep it" is the safer
   // default to land on than the reverse.
   const [deleteDataOnCancel, setDeleteDataOnCancel] = useState(true);
-  const [tab, setTab] = useState<SettingsTab>("account");
+  const [searchParams] = useSearchParams();
+  // Seeded once from ?tab=, the query param SettingsShell navigates back with when a local-tab
+  // item (Account/Resume/Billing) is clicked from /criteria, /sources or /help — see that
+  // component's own comment. Not re-derived on every searchParams change, same reasoning as
+  // DiscoveriesPage's own ?posting= deep-link: this only needs to act once per visit. Falls back
+  // to "account" for a missing or untrusted value rather than trusting the query string blindly.
+  const [tab, setTab] = useState<SettingsTab>(() => {
+    const raw = searchParams.get("tab");
+    return isSettingsTab(raw) ? raw : "account";
+  });
   // "billing" shows the same panel as "account" (see the SUB_NAV_ITEMS comment above) — this is
   // only where they diverge: which nav item highlights as active.
   const activePanel: "account" | "resume" = tab === "resume" ? "resume" : "account";

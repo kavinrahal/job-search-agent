@@ -37,13 +37,15 @@ export function SettingsSubNav({ items, activeKey, onSelect, className }: Settin
       <div className="surface-core flex flex-col gap-px p-[6px]">
         {items.map(item => {
           if (item.href) {
-            // Never "active" against this page's own tab state — it navigates away entirely.
+            // Active when this item's own page (SettingsShell) is the one rendering the nav —
+            // SettingsPage itself never passes a matching activeKey for an href item, since a
+            // click there always navigates away.
             return isInternalPath(item.href) ? (
-              <Link key={item.key} to={item.href} className={itemClasses(false)}>
+              <Link key={item.key} to={item.href} className={itemClasses(item.key === activeKey)}>
                 {item.label}
               </Link>
             ) : (
-              <a key={item.key} href={item.href} className={itemClasses(false)}>
+              <a key={item.key} href={item.href} className={itemClasses(item.key === activeKey)}>
                 {item.label}
               </a>
             );
