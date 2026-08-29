@@ -122,11 +122,7 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
 
         <div className="mt-auto flex flex-col gap-2">
           <div className="flex flex-wrap gap-2">
-            {heldBack ? (
-              <Button variant="ghost" onClick={() => setGenerating("cv")}>Generate anyway</Button>
-            ) : (
-              <Button cap onClick={() => setGenerating("cv")}>Generate CV</Button>
-            )}
+            <Button cap onClick={() => setGenerating("cv")}>Generate CV</Button>
             <Button variant="ghost" onClick={() => setGenerating("letter")}>Cover letter</Button>
           </div>
           <Button variant="subtle" size="sm" fullWidth onClick={() => setBreakdownOpen(true)}>
