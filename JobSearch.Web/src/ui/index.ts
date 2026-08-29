@@ -78,6 +78,8 @@ export type { SettingsSubNavItem, SettingsSubNavProps } from "./SettingsSubNav";
 export { SkipLink } from "./SkipLink";
 export { Drawer } from "./Drawer";
 export type { DrawerProps } from "./Drawer";
+export { Modal } from "./Modal";
+export type { ModalProps } from "./Modal";
 export { ThemeToggle } from "./ThemeToggle";
 
 // Layer 4, state and feedback

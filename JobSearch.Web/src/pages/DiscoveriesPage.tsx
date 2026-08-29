@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useDiscoveries } from "../hooks/useDashboardData";
 import type { DiscoveredPosting } from "../types";
 import { GenerationDrawer, type GenerationKind } from "../components/GenerationDrawer";
+import { MatchBreakdownModal } from "../components/MatchBreakdownModal";
 import {
   Badge,
   Button,
@@ -70,6 +71,7 @@ function freshnessLabel(postings: DiscoveredPosting[]): string | null {
 // ---------------------------------------------------------------------------
 function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; highlighted?: boolean }) {
   const [generating, setGenerating] = useState<GenerationKind | null>(null);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const tier = tierOf(posting);
   const heldBack = tier === "weak" || tier === null;
   const strong = tier === "strong";
@@ -103,7 +105,7 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
           {posting.rationale ?? "No rationale recorded for this posting."}
         </MatchReason>
 
-        <div className="mt-auto">
+        <div className="mt-auto flex flex-col gap-2">
           {strong ? (
             <Button fullWidth cap onClick={() => setGenerating("cv")}>Generate CV</Button>
           ) : (
@@ -111,6 +113,9 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
               {heldBack ? "Generate anyway" : "Generate CV"}
             </Button>
           )}
+          <Button variant="subtle" size="sm" fullWidth onClick={() => setBreakdownOpen(true)}>
+            Read more
+          </Button>
         </div>
       </div>
 
@@ -123,6 +128,8 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
           onClose={() => setGenerating(null)}
         />
       )}
+
+      {breakdownOpen && <MatchBreakdownModal posting={posting} onClose={() => setBreakdownOpen(false)} />}
     </Surface>
   );
 }
