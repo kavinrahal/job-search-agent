@@ -4,24 +4,23 @@ import { cx } from "./cx";
 import { IconButton } from "./Button";
 import { CloseIcon } from "./icons";
 
-// A side panel on desktop, a bottom sheet on mobile.
+// A centred modal dialog: a fixed-width card floating in the middle of the screen, scrim behind.
 //
-// The prototype is explicit that the mobile form is a sheet and not a modal: it rises from the
-// bottom edge, keeps the blurred page visible behind it, and has a grab handle. A centred modal on
-// a phone puts the primary action under the user's thumb reach and hides both edges of the screen.
+// Sibling to Drawer, and it shares Drawer's modal contract wholesale — the two differ only in
+// chrome. Use this when the content is a self-contained card the reader steps into and back out of
+// (a breakdown, a confirmation); use Drawer when it's an edge-anchored panel or a mobile sheet.
 //
-// Everything below the presentation is the modal contract, which is not optional:
+// The contract, identical to Drawer's and not optional:
 //   - Escape closes.
 //   - Focus moves in on open and returns to the trigger on close.
 //   - Tab is trapped inside while it is open.
 //   - The background does not scroll.
-//   - overscroll-behavior: contain, so scrolling to the end of the panel does not start scrolling
-//     the page underneath it — the specific thing that makes a bottom sheet feel broken on iOS.
+//   - Clicking the scrim closes it.
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export interface DrawerProps {
+export interface ModalProps {
   open: boolean;
   onClose: () => void;
   /** Also the panel's accessible name. */
@@ -33,7 +32,7 @@ export interface DrawerProps {
   className?: string;
 }
 
-export function Drawer({ open, onClose, title, description, children, footer, className }: DrawerProps) {
+export function Modal({ open, onClose, title, description, children, footer, className }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreFocusTo = useRef<HTMLElement | null>(null);
 
@@ -43,7 +42,7 @@ export function Drawer({ open, onClose, title, description, children, footer, cl
   );
 
   // Move focus in, and remember where it came from so it can go back. Without the restore, closing
-  // a drawer opened from the twelfth row of a list dumps the keyboard user back at the top of the
+  // a modal opened from the twelfth row of a list dumps the keyboard user back at the top of the
   // document.
   useEffect(() => {
     if (!open) return;
@@ -97,16 +96,13 @@ export function Drawer({ open, onClose, title, description, children, footer, cl
 
   if (!open) return null;
 
-  // Portalled to <body> rather than rendered in place.
-  //
-  // `position: fixed` and a high z-index are not enough on their own: a z-index only competes
-  // inside its own stacking context, so any ancestor with a transform, a filter, a backdrop-blur or
-  // its own z-index silently caps the drawer beneath everything outside it. AppShell's <main> is
-  // exactly such an ancestor, and the gallery caught this — the drawer opened *underneath* the
-  // sticky top bar. A portal takes the panel out of that hierarchy entirely, which also stops any
-  // `overflow: hidden` ancestor from clipping it.
+  // Portalled to <body> rather than rendered in place. A z-index only competes inside its own
+  // stacking context, so any ancestor with a transform, filter, backdrop-blur or its own z-index
+  // silently caps this beneath everything outside it — AppShell's <main> is exactly such an
+  // ancestor (the bug Drawer's own note documents). A portal takes the panel out of that hierarchy
+  // entirely, which also stops any `overflow: hidden` ancestor from clipping it.
   return createPortal(
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Scrim. A plain div rather than a button: it is decorative, and the panel's own close
           button plus Escape already give every user a way out. */}
       <div aria-hidden="true" onClick={onClose} className="absolute inset-0 bg-[rgba(10,13,17,.5)]" />
@@ -118,19 +114,11 @@ export function Drawer({ open, onClose, title, description, children, footer, cl
         aria-label={title}
         tabIndex={-1}
         className={cx(
-          "surface-shell-e2 absolute flex flex-col overscroll-contain focus-ring",
-          // Mobile: a sheet on the bottom edge, square at the bottom because it meets the screen.
-          "inset-x-0 bottom-0 max-h-[85vh] rounded-b-none",
-          // Desktop: a full-height panel on the right.
-          "sm:inset-y-0 sm:right-0 sm:left-auto sm:max-h-none sm:w-[380px] sm:rounded-r-none",
+          "surface-shell-e2 relative flex max-h-[85vh] w-full max-w-[480px] flex-col overscroll-contain focus-ring",
           className,
         )}
       >
         <div className="surface-core flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* The grab handle. Mobile only: on desktop the panel is anchored, not draggable, and a
-              handle would promise a gesture that does nothing. */}
-          <span aria-hidden="true" className="mx-auto mt-3 block h-1 w-[34px] rounded-pill bg-hair-2 sm:hidden" />
-
           <div className="flex items-start justify-between gap-3 px-3.5 pt-3 pb-2">
             <div className="min-w-0">
               <h2 className="m-0 text-heading font-bold text-balance text-ink">{title}</h2>

@@ -340,6 +340,32 @@ html[data-theme="dark"],
   }
 }
 
+/* --- Scrollbar --------------------------------------------------------------------------
+ * A slim, Slate-tinted scrollbar for the overlay bodies (Modal, Drawer) instead of the UA
+ * default. Thumb is a hairline pill with a core-coloured inset border so it reads as floating
+ * inside the panel. Both themes come along for free — the tokens re-point under dark.
+ */
+@utility slate-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-hair-2) transparent;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--color-hair-2);
+    border-radius: var(--radius-pill);
+    border: 2px solid var(--color-core);
+    background-clip: padding-box;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-faint);
+  }
+}
+
 /* --- Touch ---------------------------------------------------------------------------------
  * Applied to everything pressable.
  *
