@@ -18,7 +18,11 @@ export function LedgerGroup({ children, className }: { children: ReactNode; clas
 }
 
 export interface LedgerRowProps {
-  tick: StatusTickState;
+  /** The generic done/live/pending mark. Ignored when `tickIcon` is given. */
+  tick?: StatusTickState;
+  /** A caller-supplied glyph for the leading slot instead of the generic tick — e.g. a
+   * status-specific icon where the state itself has its own visual identity beyond done/live/pending. */
+  tickIcon?: ReactNode;
   /** The strong line: a company, an employer. */
   title: string;
   /** The quiet line: a role title. Truncates to one line rather than wrapping. */
@@ -30,7 +34,7 @@ export interface LedgerRowProps {
   className?: string;
 }
 
-export function LedgerRow({ tick, title, subtitle, meta, href, onClick, className }: LedgerRowProps) {
+export function LedgerRow({ tick, tickIcon, title, subtitle, meta, href, onClick, className }: LedgerRowProps) {
   const classes = cx(
     // `[[data-ledger-row]+&]` gives the hairline only to a row that directly follows another row,
     // so the first row under a group heading does not get a stray rule above it.
@@ -42,7 +46,7 @@ export function LedgerRow({ tick, title, subtitle, meta, href, onClick, classNam
 
   const content = (
     <>
-      <StatusTick state={tick} />
+      {tickIcon ?? (tick && <StatusTick state={tick} />)}
       {/* min-w-0 is the entire reason the row truncates instead of blowing out the grid: without
           it a grid item's default min-width:auto refuses to shrink below its content. */}
       <span className="min-w-0">
