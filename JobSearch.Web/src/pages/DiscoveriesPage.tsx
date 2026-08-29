@@ -3,10 +3,12 @@ import { useSearchParams } from "react-router-dom";
 import { useDiscoveries } from "../hooks/useDashboardData";
 import type { DiscoveredPosting } from "../types";
 import { GenerationDrawer, type GenerationKind } from "../components/GenerationDrawer";
+import { computeMatchScore, dimensionLevel, dimensionValueLabel, summarizeRationale, type DimensionLevel } from "../lib/matchScore";
 import {
   Badge,
   Button,
   Callout,
+  Drawer,
   EmptyState,
   MatchReason,
   SegmentedControl,
@@ -14,6 +16,7 @@ import {
   Surface,
   SearchIcon,
   cx,
+  styleFor,
   type BadgeVariant,
 } from "../ui";
 
@@ -36,6 +39,101 @@ const REC_TO_TIER: Record<string, Exclude<Tier, "all">> = {
 function tierOf(posting: DiscoveredPosting): Exclude<Tier, "all"> | null {
   if (!posting.recommendation) return null;
   return REC_TO_TIER[posting.recommendation] ?? null;
+}
+
+// Meter fill/number colors, keyed by the same recommendation tier as TIER_BADGE (a null tier
+// gets the same faint/grey treatment as "weak" — see DiscoveryCard's heldBack). Solid tokens
+// (bg-pos, not bg-pos-wash) rather than Badge's wash backgrounds — a wash reads as a label
+// background, not a meter fill — but the same three color tokens Badge already uses, nothing new.
+const METER_TONE: Record<Exclude<Tier, "all">, { fill: string; text: string }> = {
+  strong: { fill: "bg-pos", text: "text-pos" },
+  good: { fill: "bg-brass", text: "text-brass" },
+  weak: { fill: "bg-faint", text: "text-faint" },
+};
+
+// Per-dimension badge coloring in the detail drawer, driven by the same score buckets the
+// composite meter uses (see matchScore.ts's dimensionLevel) so a dimension that pulls the score
+// up reads as "strong" wherever it appears.
+const LEVEL_BADGE: Record<DimensionLevel, BadgeVariant> = {
+  high: "strong",
+  medium: "good",
+  low: "weak",
+  none: "neutral",
+};
+
+function DimensionBadge({ value }: { value: string }) {
+  return <Badge variant={styleFor(LEVEL_BADGE, dimensionLevel(value))}>{dimensionValueLabel(value)}</Badge>;
+}
+
+// One row of the detail drawer's breakdown: a label, a tier badge, and optional free-text detail.
+function DetailRow({ label, value, detail, divider }: { label: string; value: string; detail?: string | null; divider?: boolean }) {
+  return (
+    <div className={cx("flex flex-col gap-1 py-2.5", divider && "hairline-t")}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-caption font-[650] text-ink">{label}</span>
+        <DimensionBadge value={value} />
+      </div>
+      {detail && <p className="m-0 text-caption text-muted">{detail}</p>}
+    </div>
+  );
+}
+
+// The "Read more" panel: every structured field the meter and one-liner are derived from, so a
+// curious user can see exactly why the score is what it is. Reuses ui/Drawer rather than a new
+// modal — same close-button/backdrop-click/Escape/focus-trap contract GenerationDrawer already
+// uses on this same card, see this file's own header comment on why.
+// Skips any dimension whose raw value is empty (legacy rows), and — per the same "missing isn't
+// a bad salary" rule matchScore.ts's scoreForValue follows — an unstated salary too.
+function detailRows(posting: DiscoveredPosting): { label: string; value: string; detail?: string | null }[] {
+  const rows: { label: string; value: string; detail?: string | null }[] = [];
+  if (posting.locationMatch) rows.push({ label: "Location", value: posting.locationMatch, detail: posting.locationDetail });
+  if (posting.experienceMatch) rows.push({ label: "Experience", value: posting.experienceMatch, detail: posting.experienceDetail });
+  if (posting.salaryAssessment && posting.salaryAssessment !== "missing") {
+    rows.push({ label: "Salary", value: posting.salaryAssessment, detail: posting.salaryDetail });
+  }
+  if (posting.companyAssessment) rows.push({ label: "Company fit", value: posting.companyAssessment });
+  if (posting.roleTypeMatch) rows.push({ label: "Role type", value: posting.roleTypeMatch });
+  return rows;
+}
+
+function DiscoveryDetailDrawer({ posting, tier, onClose }: { posting: DiscoveredPosting; tier: Exclude<Tier, "all"> | null; onClose: () => void }) {
+  const heldBack = tier === "weak" || tier === null;
+
+  return (
+    <Drawer open onClose={onClose} title={posting.title} description={posting.company}>
+      <div className="flex flex-col gap-4">
+        {/* eslint-disable-next-line security/detect-object-injection -- tier is Exclude<Tier, "all">, not arbitrary input */}
+        {tier && <Badge variant={styleFor(TIER_BADGE, tier)}>{TIER_LABEL[tier]}</Badge>}
+
+        <div className="flex flex-col">
+          {detailRows(posting).map((row, i) => (
+            <DetailRow key={row.label} label={row.label} value={row.value} detail={row.detail} divider={i > 0} />
+          ))}
+        </div>
+
+        {posting.skillMatches.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="m-0 text-eyebrow uppercase text-faint">Skill matches</p>
+            <div className="flex flex-col">
+              {posting.skillMatches.map((skill, i) => (
+                <DetailRow key={`${skill.dimension}-${i}`} label={skill.dimension} value={skill.match} detail={skill.detail} divider={i > 0} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {posting.orangeFlags.length > 0 && (
+          <Callout variant="warning" title="Worth a second look">
+            {posting.orangeFlags.join(" · ")}
+          </Callout>
+        )}
+
+        <MatchReason tone={heldBack ? "held-back" : "why"} heading={heldBack ? "Held back." : "Why this one."}>
+          {posting.rationale ?? "No rationale recorded for this posting."}
+        </MatchReason>
+      </div>
+    </Drawer>
+  );
 }
 
 // Stable per-posting DOM id, so a Today "Worth a look" link (?posting=<id>) can scroll straight
@@ -64,15 +162,38 @@ function freshnessLabel(postings: DiscoveredPosting[]): string | null {
   return `Checked ${time} today`;
 }
 
+// The score-forward meter: a thin fill bar plus the percentage, colored by the card's overall
+// tier (not the score itself) so it agrees with the Badge next to it. Hidden entirely by the
+// caller when score is null — a legacy row with no scoreable dimensions falls back to just the
+// tier badge instead of a fake 0%.
+function MatchMeter({ score, tier }: { score: number; tier: Exclude<Tier, "all"> | null }) {
+  const tone = styleFor(METER_TONE, tier ?? "weak");
+  return (
+    <div className="flex items-center gap-2" role="img" aria-label={`Match score ${score}%`}>
+      <div className="h-1.5 flex-1 overflow-hidden rounded-pill bg-sunk">
+        <span
+          className={cx("block h-full rounded-pill transition-[width] duration-500 ease-spring motion-reduce:transition-none", tone.fill)}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+      <span className={cx("text-caption font-[650] tabular-nums", tone.text)}>{score}%</span>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Discovery card — company/role/badge, a single "why" well, one button. Deliberately minimal:
-// no source badge, no key-signals table, no orange-flags expander, no view-posting/more row.
+// Discovery card — company/role/badge, a score meter, a one-line summary, a "Read more" link to
+// the full breakdown, one button. Option 3 (score-forward) from the redesign: the full rationale
+// prose moved off the card and into the detail drawer, so the card itself no longer reads as a
+// wall of text.
 // ---------------------------------------------------------------------------
 function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; highlighted?: boolean }) {
   const [generating, setGenerating] = useState<GenerationKind | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
   const tier = tierOf(posting);
   const heldBack = tier === "weak" || tier === null;
   const strong = tier === "strong";
+  const score = computeMatchScore(posting);
 
   return (
     <Surface
@@ -99,9 +220,19 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
           {tier && <Badge variant={TIER_BADGE[tier]}>{TIER_LABEL[tier]}</Badge>}
         </div>
 
-        <MatchReason tone={heldBack ? "held-back" : "why"} heading={heldBack ? "Held back." : "Why this one."}>
-          {posting.rationale ?? "No rationale recorded for this posting."}
-        </MatchReason>
+        <div className="flex flex-col gap-2">
+          {score !== null && <MatchMeter score={score} tier={tier} />}
+          <p className="m-0 text-caption text-ink-2">
+            <b className="font-[650] text-ink">{heldBack ? "Held back." : "Why this one."}</b> {summarizeRationale(posting.rationale)}
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowDetail(true)}
+            className="self-start text-caption font-[650] text-ember hover:text-ember-hi"
+          >
+            Read more
+          </button>
+        </div>
 
         <div className="mt-auto">
           {strong ? (
@@ -123,6 +254,8 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
           onClose={() => setGenerating(null)}
         />
       )}
+
+      {showDetail && <DiscoveryDetailDrawer posting={posting} tier={tier} onClose={() => setShowDetail(false)} />}
     </Surface>
   );
 }
