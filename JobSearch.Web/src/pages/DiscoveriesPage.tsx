@@ -56,16 +56,15 @@ function freshnessLabel(postings: DiscoveredPosting[]): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Discovery card — company/role/badge, a tier-coloured match meter + one-line read, then the
-// generate and "Read more" buttons. The full per-dimension breakdown lives behind "Read more"
-// (MatchBreakdownModal), so the card itself stays deliberately minimal.
+// Discovery card — role/company/badge, a tier-coloured match meter + one-line read, then the
+// CV + cover-letter generate buttons and a "Read more" button. The full per-dimension breakdown
+// lives behind "Read more" (MatchBreakdownModal), so the card itself stays deliberately minimal.
 // ---------------------------------------------------------------------------
 function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; highlighted?: boolean }) {
   const [generating, setGenerating] = useState<GenerationKind | null>(null);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const tier = tierOf(posting);
   const heldBack = tier === "weak" || tier === null;
-  const strong = tier === "strong";
   const score = computeMatchScore(posting);
   const meter = TIER_METER[tier ?? "weak"];
 
@@ -86,16 +85,14 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-1">
-              <p className="m-0 truncate text-body font-[650] tracking-[-.018em] text-ink">
-                {posting.company || "Unknown company"}
-              </p>
+              <p className="m-0 truncate text-heading font-bold text-ink">{posting.title}</p>
               {posting.url && (
                 <IconButton href={posting.url} aria-label="Open posting in a new tab" size="sm" className="flex-none">
                   <ExternalLinkIcon className="h-3.5 w-3.5" />
                 </IconButton>
               )}
             </div>
-            <p className="m-0 mt-2 text-caption leading-snug text-muted">{posting.title}</p>
+            <p className="m-0 mt-2 text-caption leading-snug text-muted">{posting.company || "Unknown company"}</p>
           </div>
           {/* eslint-disable-next-line security/detect-object-injection -- tier is Exclude<Tier, "all"> | null, not arbitrary input */}
           {tier && <Badge variant={TIER_BADGE[tier]}>{TIER_LABEL[tier]}</Badge>}
@@ -124,13 +121,14 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
         </div>
 
         <div className="mt-auto flex flex-col gap-2">
-          {strong ? (
-            <Button fullWidth cap onClick={() => setGenerating("cv")}>Generate CV</Button>
-          ) : (
-            <Button variant="ghost" fullWidth onClick={() => setGenerating("cv")}>
-              {heldBack ? "Generate anyway" : "Generate CV"}
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {heldBack ? (
+              <Button variant="ghost" onClick={() => setGenerating("cv")}>Generate anyway</Button>
+            ) : (
+              <Button cap onClick={() => setGenerating("cv")}>Generate CV</Button>
+            )}
+            <Button variant="ghost" onClick={() => setGenerating("letter")}>Cover letter</Button>
+          </div>
           <Button variant="subtle" size="sm" fullWidth onClick={() => setBreakdownOpen(true)}>
             Read more
           </Button>
