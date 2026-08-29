@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from "react";
+import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { cx } from "./cx";
 
 // The tab/filter segment: "All 14 · Strong 2 · Good 5 · Weak 7".
@@ -13,6 +13,8 @@ export interface Segment<T extends string> {
   label: string;
   /** The trailing count in the design, e.g. "Strong" + 2. Rendered dimmer than the label. */
   count?: number;
+  /** Optional leading glyph before the label. Omit for icon-less segments. */
+  icon?: ReactNode;
 }
 
 export interface SegmentedControlProps<T extends string> {
@@ -104,10 +106,12 @@ export function SegmentedControl<T extends string>({
               "rounded-inset px-[11px] py-[5px] text-control font-[650] whitespace-nowrap focus-ring tappable",
               "transition-[background-color,color,transform] duration-350 ease-spring motion-reduce:transition-none",
               "active:scale-[.97]",
-              fullWidth && "flex-1",
+              segment.icon != null && "inline-flex items-center gap-1.5",
+              fullWidth && "flex-1 justify-center",
               selected ? "bg-core text-ink shadow-e1" : "text-muted hover:text-ink",
             )}
           >
+            {segment.icon != null && <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">{segment.icon}</span>}
             {segment.label}
             {segment.count !== undefined && (
               <span className={cx("ml-1.5", selected ? "text-muted" : "text-faint")}>{segment.count}</span>

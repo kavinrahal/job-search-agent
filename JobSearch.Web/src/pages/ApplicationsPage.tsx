@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useApplications, useCreateApplication, useUpdateApplicationStatus } from "../hooks/useDashboardData";
 import { APPLICATION_STATUSES, type Application } from "../types";
 import {
@@ -16,6 +16,10 @@ import {
   Surface,
   ChecklistIcon,
   PlusIcon,
+  LiveStatusIcon,
+  InterviewingStatusIcon,
+  ClosedStatusIcon,
+  SuccessfulStatusIcon,
   type BadgeVariant,
   type StatusTickState,
 } from "../ui";
@@ -68,6 +72,19 @@ function statusSelectTextClass(status: string): string {
     case "live": return "text-ember!";
     default: return "text-faint!";
   }
+}
+
+// The Kit A status glyph for each semantic bucket, keyed off the same tabFor() bucketing the
+// filter uses. Rendered as a leading glyph on the filter tabs and inline status Select.
+const BUCKET_ICON: Record<Exclude<Tab, "all">, (p: { className?: string }) => ReactNode> = {
+  live: LiveStatusIcon,
+  interviewing: InterviewingStatusIcon,
+  closed: ClosedStatusIcon,
+  successful: SuccessfulStatusIcon,
+};
+function statusIcon(status: string, className?: string): ReactNode {
+  const Glyph = BUCKET_ICON[tabFor(status)];
+  return <Glyph className={className} />;
 }
 
 // The tick reads "settled" vs. "actively moving" rather than "good" vs. "bad" — only the
@@ -172,6 +189,7 @@ function ApplicationRow({ app, reload }: { app: Application; reload: () => void 
       subtitle={app.roleTitle || undefined}
       meta={
         <>
+          {statusIcon(app.status, cx("h-3.5 w-3.5 shrink-0", statusSelectTextClass(app.status)))}
           <Select
             label={`Status for ${app.company}`}
             hideLabel
@@ -218,10 +236,10 @@ export function ApplicationsPage() {
           label="Filter applications"
           segments={[
             { value: "all", label: "All", count: counts.all },
-            { value: "live", label: "Live", count: counts.live },
-            { value: "interviewing", label: "Interviewing", count: counts.interviewing },
-            { value: "closed", label: "Closed", count: counts.closed },
-            { value: "successful", label: "Successful", count: counts.successful },
+            { value: "live", label: "Live", count: counts.live, icon: <LiveStatusIcon /> },
+            { value: "interviewing", label: "Interviewing", count: counts.interviewing, icon: <InterviewingStatusIcon /> },
+            { value: "closed", label: "Closed", count: counts.closed, icon: <ClosedStatusIcon /> },
+            { value: "successful", label: "Successful", count: counts.successful, icon: <SuccessfulStatusIcon /> },
           ]}
           value={activeTab}
           onChange={setActiveTab}
