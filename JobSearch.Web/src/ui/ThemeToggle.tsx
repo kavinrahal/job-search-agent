@@ -1,12 +1,14 @@
 import { cx } from "./cx";
 import { useTheme, type ThemePreference } from "./ThemeProvider";
-import { MonitorIcon, MoonIcon, SunIcon } from "./icons";
+import { MoonIcon, SunIcon } from "./icons";
 
-// The theme control from the prototype's top bar: a pill-shaped three-way segment.
+// The theme control from the prototype's top bar: a pill-shaped segment.
 //
-// Three options rather than the existing ThemeToggle's two, because "system" is a real preference
-// and a two-state toggle silently forces everyone off it the first time they touch it. Icons
-// rather than words, since it sits in a 50px bar next to the credit pill and the avatar.
+// Light/Dark only — "Match system" was dropped from this control by product decision, keeping the
+// header control simple. ThemeProvider still fully supports a "system" preference underneath
+// (OS-following, untouched); a user whose stored preference is still "system" just keeps following
+// the OS here until they explicitly click Light or Dark once. Icons rather than words, since it
+// sits in a 50px bar next to the credit pill and the avatar.
 //
 // Pill-shaped, unlike SegmentedControl's 9px track, matching the prototype — the theme control is
 // chrome, not a content filter, and the different shape is what keeps it from being read as one.
@@ -14,7 +16,6 @@ import { MonitorIcon, MoonIcon, SunIcon } from "./icons";
 const OPTIONS: Array<{ value: ThemePreference; label: string; Icon: typeof SunIcon }> = [
   { value: "light", label: "Light", Icon: SunIcon },
   { value: "dark", label: "Dark", Icon: MoonIcon },
-  { value: "system", label: "Match system", Icon: MonitorIcon },
 ];
 
 export function ThemeToggle({ className }: { className?: string }) {

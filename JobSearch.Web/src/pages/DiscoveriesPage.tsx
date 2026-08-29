@@ -80,14 +80,35 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
     >
       {/* Surface's `className` lands on its outer shell div, which has exactly one child (the
           padded core) — a flex/gap there does nothing for spacing *between* these three blocks.
-          This wrapper is what the header/well/button actually need to lay out against. */}
-      <div className="flex h-full flex-col gap-5">
+          This wrapper is what the header/well/button actually need to lay out against. It's also
+          the click target for opening the same breakdown modal "Read more" does — anywhere on
+          the card except the external-link icon, Generate CV, and Cover letter, each of which
+          stops propagation to keep its own distinct action. role="button"/tabIndex/onKeyDown make
+          it keyboard-operable, since it now wraps other real interactive elements. */}
+      <div
+        className="flex h-full flex-col gap-5 cursor-pointer"
+        role="button"
+        tabIndex={0}
+        onClick={() => setBreakdownOpen(true)}
+        onKeyDown={e => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setBreakdownOpen(true);
+          }
+        }}
+      >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-1">
               <p className="m-0 truncate text-heading font-bold text-ink">{posting.title}</p>
               {posting.url && (
-                <IconButton href={posting.url} aria-label="Open posting in a new tab" size="sm" className="flex-none">
+                <IconButton
+                  href={posting.url}
+                  aria-label="Open posting in a new tab"
+                  size="sm"
+                  className="flex-none"
+                  onClick={e => e.stopPropagation()}
+                >
                   <ExternalLinkIcon className="h-3.5 w-3.5" />
                 </IconButton>
               )}
@@ -122,8 +143,8 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
 
         <div className="mt-auto flex flex-col gap-2">
           <div className="flex flex-wrap gap-2">
-            <Button cap onClick={() => setGenerating("cv")}>Generate CV</Button>
-            <Button variant="ghost" onClick={() => setGenerating("letter")}>Cover letter</Button>
+            <Button cap onClick={e => { e.stopPropagation(); setGenerating("cv"); }}>Generate CV</Button>
+            <Button variant="ghost" onClick={e => { e.stopPropagation(); setGenerating("letter"); }}>Cover letter</Button>
           </div>
           <Button variant="subtle" size="sm" fullWidth onClick={() => setBreakdownOpen(true)}>
             Read more

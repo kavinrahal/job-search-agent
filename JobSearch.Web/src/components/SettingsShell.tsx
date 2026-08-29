@@ -24,9 +24,10 @@ export function SettingsShell({
     <div className="space-y-6">
       <PageHeader title={title} tagline={tagline} />
       <div className="grid grid-cols-1 items-start gap-3.5 md:grid-cols-[200px_1fr]">
-        {/* Local-tab items (Account/Resume/Billing) have no href here — clicking one just goes
-            back to Settings, which opens on Account (its own default tab). */}
-        <SettingsSubNav items={SUB_NAV_ITEMS} activeKey={activeKey} onSelect={() => navigate("/settings")} />
+        {/* Local-tab items (Account/Resume/Billing) have no href here — clicking one navigates
+            back to Settings with ?tab=<key> so SettingsPage opens on (and highlights) the tab
+            that was actually clicked, rather than always landing on its default. */}
+        <SettingsSubNav items={SUB_NAV_ITEMS} activeKey={activeKey} onSelect={key => navigate(`/settings?tab=${key}`)} />
         <div className="min-w-0 space-y-3.5">{children}</div>
       </div>
     </div>
