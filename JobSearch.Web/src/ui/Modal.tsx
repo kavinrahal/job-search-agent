@@ -25,6 +25,8 @@ export interface ModalProps {
   onClose: () => void;
   /** Also the panel's accessible name. */
   title: string;
+  /** Rendered inline right after the title text — e.g. a link-out icon button. */
+  titleActions?: ReactNode;
   description?: string;
   children: ReactNode;
   /** Pinned to the bottom of the panel, outside the scrolling body. */
@@ -32,7 +34,7 @@ export interface ModalProps {
   className?: string;
 }
 
-export function Modal({ open, onClose, title, description, children, footer, className }: ModalProps) {
+export function Modal({ open, onClose, title, titleActions, description, children, footer, className }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreFocusTo = useRef<HTMLElement | null>(null);
 
@@ -121,7 +123,10 @@ export function Modal({ open, onClose, title, description, children, footer, cla
         <div className="surface-core flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex items-start justify-between gap-3 px-3.5 pt-3 pb-2">
             <div className="min-w-0">
-              <h2 className="m-0 text-heading font-bold text-balance text-ink">{title}</h2>
+              <div className="flex items-center gap-1.5">
+                <h2 className="m-0 min-w-0 text-heading font-bold text-balance text-ink">{title}</h2>
+                {titleActions}
+              </div>
               {description && <p className="m-0 text-caption text-muted">{description}</p>}
             </div>
             <IconButton aria-label="Close" size="sm" onClick={onClose}>

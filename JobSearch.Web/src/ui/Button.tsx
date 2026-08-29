@@ -136,6 +136,8 @@ export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
   "aria-label": string;
   variant?: Exclude<ButtonVariant, "primary">;
   size?: ButtonSize;
+  /** Renders an <a> that opens in a new tab instead of a <button> — used for icon-only external links. */
+  href?: string;
   className?: string;
 }
 
@@ -144,20 +146,27 @@ const ICON_BUTTON_SIZE: Record<ButtonSize, string> = {
   md: "h-8 w-8",
 };
 
-export function IconButton({ children, variant = "ghost", size = "md", className, type, ...rest }: IconButtonProps) {
+export function IconButton({ children, variant = "ghost", size = "md", className, type, href, ...rest }: IconButtonProps) {
+  const classes = cx(
+    "inline-grid place-items-center rounded-ctl focus-ring tappable",
+    "transition-[background-color,color,transform] duration-400 ease-spring motion-reduce:transition-none",
+    "active:scale-[.94] disabled:pointer-events-none disabled:opacity-55",
+    styleFor(ICON_BUTTON_SIZE, size),
+    variant === "ghost" ? "text-muted hover:bg-shell hover:text-ink" : "bg-shell text-ink-2 hover:bg-sunk hover:text-ink",
+    className,
+  );
+
+  if (href) {
+    // External-only: opens in a new tab. rel closes the reverse-tabnabbing hole target="_blank" leaves.
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={classes} {...(rest as object)}>
+        {children}
+      </a>
+    );
+  }
+
   return (
-    <button
-      type={type ?? "button"}
-      className={cx(
-        "inline-grid place-items-center rounded-ctl focus-ring tappable",
-        "transition-[background-color,color,transform] duration-400 ease-spring motion-reduce:transition-none",
-        "active:scale-[.94] disabled:pointer-events-none disabled:opacity-55",
-        styleFor(ICON_BUTTON_SIZE, size),
-        variant === "ghost" ? "text-muted hover:bg-shell hover:text-ink" : "bg-shell text-ink-2 hover:bg-sunk hover:text-ink",
-        className,
-      )}
-      {...rest}
-    >
+    <button type={type ?? "button"} className={classes} {...rest}>
       {children}
     </button>
   );

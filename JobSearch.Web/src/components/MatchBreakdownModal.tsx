@@ -1,13 +1,14 @@
 import type { DiscoveredPosting } from "../types";
-import { buildMatchRows, scoreFromRows } from "../lib/matchScore";
-import { Modal, Badge, MatchReason, Well, cx, type BadgeVariant } from "../ui";
+import { buildMatchRows, scoreFromRows, tierOf, TIER_LABEL, TIER_BADGE } from "../lib/matchScore";
+import { Modal, Badge, IconButton, MatchReason, Well, ExternalLinkIcon, cx, type BadgeVariant } from "../ui";
 
 // The "Read more" breakdown for a Discover card: the same evaluation the agent ran, opened up.
 // A derived match score and one-line read at the top, then every dimension the evaluator scored
 // with its own detail and fit tier, then any orange flags and the full rationale.
 //
-// The score and rows come from the shared `matchScore` helper, so this modal's number and the
-// card's meter can never diverge.
+// The score, rows, and the qualitative "fit" label all come from the shared `matchScore` helper —
+// the label is the AI's own recommendation tier (not a second verdict re-derived from the score),
+// so the modal can never disagree with the card's badge.
 
 // Fit tier → badge colour. Top tier reads pos/green, middle brass, anything below faint.
 function tierVariant(tier: string): BadgeVariant {
@@ -15,12 +16,6 @@ function tierVariant(tier: string): BadgeVariant {
   if (["acceptable", "good"].includes(tier)) return "good";
   if (tier === "missing") return "neutral";
   return "weak";
-}
-
-function band(score: number): { label: string; variant: BadgeVariant } {
-  if (score >= 75) return { label: "Strong fit", variant: "strong" };
-  if (score >= 50) return { label: "Good fit", variant: "good" };
-  return { label: "Weak fit", variant: "weak" };
 }
 
 // One-line read: the score band plus how many things the evaluator flagged (excluded/weak
@@ -34,11 +29,24 @@ function oneLiner(score: number | null, concerns: number): string {
 export function MatchBreakdownModal({ posting, onClose }: { posting: DiscoveredPosting; onClose: () => void }) {
   const rows = buildMatchRows(posting);
   const score = scoreFromRows(rows);
+  const tier = tierOf(posting);
   const concernRows = rows.filter(r => r.weight !== null && r.weight <= 0.35).length;
   const concerns = concernRows + posting.orangeFlags.length + (posting.disqualifierHit ? 1 : 0);
 
   return (
-    <Modal open onClose={onClose} title={posting.title} description={posting.company || "Unknown company"}>
+    <Modal
+      open
+      onClose={onClose}
+      title={posting.title}
+      description={posting.company || "Unknown company"}
+      titleActions={
+        posting.url && (
+          <IconButton href={posting.url} aria-label="Open posting in a new tab" size="sm" className="flex-none">
+            <ExternalLinkIcon className="h-4 w-4" />
+          </IconButton>
+        )
+      }
+    >
       <div className="flex flex-col gap-4">
         <Well className="flex items-center justify-between gap-3 px-3.5 py-3">
           <div className="min-w-0">
@@ -47,7 +55,8 @@ export function MatchBreakdownModal({ posting, onClose }: { posting: DiscoveredP
           {score !== null && (
             <div className="flex flex-col items-end gap-1">
               <span className="text-display font-bold tabular-nums leading-none text-ink">{score}</span>
-              <Badge variant={band(score).variant}>{band(score).label}</Badge>
+              {/* eslint-disable-next-line security/detect-object-injection -- tier is Exclude<Tier, "all">, not arbitrary input */}
+              {tier && <Badge variant={TIER_BADGE[tier]}>{TIER_LABEL[tier]} fit</Badge>}
             </div>
           )}
         </Well>

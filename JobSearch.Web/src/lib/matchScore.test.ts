@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { DiscoveredPosting } from "../types";
-import { buildMatchRows, computeMatchScore, matchSummaryLine, scoreFromRows } from "./matchScore";
+import { buildMatchRows, computeMatchScore, matchSummaryLine, scoreFromRows, tierOf } from "./matchScore";
 
 // A posting with nothing assessed — each test overrides only the dimensions it cares about.
 function posting(overrides: Partial<DiscoveredPosting> = {}): DiscoveredPosting {
@@ -41,9 +41,11 @@ describe("computeMatchScore", () => {
     expect(computeMatchScore(posting({ locationMatch: "acceptable", experienceMatch: "acceptable" }))).toBe(60);
   });
 
-  it("excludes salary 'missing' from the average rather than scoring it zero", () => {
-    // Only experience ideal (1) counts; salary "missing" is dropped => 100, not 50.
-    expect(computeMatchScore(posting({ experienceMatch: "ideal", salaryAssessment: "missing" }))).toBe(100);
+  it("counts 'missing' as a low weight that drags the score down, not an exclusion", () => {
+    // experience ideal alone => 100.
+    expect(computeMatchScore(posting({ experienceMatch: "ideal" }))).toBe(100);
+    // adding a missing salary (weight 0.25) pulls it down: (1 + 0.25) / 2 = 0.625 => 63.
+    expect(computeMatchScore(posting({ experienceMatch: "ideal", salaryAssessment: "missing" }))).toBe(63);
   });
 
   it("excludes tiers with no weight mapping", () => {
@@ -64,6 +66,72 @@ describe("computeMatchScore", () => {
         }),
       ),
     ).toBe(50);
+  });
+
+  it("priority-weights skill dimensions above company/role-type", () => {
+    // skill strong (weight 1, priority 2) + company weaker (weight 0.3, priority 0.4).
+    // Weighted: (1*2 + 0.3*0.4) / (2 + 0.4) = 2.12 / 2.4 => 88.
+    // A plain equal-weight average would be (1 + 0.3) / 2 = 0.65 => 65, so weighting lifts it.
+    const score = computeMatchScore(
+      posting({ skillMatches: [{ dimension: "React", match: "strong", detail: "" }], companyAssessment: "weaker" }),
+    );
+    expect(score).toBe(88);
+    expect(score).toBeGreaterThan(65);
+  });
+
+  it("weights 'missing' at 0.25 on every dimension it can appear on", () => {
+    for (const p of [
+      posting({ locationMatch: "missing" }),
+      posting({ experienceMatch: "missing" }),
+      posting({ companyAssessment: "missing" }),
+      posting({ roleTypeMatch: "missing" }),
+      posting({ skillMatches: [{ dimension: "Go", match: "missing", detail: "not stated" }] }),
+    ]) {
+      expect(buildMatchRows(p)[0].weight).toBe(0.25);
+    }
+  });
+
+  it("scores a posting whose assessed dimensions are all 'missing' at 25, not null", () => {
+    // Every weight is 0.25, so the weighted average collapses to 0.25 regardless of priorities => 25.
+    expect(
+      computeMatchScore(
+        posting({
+          locationMatch: "missing",
+          experienceMatch: "missing",
+          companyAssessment: "missing",
+          roleTypeMatch: "missing",
+          skillMatches: [{ dimension: "React", match: "missing", detail: "not stated" }],
+        }),
+      ),
+    ).toBe(25);
+  });
+});
+
+describe("tierOf", () => {
+  it("derives the tier from the match score, ignoring the recommendation field", () => {
+    // skill good (0.75, pri 2) + location preferred (1, pri 1) => (1.5 + 1) / 3 = 0.833 => 83 => strong,
+    // even though recommendation says weak_match.
+    expect(tierOf(posting({
+      recommendation: "weak_match",
+      skillMatches: [{ dimension: "React", match: "good", detail: "" }],
+      locationMatch: "preferred",
+    }))).toBe("strong");
+    // location acceptable (0.6) + experience acceptable (0.6) => 60 => good.
+    expect(tierOf(posting({
+      recommendation: "strong_match",
+      locationMatch: "acceptable",
+      experienceMatch: "acceptable",
+    }))).toBe("good");
+    // location weak (0.25) + experience acceptable (0.6) => 42.5 => 43 => weak.
+    expect(tierOf(posting({
+      recommendation: "strong_match",
+      locationMatch: "weak",
+      experienceMatch: "acceptable",
+    }))).toBe("weak");
+  });
+
+  it("returns null only when nothing assessable exists to score", () => {
+    expect(tierOf(posting())).toBeNull();
   });
 });
 

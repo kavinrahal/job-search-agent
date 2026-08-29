@@ -37,6 +37,7 @@ import {
   type AccountMenuItem,
 } from "./ui";
 import { useMe, useLogout } from "./hooks/useAuth";
+import { MeProvider } from "./hooks/useMeContext";
 
 // Daily-work destinations: the top nav on desktop, the bottom tab bar on mobile — both capped at
 // four by the design (see ui/Nav.tsx's own note on why). Discover/Applications are Tier 2-only,
@@ -88,16 +89,30 @@ function isActive(pathname: string, to: string): boolean {
 type Me = NonNullable<ReturnType<typeof useMe>["data"]>;
 
 export default function App() {
-  const { data: me, loading } = useMe();
+  const { data: me, loading, reload } = useMe();
 
-  if (loading) return null;
+  // Only blank the screen on the very first load, when there's nothing to show yet. A later
+  // reloadMe() (after a credit-spending action) also flips `loading`, but `me` is still present —
+  // rendering through it keeps the app mounted instead of flashing blank and remounting every page.
+  if (loading && !me) return null;
 
   // BrowserRouter now wraps both states: the logged-out marketing/auth routes and the
   // authenticated app. It used to mount only once a session existed, which is why the old
   // landing page had to read its own query params off window.location by hand — there was no
   // router to give /signin, /register or the reset link real routes.
+  //
+  // MeProvider exposes `reload` to any credit-spending descendant so the header's credit pill can
+  // refresh the moment a generation/revision resolves, instead of going stale until a full reload.
   return (
-    <BrowserRouter>{me ? <AuthedApp me={me} /> : <LoggedOutRoutes />}</BrowserRouter>
+    <BrowserRouter>
+      {me ? (
+        <MeProvider me={me} reloadMe={reload}>
+          <AuthedApp me={me} />
+        </MeProvider>
+      ) : (
+        <LoggedOutRoutes />
+      )}
+    </BrowserRouter>
   );
 }
 
