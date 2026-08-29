@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { DiscoveredPosting } from "../types";
-import { buildMatchRows, computeMatchScore, matchSummaryLine, scoreFromRows } from "./matchScore";
+import { buildMatchRows, computeMatchScore, matchSummaryLine, scoreFromRows, tierOf } from "./matchScore";
 
 // A posting with nothing assessed — each test overrides only the dimensions it cares about.
 function posting(overrides: Partial<DiscoveredPosting> = {}): DiscoveredPosting {
@@ -64,6 +64,63 @@ describe("computeMatchScore", () => {
         }),
       ),
     ).toBe(50);
+  });
+
+  it("priority-weights skill dimensions above company/role-type", () => {
+    // skill strong (weight 1, priority 2) + company weaker (weight 0.3, priority 0.4).
+    // Weighted: (1*2 + 0.3*0.4) / (2 + 0.4) = 2.12 / 2.4 => 88.
+    // A plain equal-weight average would be (1 + 0.3) / 2 = 0.65 => 65, so weighting lifts it.
+    const score = computeMatchScore(
+      posting({ skillMatches: [{ dimension: "React", match: "strong", detail: "" }], companyAssessment: "weaker" }),
+    );
+    expect(score).toBe(88);
+    expect(score).toBeGreaterThan(65);
+  });
+
+  it("excludes a 'missing' tier from every dimension it can appear on", () => {
+    // In each pair, only the ideal/strong dimension should count => 100 despite the missing sibling.
+    expect(computeMatchScore(posting({ experienceMatch: "ideal", locationMatch: "missing" }))).toBe(100);
+    expect(computeMatchScore(posting({ locationMatch: "preferred", experienceMatch: "missing" }))).toBe(100);
+    expect(computeMatchScore(posting({ experienceMatch: "ideal", companyAssessment: "missing" }))).toBe(100);
+    expect(computeMatchScore(posting({ experienceMatch: "ideal", roleTypeMatch: "missing" }))).toBe(100);
+    expect(
+      computeMatchScore(
+        posting({
+          skillMatches: [
+            { dimension: "React", match: "strong", detail: "" },
+            { dimension: "Go", match: "missing", detail: "not stated" },
+          ],
+        }),
+      ),
+    ).toBe(100);
+  });
+
+  it("returns null when every assessed dimension is 'missing'", () => {
+    expect(
+      computeMatchScore(
+        posting({
+          locationMatch: "missing",
+          experienceMatch: "missing",
+          companyAssessment: "missing",
+          roleTypeMatch: "missing",
+          skillMatches: [{ dimension: "React", match: "missing", detail: "not stated" }],
+        }),
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("tierOf", () => {
+  it("maps recommendation strings to their display tier", () => {
+    expect(tierOf(posting({ recommendation: "strong_match" }))).toBe("strong");
+    expect(tierOf(posting({ recommendation: "good_match" }))).toBe("good");
+    expect(tierOf(posting({ recommendation: "weak_match" }))).toBe("weak");
+  });
+
+  it("returns null for discard, unknown, or absent recommendations", () => {
+    expect(tierOf(posting({ recommendation: "discard" }))).toBeNull();
+    expect(tierOf(posting({ recommendation: "something_else" }))).toBeNull();
+    expect(tierOf(posting({ recommendation: null }))).toBeNull();
   });
 });
 

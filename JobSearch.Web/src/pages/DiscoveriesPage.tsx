@@ -4,48 +4,30 @@ import { useDiscoveries } from "../hooks/useDashboardData";
 import type { DiscoveredPosting } from "../types";
 import { GenerationDrawer, type GenerationKind } from "../components/GenerationDrawer";
 import { MatchBreakdownModal } from "../components/MatchBreakdownModal";
-import { computeMatchScore, matchSummaryLine } from "../lib/matchScore";
+import { computeMatchScore, matchSummaryLine, tierOf, TIER_LABEL, TIER_BADGE, type Tier } from "../lib/matchScore";
 import {
   Badge,
   Button,
   Callout,
   EmptyState,
+  IconButton,
   SegmentedControl,
   SkeletonList,
   Surface,
+  ExternalLinkIcon,
   SearchIcon,
   cx,
-  type BadgeVariant,
 } from "../ui";
-
-// ---------------------------------------------------------------------------
-// Tier config — the three match tiers the filter and card both key off. "discard" (and any
-// unrecognized/missing recommendation) never gets its own tab; it folds into the same
-// held-back treatment as "weak" wherever a tier still has to be picked for display.
-// ---------------------------------------------------------------------------
-type Tier = "all" | "strong" | "good" | "weak";
-
-const TIER_LABEL: Record<Tier, string> = { all: "All", strong: "Strong", good: "Good", weak: "Weak" };
-const TIER_BADGE: Record<Exclude<Tier, "all">, BadgeVariant> = { strong: "strong", good: "good", weak: "weak" };
 
 // The card meter's fill + percentage colour, keyed off the same tier the badge uses: strong reads
 // pos/green, good brass/amber, weak (and a null/discard tier) faint/grey — all existing tokens.
+// The tier mapping itself (Tier, TIER_LABEL, TIER_BADGE, tierOf) lives in matchScore.ts so the
+// card badge, the filter tabs, and the breakdown modal all agree on one source.
 const TIER_METER: Record<Exclude<Tier, "all">, { fill: string; text: string }> = {
   strong: { fill: "bg-pos", text: "text-pos" },
   good: { fill: "bg-brass", text: "text-brass" },
   weak: { fill: "bg-faint", text: "text-faint" },
 };
-
-const REC_TO_TIER: Record<string, Exclude<Tier, "all">> = {
-  strong_match: "strong",
-  good_match: "good",
-  weak_match: "weak",
-};
-
-function tierOf(posting: DiscoveredPosting): Exclude<Tier, "all"> | null {
-  if (!posting.recommendation) return null;
-  return REC_TO_TIER[posting.recommendation] ?? null;
-}
 
 // Stable per-posting DOM id, so a Today "Worth a look" link (?posting=<id>) can scroll straight
 // to the right card once it's loaded here.
@@ -103,9 +85,16 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
       <div className="flex h-full flex-col gap-5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="m-0 truncate text-body font-[650] tracking-[-.018em] text-ink">
-              {posting.company || "Unknown company"}
-            </p>
+            <div className="flex min-w-0 items-center gap-1">
+              <p className="m-0 truncate text-body font-[650] tracking-[-.018em] text-ink">
+                {posting.company || "Unknown company"}
+              </p>
+              {posting.url && (
+                <IconButton href={posting.url} aria-label="Open posting in a new tab" size="sm" className="flex-none">
+                  <ExternalLinkIcon className="h-3.5 w-3.5" />
+                </IconButton>
+              )}
+            </div>
             <p className="m-0 mt-2 text-caption leading-snug text-muted">{posting.title}</p>
           </div>
           {/* eslint-disable-next-line security/detect-object-injection -- tier is Exclude<Tier, "all"> | null, not arbitrary input */}

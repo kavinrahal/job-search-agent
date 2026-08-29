@@ -35,9 +35,9 @@ public class PostingEvaluator
                     ["disqualifier_hit"]     = Prop("string", "Disqualifier id that triggered. Omit this field entirely if none triggered — never the literal string \"null\".", nullable: true),
                     ["sponsorship_verdict"]  = PropEnum("Sponsorship stance.", "pass", "discard"),
                     ["sponsorship_evidence"] = Prop("string", "Exact quoted phrase. Omit this field entirely if there is none — never the literal string \"null\".", nullable: true),
-                    ["location_match"]       = PropEnum("Location fit.", "preferred", "acceptable", "weak"),
+                    ["location_match"]       = PropEnum("Location fit.", "preferred", "acceptable", "weak", "missing"),
                     ["location_detail"]      = Prop("string", "City and arrangement."),
-                    ["experience_match"]     = PropEnum("Experience fit.", "ideal", "acceptable", "excluded"),
+                    ["experience_match"]     = PropEnum("Experience fit.", "ideal", "acceptable", "excluded", "missing"),
                     ["experience_detail"]    = Prop("string", "Quoted years requirement."),
                     ["skill_matches"]        = PropSkillMatchArray(
                                                   "One entry per skill dimension defined in the candidate's job " +
@@ -47,9 +47,9 @@ public class PostingEvaluator
                                                   "target", "acceptable", "flagged_low", "flagged_high", "missing"),
                     ["salary_detail"]        = Prop("string", "Quoted salary figure or range. Omit this field entirely if not stated — never the literal string \"null\".", nullable: true),
                     ["company_assessment"]   = PropEnum("Company fit.",
-                                                  "preferred", "acceptable", "weaker", "excluded"),
+                                                  "preferred", "acceptable", "weaker", "excluded", "missing"),
                     ["role_type_match"]      = PropEnum("Role type fit.",
-                                                  "preferred", "acceptable", "weaker", "excluded"),
+                                                  "preferred", "acceptable", "weaker", "excluded", "missing"),
                     ["orange_flags"]         = PropArray("Active orange flags. Empty array if none."),
                     ["rationale"]            = Prop("string", "2-3 sentences on key factors."),
                 },
@@ -188,7 +188,7 @@ public class PostingEvaluator
                 properties = new
                 {
                     dimension = new { type = "string", description = "Skill dimension name, as defined in the candidate's job criteria." },
-                    match = new { type = "string", @enum = new[] { "strong", "good", "acceptable", "excluded" }, description = "Fit tier for this dimension." },
+                    match = new { type = "string", @enum = new[] { "strong", "good", "acceptable", "excluded", "missing" }, description = "Fit tier for this dimension." },
                     detail = new { type = "string", description = "Specific technologies/qualifications/etc. named in the posting for this dimension." },
                 },
                 required = new[] { "dimension", "match", "detail" },

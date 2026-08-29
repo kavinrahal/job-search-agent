@@ -28,23 +28,27 @@ General rules that apply regardless of profession:
 
 Evaluate dimensions in the priority order given in the candidate's criteria (if stated) — otherwise use the order below. Company and culture signals are always lowest priority — note them in the rationale as FYI, do not let them push the recommendation down.
 
+**Missing vs. present (applies to every dimension below):** If the posting simply does not address a dimension, record that dimension's tier as `missing` — do not fall back to `acceptable`. `missing` means the posting is silent on the dimension; `excluded`/`weak`/`weaker` mean the posting says something that actively counts against it. Absence of a signal is not a weak-or-middling signal and must not be scored as one — this is the same rule the salary dimension already follows, now applied to location, experience, each skill dimension, company, and role type.
+
 **Skill dimensions** (highest weight — these are defined per candidate, not fixed by this skill):
 - The candidate's criteria define a set of named skill dimensions relevant to their profession — e.g. a software engineer's criteria might define "Backend stack" and "Frontend stack"; a teacher's might define "Age group specialization" and "Curriculum framework"; a chef's might define "Cuisine specialization" and "Kitchen role level".
 - For each skill dimension defined in the criteria, score it against that dimension's own tiers (as given in the criteria) and name the specific detail found in the posting (technologies, qualifications, specializations, etc.).
-- Emit exactly one entry per dimension in `skill_matches[]`: `{"dimension": "<name from criteria>", "match": "strong|good|acceptable|excluded", "detail": "<what the posting actually says>"}`. If a dimension isn't addressed in the posting at all, still emit it with `detail: "not stated"` rather than omitting it.
+- Emit exactly one entry per dimension in `skill_matches[]`: `{"dimension": "<name from criteria>", "match": "strong|good|acceptable|excluded|missing", "detail": "<what the posting actually says>"}`. If a dimension isn't addressed in the posting at all, still emit it with `match: "missing"` and `detail: "not stated"` rather than omitting it or guessing `acceptable`.
 
 **Experience/seniority:**
 - Evaluate the years required and the scope described, per the candidate's criteria.
 - When a range is stated (e.g. "3-6 years"), use the midpoint.
+- If the posting states no experience or seniority requirement at all, record `missing` — do not default to `acceptable`.
 
 **Location:**
 - Apply the candidate's location preference (accepted regions, remote/hybrid/on-site stance) exactly as given.
+- If the posting states no location or work arrangement at all, record `missing` rather than guessing `acceptable`.
 
 **Salary:**
 - Apply the candidate's salary thresholds exactly as given. Missing salary information is not a flag — record it as `missing`, do not treat absence as a signal either way.
 
 **Company and role type (lowest — FYI only):**
-- Record `company_assessment` and `role_type_match` as normal output fields, using the candidate's criteria for what counts as preferred/acceptable/weaker/excluded.
+- Record `company_assessment` and `role_type_match` as normal output fields, using the candidate's criteria for what counts as preferred/acceptable/weaker/excluded — or `missing` if the posting doesn't address it at all.
 - Company stability, culture signals, agency/consultancy status — mention these in the rationale as FYI context, never in `orange_flags[]`.
 
 ### Step 3 — Collect orange flags
@@ -76,17 +80,17 @@ the literal string `"null"`.
   "disqualifier_hit": "id string or null",
   "sponsorship_verdict": "pass|discard",
   "sponsorship_evidence": "exact quoted phrase or null",
-  "location_match": "preferred|acceptable|weak",
+  "location_match": "preferred|acceptable|weak|missing",
   "location_detail": "city, arrangement (e.g. Melbourne hybrid)",
-  "experience_match": "ideal|acceptable|excluded",
+  "experience_match": "ideal|acceptable|excluded|missing",
   "experience_detail": "quoted requirement from posting",
   "skill_matches": [
-    { "dimension": "name from candidate's criteria", "match": "strong|good|acceptable|excluded", "detail": "what the posting says, or 'not stated'" }
+    { "dimension": "name from candidate's criteria", "match": "strong|good|acceptable|excluded|missing", "detail": "what the posting says, or 'not stated'" }
   ],
   "salary_assessment": "target|acceptable|flagged_low|flagged_high|missing",
   "salary_detail": "quoted figure or range, or null",
-  "company_assessment": "preferred|acceptable|weaker|excluded",
-  "role_type_match": "preferred|acceptable|weaker|excluded",
+  "company_assessment": "preferred|acceptable|weaker|excluded|missing",
+  "role_type_match": "preferred|acceptable|weaker|excluded|missing",
   "orange_flags": ["list of active flag descriptions — empty array if none"],
   "rationale": "2-3 sentences"
 }
