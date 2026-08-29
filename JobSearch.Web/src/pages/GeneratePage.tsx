@@ -81,11 +81,6 @@ export function GeneratePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="m-0 text-lede font-bold text-ink">Generate</h2>
-        <p className="m-0 text-caption text-faint">Paste a posting, get a tailored CV or cover letter back in seconds.</p>
-      </div>
-
       {/* Form left, live A4 preview right — matching the approved prototype's layout (see
           ResumeBuilderPage's own form-rail + sticky-preview split for the same pattern). Stacks
           to a single column below lg, where the preview simply follows the form in source order

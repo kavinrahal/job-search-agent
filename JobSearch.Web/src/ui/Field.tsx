@@ -28,10 +28,14 @@ export interface FieldProps {
   error?: string;
   required?: boolean;
   className?: string;
+  /** Keeps the label for screen readers only — for a control whose surrounding context (a table
+   * column, a list row) already makes its purpose visually obvious, so a visible label would just
+   * be redundant chrome. The control stays fully labelled via aria; only the visible text goes. */
+  hideLabel?: boolean;
   children: (props: FieldRenderProps) => ReactNode;
 }
 
-export function Field({ label, hint, error, required, className, children }: FieldProps) {
+export function Field({ label, hint, error, required, className, hideLabel, children }: FieldProps) {
   const base = useId();
   const id = `${base}-control`;
   const hintId = `${base}-hint`;
@@ -42,7 +46,7 @@ export function Field({ label, hint, error, required, className, children }: Fie
 
   return (
     <div className={cx("min-w-0", className)}>
-      <label htmlFor={id} className="mb-[5px] block text-meta font-[650] text-muted">
+      <label htmlFor={id} className={hideLabel ? "sr-only" : "mb-[5px] block text-meta font-[650] text-muted"}>
         {label}
         {required && (
           <span className="ml-1 text-ember" aria-hidden="true">
@@ -128,6 +132,7 @@ export interface SelectProps extends NativeSelectProps {
   hint?: string;
   error?: string;
   className?: string;
+  hideLabel?: boolean;
   children: ReactNode;
 }
 
@@ -136,9 +141,9 @@ export interface SelectProps extends NativeSelectProps {
  * 1.5-stroke nor theme-aware. The select itself stays a real <select>, so mobile still gets the
  * platform picker.
  */
-export function Select({ label, hint, error, required, className, children, ...rest }: SelectProps) {
+export function Select({ label, hint, error, required, className, hideLabel, children, ...rest }: SelectProps) {
   return (
-    <Field label={label} hint={hint} error={error} required={required}>
+    <Field label={label} hint={hint} error={error} required={required} hideLabel={hideLabel}>
       {field => (
         <div className="relative">
           <select {...field} {...rest} className={cx(CONTROL, ringFor(Boolean(error)), "appearance-none pr-9", className)}>

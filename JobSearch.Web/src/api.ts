@@ -88,6 +88,7 @@ export async function createApplication(input: {
   roleTitle: string;
   jobUrl?: string;
   companyDomain?: string;
+  status?: string;
 }): Promise<Application> {
   return request("/applications", { method: "POST", ...json(input) });
 }
