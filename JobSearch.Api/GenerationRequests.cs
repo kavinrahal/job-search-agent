@@ -48,7 +48,9 @@ public record CancelAccountRequest(bool DeleteData);
 // POST /api/v1/applications — manually logging an application (the only creation path
 // besides ApplicationTracker's email-driven one). CompanyDomain is only meaningful in
 // filter tracking mode (see GmailTrackingMode) — installs a per-company Gmail filter.
-public record CreateApplicationRequest(string Company, string RoleTitle, string? JobUrl, string? CompanyDomain);
+// Status is optional — an invalid or omitted value falls back to ApplicationStatus.Applied
+// (same validation pattern as UpdateApplicationStatusRequest below).
+public record CreateApplicationRequest(string Company, string RoleTitle, string? JobUrl, string? CompanyDomain, string? Status);
 
 // PATCH /api/v1/applications/{id}
 public record UpdateApplicationStatusRequest(string Status);

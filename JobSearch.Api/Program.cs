@@ -919,6 +919,10 @@ api.MapPost("/applications", async (HttpContext ctx, AppDbContext db, UserSecret
     if (string.IsNullOrWhiteSpace(body.Company) || string.IsNullOrWhiteSpace(body.RoleTitle))
         return Results.BadRequest(new { error = "Company and role title are required." });
 
+    var status = body.Status is not null && ApplicationStatus.All.Contains(body.Status)
+        ? body.Status
+        : ApplicationStatus.Applied;
+
     var now = DateTime.UtcNow;
     var application = new Application
     {
@@ -927,7 +931,7 @@ api.MapPost("/applications", async (HttpContext ctx, AppDbContext db, UserSecret
         RoleTitle = body.RoleTitle.Trim(),
         JobUrl = body.JobUrl,
         CompanyDomain = body.CompanyDomain?.Trim().ToLowerInvariant(),
-        Status = ApplicationStatus.Applied,
+        Status = status,
         AppliedAt = now,
         UpdatedAt = now,
     };
@@ -940,7 +944,7 @@ api.MapPost("/applications", async (HttpContext ctx, AppDbContext db, UserSecret
         ApplicationId = application.Id,
         EventType = ApplicationEventType.ManualUpdate,
         FromStatus = null,
-        ToStatus = ApplicationStatus.Applied,
+        ToStatus = status,
         Summary = $"Manually logged: {application.Company} - {application.RoleTitle}",
         OccurredAt = now,
     });

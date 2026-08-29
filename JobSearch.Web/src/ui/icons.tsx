@@ -181,6 +181,36 @@ export const SlidersIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const LiveStatusIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M22 2 11 13" />
+    <path d="M22 2 15 22l-4-9-9-4Z" />
+  </Icon>
+);
+
+export const InterviewingStatusIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+    <path d="M8 10h.01M12 10h.01M16 10h.01" />
+  </Icon>
+);
+
+export const ClosedStatusIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M3 4h18v4H3z" />
+    <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+    <path d="M10 13h4" />
+  </Icon>
+);
+
+export const SuccessfulStatusIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M8 4h8v5a4 4 0 0 1-8 0z" />
+    <path d="M8 5H5a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4M16 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4" />
+    <path d="M12 13v3.5M9 21h6M9.5 18h5v.5a2.5 2.5 0 0 1-5 0Z" />
+  </Icon>
+);
+
 /** The brand mark's glyph. Heavier than the icon set on purpose, it sits in a 23px ember tile. */
 export const BrandGlyph = (p: IconProps) => (
   <Icon strokeWidth={2.1} {...p}>
