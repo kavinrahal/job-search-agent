@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { DiscoveredPosting } from "../types";
-import { buildMatchRows, computeMatchScore, matchSummaryLine, scoreFromRows, tierOf } from "./matchScore";
+import { buildMatchRows, cleanDetail, computeMatchScore, matchSummaryLine, scoreFromRows, tierOf } from "./matchScore";
 
 // A posting with nothing assessed — each test overrides only the dimensions it cares about.
 function posting(overrides: Partial<DiscoveredPosting> = {}): DiscoveredPosting {
@@ -132,6 +132,23 @@ describe("tierOf", () => {
 
   it("returns null only when nothing assessable exists to score", () => {
     expect(tierOf(posting())).toBeNull();
+  });
+});
+
+describe("cleanDetail", () => {
+  it("falls back for null, undefined, and empty/whitespace values", () => {
+    expect(cleanDetail(null, "not stated")).toBe("not stated");
+    expect(cleanDetail(undefined, "not stated")).toBe("not stated");
+    expect(cleanDetail("   ", "not stated")).toBe("not stated");
+  });
+
+  it("falls back for the literal string 'null' the evaluator occasionally emits on older rows", () => {
+    expect(cleanDetail("null", "not stated")).toBe("not stated");
+    expect(cleanDetail("NULL", "not stated")).toBe("not stated");
+  });
+
+  it("passes a real value through trimmed", () => {
+    expect(cleanDetail("  $120k–$140k  ", "not stated")).toBe("$120k–$140k");
   });
 });
 

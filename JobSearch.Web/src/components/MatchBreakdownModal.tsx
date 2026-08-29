@@ -1,5 +1,5 @@
 import type { DiscoveredPosting } from "../types";
-import { buildMatchRows, scoreFromRows, tierOf, TIER_LABEL, TIER_BADGE } from "../lib/matchScore";
+import { buildMatchRows, scoreFromRows, tierOf, cleanDetail, TIER_LABEL, TIER_BADGE } from "../lib/matchScore";
 import { Modal, Badge, IconButton, MatchReason, Well, ExternalLinkIcon, cx, type BadgeVariant } from "../ui";
 
 // The "Read more" breakdown for a Discover card: the same evaluation the agent ran, opened up.
@@ -7,8 +7,8 @@ import { Modal, Badge, IconButton, MatchReason, Well, ExternalLinkIcon, cx, type
 // with its own detail and fit tier, then any orange flags and the full rationale.
 //
 // The score, rows, and the qualitative "fit" label all come from the shared `matchScore` helper —
-// the label is the AI's own recommendation tier (not a second verdict re-derived from the score),
-// so the modal can never disagree with the card's badge.
+// the label is derived from the score by the same threshold `tierOf` uses everywhere else, so the
+// modal can never disagree with the card's badge.
 
 // Fit tier → badge colour. Top tier reads pos/green, middle brass, anything below faint.
 function tierVariant(tier: string): BadgeVariant {
@@ -30,8 +30,11 @@ export function MatchBreakdownModal({ posting, onClose }: { posting: DiscoveredP
   const rows = buildMatchRows(posting);
   const score = scoreFromRows(rows);
   const tier = tierOf(posting);
+  // cleanDetail also catches the literal string "null" the evaluator occasionally emits for an
+  // optional field on older rows (see its own comment) — disqualifierHit hits this same gotcha.
+  const disqualifier = cleanDetail(posting.disqualifierHit, "");
   const concernRows = rows.filter(r => r.weight !== null && r.weight <= 0.35).length;
-  const concerns = concernRows + posting.orangeFlags.length + (posting.disqualifierHit ? 1 : 0);
+  const concerns = concernRows + posting.orangeFlags.length + (disqualifier ? 1 : 0);
 
   return (
     <Modal
@@ -76,9 +79,9 @@ export function MatchBreakdownModal({ posting, onClose }: { posting: DiscoveredP
           ))}
         </dl>
 
-        {posting.disqualifierHit && (
+        {disqualifier && (
           <MatchReason tone="held-back" heading="Disqualifier.">
-            {posting.disqualifierHit}
+            {disqualifier}
           </MatchReason>
         )}
 
