@@ -540,6 +540,13 @@ static Task SignInPasswordUserAsync(HttpContext ctx, User user)
 // proved ownership via a prior Google login is signed in immediately.
 app.MapPost("/api/v1/auth/register", async (HttpContext ctx, RegisterRequest body, AppDbContext db) =>
 {
+    // Request DTOs are positional records with non-nullable string params, but that's a
+    // compile-time-only guarantee — a missing/null JSON field still binds to null at runtime,
+    // so this guard is load-bearing, not redundant. Without it, PasswordRules.Validate(null)
+    // throws a NullReferenceException instead of a clean 400.
+    if (string.IsNullOrWhiteSpace(body.Email) || string.IsNullOrWhiteSpace(body.Password))
+        return Results.BadRequest(new { error = "Email and password are required." });
+
     var result = await PasswordAuthService.RegisterAsync(db, body.Email, body.Password, ownerEmail);
 
     switch (result.Outcome)
@@ -599,6 +606,12 @@ app.MapGet("/api/v1/auth/verify-email", async (HttpContext ctx, AppDbContext db,
 // — deliberately not distinguishing which, to avoid leaking which emails have accounts.
 app.MapPost("/api/v1/auth/login", async (HttpContext ctx, LoginRequest body, AppDbContext db) =>
 {
+    // Same null-guard reasoning as /auth/register above — a missing field binds to null at
+    // runtime despite the non-nullable DTO param, and FindByNormalizedEmailAsync's
+    // email.Trim() would otherwise throw instead of returning a clean 400.
+    if (string.IsNullOrWhiteSpace(body.Email) || string.IsNullOrWhiteSpace(body.Password))
+        return Results.BadRequest(new { error = "Email and password are required." });
+
     var result = await PasswordAuthService.LoginAsync(db, body.Email, body.Password);
 
     switch (result.Outcome)
@@ -679,6 +692,11 @@ api.MapGet("/discoveries", async (HttpContext ctx, AppDbContext db, string? reco
     var validRecs = new HashSet<string> { "strong_match", "good_match", "weak_match", "discard" };
     if (recommendation is not null && !validRecs.Contains(recommendation))
         return Results.BadRequest(new { error = "Invalid recommendation value" });
+
+    // page <= 0 would otherwise produce a negative Skip()/OFFSET and 500 in Postgres; pageSize
+    // has no natural upper bound from the caller otherwise. Same clamp as /applications below.
+    page = Math.Max(1, page);
+    pageSize = Math.Clamp(pageSize, 1, 100);
 
     // Explicit ownership scoping — defense-in-depth alongside AppDbContext's global query
     // filter (HasQueryFilter, OnModelCreating), which already restricts this to the
@@ -833,6 +851,11 @@ api.MapGet("/applications", async (
 
     if (status is not null && !ApplicationStatus.All.Contains(status))
         return Results.BadRequest(new { error = "Invalid status" });
+
+    // page <= 0 would otherwise produce a negative Skip()/OFFSET and 500 in Postgres; pageSize
+    // has no natural upper bound from the caller otherwise. Same clamp as /discoveries above.
+    page = Math.Max(1, page);
+    pageSize = Math.Clamp(pageSize, 1, 100);
 
     // Explicit ownership scoping, defense-in-depth (see the /discoveries comment above).
     var query = db.Applications.AsQueryable().Where(a => a.UserId == userId);
@@ -1110,6 +1133,12 @@ api.MapPost("/support", async (HttpContext ctx, SupportMessageRequest body, AppD
     int userId = CurrentUserId(ctx, UserIdClaimType);
     var user = await db.Users.FindAsync(userId);
     if (user is null) return Results.NotFound();
+
+    // A missing/null message binds at runtime despite the DTO's non-nullable string param —
+    // without this guard it reaches SaveChangesAsync as a null on a required column instead of
+    // a clean 400.
+    if (string.IsNullOrWhiteSpace(body.Message))
+        return Results.BadRequest(new { error = "message is required." });
 
     db.SupportMessages.Add(new SupportMessage
     {
@@ -1420,6 +1449,11 @@ api.MapPut("/sources", async (HttpContext ctx, SourcesUpdateRequest body, AppDbC
 {
     var (user, error) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
     if (error is not null) return error;
+
+    // A null sources field binds at runtime despite the DTO's non-nullable array param —
+    // JobSource.Sanitize would otherwise throw on the null IEnumerable instead of a clean 400.
+    if (body.Sources is null)
+        return Results.BadRequest(new { error = "sources is required." });
 
     var sanitized = JobSource.Sanitize(body.Sources);
     user!.EnabledSources = string.Join(',', sanitized);
@@ -1862,8 +1896,12 @@ static async Task<(string? PostingText, string EvalJson, string? Company, string
     if (discoveryId is null)
         return (null, "{}", null, "Provide a discoveryId, postingUrl, or postingText.");
 
+    // Explicit ownership check, defense-in-depth: AppDbContext's global query filter
+    // (HasQueryFilter, OnModelCreating) already makes FindAsync return null for a row owned
+    // by another user; this re-checks it explicitly at the call site too, same pattern as
+    // every other FindAsync-by-id site in this file.
     var posting = await db.DiscoveredPostings.FindAsync(discoveryId.Value);
-    if (posting is null)
+    if (posting is null || posting.UserId != userId)
         return (null, "{}", null, "Discovery not found.");
 
     string evalJson = posting.EvaluationJson ?? "{}";
@@ -2151,7 +2189,13 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
     }
     else if (body.DiscoveryId is int discoveryId)
     {
+        // Explicit ownership check, defense-in-depth: AppDbContext's global query filter
+        // (HasQueryFilter, OnModelCreating) already makes FindAsync return null for a row owned
+        // by another user; this re-checks it explicitly at the call site too, same pattern as
+        // every other FindAsync-by-id site in this file.
         var posting = await db.DiscoveredPostings.FindAsync(discoveryId);
+        if (posting is not null && posting.UserId != userId)
+            posting = null;
         if (posting?.EvaluationJson is not null)
         {
             var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
