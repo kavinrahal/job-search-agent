@@ -51,6 +51,17 @@ public static class PasswordAuthService
         // to that same row here instead of creating a duplicate.
         var user = await UserProvisioningService.GetOrCreateAsync(db, email, signupTier);
 
+        // Mirrors the Google OAuth path's OnCreatingTicket (Program.cs), which seeds a
+        // UserProfile row right after GetOrCreateAsync — without this, a password-only signup
+        // never gets a profile at all (GET/PUT /profile 404s, every generation endpoint 500s or
+        // hits the resume-setup gate, with no self-service way to create one). GetOrSeedAsync is
+        // find-or-create, so this is a no-op for the account-linking case above where a prior
+        // Google login already seeded one. This is the only seed call needed: VerifyEmailAsync
+        // and ResetPasswordAsync only ever operate on a user that already went through this
+        // method once (found via a token issued from here), so they can't reach a first-time
+        // sign-in without a profile.
+        await UserProfileProvisioningService.GetOrSeedAsync(db, user.Id, background: "", cvBase: "", jobCriteria: "");
+
         // Only a genuinely-registered (verified) account is rejected here. An account that
         // already has a PasswordHash but was never verified — the original verification email
         // was lost, expired, or never clicked — falls through below and gets a fresh token

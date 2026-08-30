@@ -393,4 +393,50 @@ public class PasswordAuthServiceTests
         var login = await PasswordAuthService.LoginAsync(db, email, newPassword);
         Assert.Equal(PasswordAuthService.LoginOutcome.Success, login.Outcome);
     }
+
+    // TC19 — Regression for the missing-profile bug: a password-registered user must get a
+    // UserProfile row, same as the Google OAuth path (OnCreatingTicket in Program.cs) already
+    // gets via UserProfileProvisioningService.GetOrSeedAsync. Without this, GET/PUT /profile
+    // 404 and every generation endpoint 500s, with no self-service way to create one.
+    [Fact]
+    public async Task RegisterAsync_NewUser_CreatesUserProfileRow()
+    {
+        using var db = FreshDb();
+        const string email = "profileless@example.com";
+        await InviteAsync(db, email);
+
+        var result = await PasswordAuthService.RegisterAsync(db, email, ValidPassword, OwnerEmail);
+
+        Assert.Equal(PasswordAuthService.RegisterOutcome.VerificationSent, result.Outcome);
+        var profile = await db.UserProfiles.FindAsync(result.User!.Id);
+        Assert.NotNull(profile);
+    }
+
+    // TC20 — The account-linking case: registering against an email that already has a
+    // Google-created profile must not duplicate or clobber it — GetOrSeedAsync is find-or-create.
+    [Fact]
+    public async Task RegisterAsync_EmailMatchesExistingGoogleAccountWithProfile_DoesNotDuplicateProfile()
+    {
+        using var db = FreshDb();
+        const string email = "googlewithprofile@example.com";
+        var googleUser = new User
+        {
+            Email = email,
+            Tier = UserTier.Tier1,
+            CreatedAt = DateTime.UtcNow,
+            EmailVerifiedAt = DateTime.UtcNow.AddDays(-3),
+        };
+        db.Users.Add(googleUser);
+        await db.SaveChangesAsync();
+        var existingProfile = await UserProfileProvisioningService.GetOrSeedAsync(
+            db, googleUser.Id, background: "existing background", cvBase: "", jobCriteria: "");
+
+        var result = await PasswordAuthService.RegisterAsync(db, email, ValidPassword, OwnerEmail);
+
+        Assert.Equal(PasswordAuthService.RegisterOutcome.SignedIn, result.Outcome);
+        var profile = await db.UserProfiles.FindAsync(googleUser.Id);
+        Assert.NotNull(profile);
+        Assert.Equal(existingProfile.Background, profile!.Background); // untouched, not overwritten
+        Assert.Single(db.UserProfiles);
+    }
 }
