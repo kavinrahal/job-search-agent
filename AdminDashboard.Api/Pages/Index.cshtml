@@ -1,0 +1,75 @@
+@page
+@model AdminDashboard.Api.Pages.IndexModel
+@{
+    ViewData["Title"] = "Overview";
+}
+
+<h1>Overview</h1>
+
+<div class="stat-grid">
+    <div class="stat-tile">
+        <div class="stat-label">Total users</div>
+        <div class="stat-value">@Model.TotalUsers</div>
+    </div>
+    <div class="stat-tile">
+        <div class="stat-label">Tier 2 users</div>
+        <div class="stat-value">@Model.Tier2Count</div>
+    </div>
+    <div class="stat-tile">
+        <div class="stat-label">7-day credit spend</div>
+        <div class="stat-value">@Model.CreditSpend7d</div>
+    </div>
+    <div class="stat-tile">
+        <div class="stat-label">Open support</div>
+        <div class="stat-value">@Model.OpenSupportCount</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Recent signups</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Tier</th>
+                    <th>Verified</th>
+                    <th>Joined</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in Model.RecentSignups)
+                {
+                    <tr>
+                        <td>@u.Email</td>
+                        <td>
+                            @if (u.Tier == JobSearch.Data.UserTier.Tier2)
+                            {
+                                <span class="badge badge-tier2">Tier 2</span>
+                            }
+                            else
+                            {
+                                <span class="badge">Tier 1</span>
+                            }
+                        </td>
+                        <td>
+                            @if (u.EmailVerifiedAt is not null)
+                            {
+                                <span class="badge badge-ok">Verified</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-warn">Unverified</span>
+                            }
+                        </td>
+                        <td class="mono">@u.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    </tr>
+                }
+                @if (Model.RecentSignups.Count == 0)
+                {
+                    <tr><td colspan="4">No users yet.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

@@ -1,0 +1,81 @@
+@page
+@model AdminDashboard.Api.Pages.TrendsModel
+@{
+    ViewData["Title"] = "Trends";
+
+    int SimpleMax(IEnumerable<AdminDashboard.Api.Pages.ChartDay> days) =>
+        Math.Max(1, days.Select(d => d.Value).DefaultIfEmpty(0).Max());
+
+    int StackedMax(IEnumerable<AdminDashboard.Api.Pages.StackedChartDay> days) =>
+        Math.Max(1, days.Select(d => d.Cv + d.Letter + d.Answer).DefaultIfEmpty(0).Max());
+
+    int Pct(int value, int max) => max == 0 ? 0 : (int)Math.Round(100.0 * value / max);
+}
+
+<h1>Trends</h1>
+<p>Last 21 days, bucketed by day.</p>
+
+<div class="grid-2">
+    <div class="card">
+        <h2>Signups</h2>
+        @{ var maxSignups = SimpleMax(Model.Signups); }
+        <div class="chart">
+            @foreach (var d in Model.Signups)
+            {
+                <div class="chart-col" title="@d.Label: @d.Value">
+                    <div class="chart-bar" style="height:@(Pct(d.Value, maxSignups))%"></div>
+                </div>
+            }
+        </div>
+        <div class="chart-labels"><span>@Model.Signups[0].Label</span><span>@Model.Signups[^1].Label</span></div>
+    </div>
+
+    <div class="card">
+        <h2>Tier 2 upgrades</h2>
+        @{ var maxUpgrades = SimpleMax(Model.Tier2Upgrades); }
+        <div class="chart">
+            @foreach (var d in Model.Tier2Upgrades)
+            {
+                <div class="chart-col" title="@d.Label: @d.Value">
+                    <div class="chart-bar" style="height:@(Pct(d.Value, maxUpgrades))%"></div>
+                </div>
+            }
+        </div>
+        <div class="chart-labels"><span>@Model.Tier2Upgrades[0].Label</span><span>@Model.Tier2Upgrades[^1].Label</span></div>
+    </div>
+
+    <div class="card">
+        <h2>Credit consumption by type</h2>
+        @{ var maxCredit = StackedMax(Model.CreditConsumption); }
+        <div class="chart">
+            @foreach (var d in Model.CreditConsumption)
+            {
+                <div class="chart-col" title="@d.Label: CV @d.Cv, Letter @d.Letter, Answer @d.Answer">
+                    <div class="chart-bar stack-answer" style="height:@(Pct(d.Answer, maxCredit))%"></div>
+                    <div class="chart-bar stack-letter" style="height:@(Pct(d.Letter, maxCredit))%"></div>
+                    <div class="chart-bar stack-cv" style="height:@(Pct(d.Cv, maxCredit))%"></div>
+                </div>
+            }
+        </div>
+        <div class="chart-labels"><span>@Model.CreditConsumption[0].Label</span><span>@Model.CreditConsumption[^1].Label</span></div>
+        <div class="chart-legend">
+            <span><span class="dot" style="background:var(--accent)"></span>CV</span>
+            <span><span class="dot" style="background:var(--ok)"></span>Letter</span>
+            <span><span class="dot" style="background:var(--warn)"></span>Answer</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Daily active users</h2>
+        @{ var maxDau = SimpleMax(Model.DailyActiveUsers); }
+        <div class="chart">
+            @foreach (var d in Model.DailyActiveUsers)
+            {
+                <div class="chart-col" title="@d.Label: @d.Value">
+                    <div class="chart-bar" style="height:@(Pct(d.Value, maxDau))%"></div>
+                </div>
+            }
+        </div>
+        <div class="chart-labels"><span>@Model.DailyActiveUsers[0].Label</span><span>@Model.DailyActiveUsers[^1].Label</span></div>
+    </div>
+</div>

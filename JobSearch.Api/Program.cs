@@ -1114,6 +1114,22 @@ api.MapGet("/health", (AppDbContext db) =>
         : Results.Ok(result);
 }).AllowAnonymous(); // UptimeRobot hits this without a session
 
+// GET /api/v1/status — maintenance-mode/banner state, read by JobSearch.Web's useSiteStatus()
+// before anything else mounts. Must stay unauthenticated and cheap: a logged-out visitor has
+// to see maintenance mode too, and this is written by AdminDashboard.Api even when this API
+// itself is degraded — see SiteStatus's own doc comment for why it's always exactly one row.
+api.MapGet("/status", async (AppDbContext db) =>
+{
+    var status = await db.SiteStatuses.SingleAsync();
+    return Results.Ok(new
+    {
+        maintenanceMode = status.MaintenanceMode,
+        maintenanceMessage = status.MaintenanceMessage,
+        bannerActive = status.BannerActive,
+        bannerMessage = status.BannerMessage,
+    });
+}).AllowAnonymous();
+
 // GET /api/v1/admin/analytics — owner-only aggregate view: signup/login volume, tier
 // breakdown, generation-tool usage, and a 7-day active-user count as a churn proxy.
 // Gated by ownerUserId instead of a role system, since there is only one admin account

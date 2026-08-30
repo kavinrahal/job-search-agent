@@ -13,6 +13,7 @@ import type {
   ResumeData,
   ResumeTemplatesResponse,
   ResumePreviewResponse,
+  SiteStatus,
 } from "./types";
 
 // VITE_API_URL is set in production to the API's own Railway URL — the frontend and API are
@@ -63,6 +64,13 @@ function qs(params: object): string {
     if (v != null && v !== false) q.set(k, String(v));
   const s = q.toString();
   return s ? "?" + s : "";
+}
+
+// Unauthenticated by design (see JobSearch.Api's GET /api/v1/status) — must resolve the same
+// way for a logged-out visitor as a signed-in one, since useSiteStatus() runs before App.tsx
+// knows whether a session exists at all.
+export async function fetchSiteStatus(): Promise<SiteStatus> {
+  return request("/status");
 }
 
 export async function fetchSummary(): Promise<Summary> {

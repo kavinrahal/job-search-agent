@@ -37,7 +37,10 @@ import {
   type AccountMenuItem,
 } from "./ui";
 import { useMe, useLogout } from "./hooks/useAuth";
+import { useSiteStatus } from "./hooks/useSiteStatus";
 import { MeProvider } from "./hooks/useMeContext";
+import { MaintenanceNotice } from "./components/MaintenanceNotice";
+import { AnnouncementBanner } from "./components/AnnouncementBanner";
 
 // Daily-work destinations: the top nav on desktop, the bottom tab bar on mobile — both capped at
 // four by the design (see ui/Nav.tsx's own note on why). Discover/Applications are Tier 2-only,
@@ -90,11 +93,23 @@ type Me = NonNullable<ReturnType<typeof useMe>["data"]>;
 
 export default function App() {
   const { data: me, loading, reload } = useMe();
+  // Independent of useMe() entirely — both a logged-in and a logged-out visitor need to see
+  // maintenance mode/the banner, so this can't be derived from or gated on auth state.
+  const { data: siteStatus, loading: siteStatusLoading } = useSiteStatus();
 
   // Only blank the screen on the very first load, when there's nothing to show yet. A later
   // reloadMe() (after a credit-spending action) also flips `loading`, but `me` is still present —
   // rendering through it keeps the app mounted instead of flashing blank and remounting every page.
+  // Same reasoning for siteStatusLoading: block only until the very first status check lands, so
+  // the app doesn't flash its normal content for a moment before the maintenance notice appears.
   if (loading && !me) return null;
+  if (siteStatusLoading && !siteStatus) return null;
+
+  // Maintenance mode short-circuits the entire app — before BrowserRouter/AuthedApp/
+  // LoggedOutRoutes mount, regardless of session state. See MaintenanceNotice's own comment.
+  if (siteStatus?.maintenanceMode) {
+    return <MaintenanceNotice message={siteStatus.maintenanceMessage} />;
+  }
 
   // BrowserRouter now wraps both states: the logged-out marketing/auth routes and the
   // authenticated app. It used to mount only once a session existed, which is why the old
@@ -105,6 +120,11 @@ export default function App() {
   // refresh the moment a generation/revision resolves, instead of going stale until a full reload.
   return (
     <BrowserRouter>
+      {/* The banner sits above whichever branch renders below — the app stays fully usable
+          underneath it, unlike maintenance mode's full takeover above. */}
+      {siteStatus?.bannerActive && siteStatus.bannerMessage && (
+        <AnnouncementBanner message={siteStatus.bannerMessage} />
+      )}
       {me ? (
         <MeProvider me={me} reloadMe={reload}>
           <AuthedApp me={me} />

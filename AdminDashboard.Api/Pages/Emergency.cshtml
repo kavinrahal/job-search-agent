@@ -1,0 +1,203 @@
+@page
+@model AdminDashboard.Api.Pages.EmergencyModel
+@{
+    ViewData["Title"] = "Emergency actions";
+}
+
+<h1>Emergency actions</h1>
+<p>Every action requires typing <span class="mono">CONFIRM</span> before it submits — validated again on the server, not just in this page's JS.</p>
+
+@if (Model.FlashMessage is not null)
+{
+    <div class="notice @(Model.FlashIsError ? "notice-error" : "notice-ok")">@Model.FlashMessage</div>
+}
+
+<div class="action-grid">
+    <div class="card action-card">
+        <h3>1 — Credit adjustment</h3>
+        <form method="post" asp-page-handler="AdjustCredit">
+            <div class="field">
+                <label>User ID</label>
+                <input type="number" name="targetUserId" required min="1" />
+            </div>
+            <div class="field">
+                <label>Amount (+/-)</label>
+                <input type="number" name="amount" required placeholder="e.g. 5 or -5" />
+            </div>
+            <div class="field confirm-field">
+                <label>Type CONFIRM</label>
+                <input type="text" name="confirmText" autocomplete="off" data-confirm-input />
+            </div>
+            <button type="submit" data-confirm-submit disabled>Apply</button>
+        </form>
+    </div>
+
+    <div class="card action-card">
+        <h3>2 — Tier change</h3>
+        <form method="post" asp-page-handler="ChangeTier">
+            <div class="field">
+                <label>User ID</label>
+                <input type="number" name="targetUserId" required min="1" />
+            </div>
+            <div class="field">
+                <label>New tier</label>
+                <select name="newTier" required>
+                    <option value="Tier1">Tier1</option>
+                    <option value="Tier2">Tier2</option>
+                </select>
+            </div>
+            <div class="field confirm-field">
+                <label>Type CONFIRM</label>
+                <input type="text" name="confirmText" autocomplete="off" data-confirm-input />
+            </div>
+            <button type="submit" data-confirm-submit disabled>Apply</button>
+        </form>
+    </div>
+
+    <div class="card action-card">
+        <h3>3 — Deactivate account</h3>
+        <form method="post" asp-page-handler="Deactivate">
+            <div class="field">
+                <label>User ID</label>
+                <input type="number" name="targetUserId" required min="1" />
+            </div>
+            <div class="field confirm-field">
+                <label>Type CONFIRM</label>
+                <input type="text" name="confirmText" autocomplete="off" data-confirm-input />
+            </div>
+            <button type="submit" class="btn-danger" data-confirm-submit disabled>Deactivate</button>
+        </form>
+    </div>
+
+    <div class="card action-card">
+        <h3>4 — Clear stuck worker lock</h3>
+        <p>Clears the overnight discovery cron's guard row so the next scheduled run isn't blocked by a stale lock.</p>
+        <form method="post" asp-page-handler="ClearWorkerLock">
+            <div class="field confirm-field">
+                <label>Type CONFIRM</label>
+                <input type="text" name="confirmText" autocomplete="off" data-confirm-input />
+            </div>
+            <button type="submit" data-confirm-submit disabled>Clear lock</button>
+        </form>
+    </div>
+
+    <div class="card action-card">
+        <h3>5 — Maintenance mode</h3>
+        <form method="post" asp-page-handler="ToggleMaintenance">
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="maintenanceMode" value="true" style="width:auto; display:inline-block;"
+                           checked="@Model.CurrentStatus.MaintenanceMode" />
+                    Maintenance mode ON
+                </label>
+            </div>
+            <div class="field">
+                <label>Message shown on the maintenance page</label>
+                <textarea name="maintenanceMessage" data-preview-input="maintenance-message"
+                          placeholder="We're doing some quick maintenance. Check back shortly.">@Model.CurrentStatus.MaintenanceMessage</textarea>
+            </div>
+            <div class="preview-panel">
+                <div class="preview-title">Preview — main app maintenance page</div>
+                <div data-preview-output="maintenance">
+                    @(string.IsNullOrWhiteSpace(Model.CurrentStatus.MaintenanceMessage)
+                        ? "We're doing some quick maintenance. Check back shortly."
+                        : Model.CurrentStatus.MaintenanceMessage)
+                </div>
+            </div>
+            <div class="field confirm-field">
+                <label>Type CONFIRM</label>
+                <input type="text" name="confirmText" autocomplete="off" data-confirm-input />
+            </div>
+            <button type="submit" data-confirm-submit disabled>Save</button>
+        </form>
+    </div>
+
+    <div class="card action-card">
+        <h3>6 — Announcement banner</h3>
+        <form method="post" asp-page-handler="UpdateBanner">
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="bannerActive" value="true" style="width:auto; display:inline-block;"
+                           checked="@Model.CurrentStatus.BannerActive" />
+                    Banner ON
+                </label>
+            </div>
+            <div class="field">
+                <label>Banner message</label>
+                <input type="text" name="bannerMessage" data-preview-input="banner-message"
+                       placeholder="e.g. We're rolling out a new feature this week."
+                       value="@Model.CurrentStatus.BannerMessage" />
+            </div>
+            <div class="preview-panel">
+                <div class="preview-title">Preview — dismissible strip above the app</div>
+                @if (string.IsNullOrWhiteSpace(Model.CurrentStatus.BannerMessage))
+                {
+                    <div class="preview-empty" data-preview-output="banner">No message set.</div>
+                }
+                else
+                {
+                    <div data-preview-output="banner">@Model.CurrentStatus.BannerMessage</div>
+                }
+            </div>
+            <div class="field confirm-field">
+                <label>Type CONFIRM</label>
+                <input type="text" name="confirmText" autocomplete="off" data-confirm-input />
+            </div>
+            <button type="submit" data-confirm-submit disabled>Save</button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Recent audit log</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Action</th>
+                    <th class="num">Target user</th>
+                    <th>Detail</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in Model.RecentAuditLog)
+                {
+                    <tr>
+                        <td class="mono">@entry.PerformedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td>@entry.Action</td>
+                        <td class="num">@(entry.TargetUserId?.ToString() ?? "—")</td>
+                        <td>@entry.Detail</td>
+                    </tr>
+                }
+                @if (Model.RecentAuditLog.Count == 0)
+                {
+                    <tr><td colspan="4">No actions logged yet.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // Client-side only: enables the submit button once the confirm text matches, and keeps the
+    // maintenance/banner preview panels in sync as the admin types. Neither is a safety control —
+    // the server validates CONFIRM again on every POST handler regardless (see ConfirmTextValidator).
+    document.querySelectorAll('[data-confirm-input]').forEach(function (input) {
+        var btn = input.closest('form').querySelector('[data-confirm-submit]');
+        input.addEventListener('input', function () {
+            btn.disabled = input.value.trim() !== 'CONFIRM';
+        });
+    });
+
+    function wirePreview(inputName, outputName, fallback) {
+        var input = document.querySelector('[data-preview-input="' + inputName + '"]');
+        var output = document.querySelector('[data-preview-output="' + outputName + '"]');
+        if (!input || !output) return;
+        input.addEventListener('input', function () {
+            output.textContent = input.value.trim() === '' ? fallback : input.value;
+        });
+    }
+    wirePreview('maintenance-message', 'maintenance', "We're doing some quick maintenance. Check back shortly.");
+    wirePreview('banner-message', 'banner', 'No message set.');
+</script>
