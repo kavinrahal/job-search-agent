@@ -220,3 +220,12 @@ export interface SourcesResponse {
   gmailTrackingMode: "full" | "filter" | "manual" | null;
 }
 
+// GET /api/v1/status — unauthenticated, read by useSiteStatus() before anything else mounts.
+// Written by AdminDashboard.Api's Emergency page (see SiteStatus in JobSearch.Data).
+export interface SiteStatus {
+  maintenanceMode: boolean;
+  maintenanceMessage: string | null;
+  bannerActive: boolean;
+  bannerMessage: string | null;
+}
+

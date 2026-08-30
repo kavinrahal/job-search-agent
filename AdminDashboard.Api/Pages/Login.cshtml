@@ -1,0 +1,23 @@
+@page
+@model AdminDashboard.Api.Pages.LoginModel
+@{
+    ViewData["Title"] = "Login";
+}
+
+<div class="login-card">
+    <h1>Ops Console</h1>
+    <p class="sub">Enter the admin portal secret to continue.</p>
+
+    @if (Model.Error is not null)
+    {
+        <div class="notice notice-error">@Model.Error</div>
+    }
+
+    <form method="post">
+        <div class="field">
+            <label for="Secret">Secret</label>
+            <input type="password" id="Secret" name="Secret" autocomplete="current-password" autofocus />
+        </div>
+        <button type="submit" style="width:100%">Sign in</button>
+    </form>
+</div>

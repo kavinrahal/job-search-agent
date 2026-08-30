@@ -38,6 +38,8 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<BetaInvite> BetaInvites { get; set; }
     public DbSet<CrashTriageDispatch> CrashTriageDispatches { get; set; }
     public DbSet<UserVerificationToken> UserVerificationTokens { get; set; }
+    public DbSet<SiteStatus> SiteStatuses { get; set; }
+    public DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -208,5 +210,18 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<SupportMessage>()
             .HasIndex(s => s.CreatedAt);
+
+        // No query filter — single-row table read/written cross-tenant by design (see
+        // SiteStatus's own doc comment). Always looked up via SingleAsync()/FirstAsync(),
+        // never a per-user list.
+        modelBuilder.Entity<SiteStatus>();
+
+        // No query filter — same reasoning as AnalyticsEvent/SupportMessage: this table
+        // exists for the owner-only Emergency audit trail, a cross-tenant view by design.
+        modelBuilder.Entity<AdminAuditLog>(e =>
+        {
+            e.HasIndex(a => a.PerformedAt);
+            e.HasIndex(a => a.TargetUserId);
+        });
     }
 }

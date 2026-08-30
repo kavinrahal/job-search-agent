@@ -1,0 +1,80 @@
+@page
+@model AdminDashboard.Api.Pages.RevenueModel
+@{
+    ViewData["Title"] = "Revenue";
+    int max = Math.Max(1, Model.RevenueTrend.Select(d => d.Value).DefaultIfEmpty(0).Max());
+    int Pct(int value) => (int)Math.Round(100.0 * value / max);
+    decimal sourceTotal = Model.BySource.Sum(s => s.Amount);
+}
+
+<h1>Revenue</h1>
+<p>Placeholder data — flips to real Stripe-backed figures once that integration ships (<span class="mono">Features:RevenueEnabled</span>).</p>
+
+<div class="stat-grid">
+    <div class="stat-tile">
+        <div class="stat-label">MRR</div>
+        <div class="stat-value">$@Model.Mrr.ToString("N0")</div>
+    </div>
+    <div class="stat-tile">
+        <div class="stat-label">30-day revenue</div>
+        <div class="stat-value">$@Model.Revenue30d.ToString("N0")</div>
+    </div>
+    <div class="stat-tile">
+        <div class="stat-label">Paying users</div>
+        <div class="stat-value">@Model.PayingUsers</div>
+    </div>
+    <div class="stat-tile">
+        <div class="stat-label">Avg revenue / user</div>
+        <div class="stat-value">$@Model.AvgRevenuePerUser.ToString("N2")</div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <h2>Revenue trend</h2>
+        <div class="chart">
+            @foreach (var d in Model.RevenueTrend)
+            {
+                <div class="chart-col" title="@d.Label: $@d.Value">
+                    <div class="chart-bar" style="height:@(Pct(d.Value))%"></div>
+                </div>
+            }
+        </div>
+        <div class="chart-labels"><span>@Model.RevenueTrend[0].Label</span><span>@Model.RevenueTrend[^1].Label</span></div>
+    </div>
+
+    <div class="card">
+        <h2>Revenue by source</h2>
+        <table>
+            <thead><tr><th>Source</th><th class="num">Amount</th><th class="num">Share</th></tr></thead>
+            <tbody>
+                @foreach (var s in Model.BySource)
+                {
+                    <tr>
+                        <td>@s.Source</td>
+                        <td class="num">$@s.Amount.ToString("N0")</td>
+                        <td class="num">@(sourceTotal == 0 ? 0 : Math.Round(100 * s.Amount / sourceTotal, 1))%</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+    <h2>Top spenders</h2>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Email</th><th class="num">Amount</th></tr></thead>
+            <tbody>
+                @foreach (var s in Model.TopSpenders)
+                {
+                    <tr>
+                        <td>@s.Email</td>
+                        <td class="num">$@s.Amount.ToString("N0")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

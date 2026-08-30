@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="AdminDashboard.Api.Tests/AdminDashboard.Api.Tests.csproj" />
+  <Project Path="AdminDashboard.Api/AdminDashboard.Api.csproj" />
   <Project Path="JobSearch.Api.Tests/JobSearch.Api.Tests.csproj" />
   <Project Path="JobSearch.Api/JobSearch.Api.csproj" />
   <Project Path="JobSearch.Data/JobSearch.Data.csproj" />

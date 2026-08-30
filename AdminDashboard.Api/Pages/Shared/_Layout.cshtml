@@ -1,0 +1,50 @@
+@inject IConfiguration Config
+@{
+    var revenueEnabled = Config.GetValue<bool>("Features:RevenueEnabled");
+    var isAuthed = User.Identity?.IsAuthenticated == true;
+    var path = Context.Request.Path.Value ?? "";
+    bool IsActive(string href) => string.Equals(path, href, StringComparison.OrdinalIgnoreCase);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>@(ViewData["Title"] as string ?? "Admin") — Ops Console</title>
+    <link rel="stylesheet" href="/css/site.css" />
+</head>
+<body class="@(isAuthed ? "" : "no-chrome")">
+@if (isAuthed)
+{
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" />
+    <div class="shell">
+        <header class="topbar">
+            <label for="nav-toggle" class="nav-burger" aria-label="Toggle navigation">&#9776;</label>
+            <span class="brand">Ops Console</span>
+            <form method="post" action="/Logout" class="logout-form">
+                <button type="submit" class="btn-ghost">Log out</button>
+            </form>
+        </header>
+        <nav class="sidebar">
+            <span class="brand sidebar-brand">Ops Console</span>
+            <a href="/Index" class="nav-link @(IsActive("/") || IsActive("/Index") ? "active" : "")">Overview</a>
+            <a href="/Trends" class="nav-link @(IsActive("/Trends") ? "active" : "")">Trends</a>
+            @if (revenueEnabled)
+            {
+                <a href="/Revenue" class="nav-link @(IsActive("/Revenue") ? "active" : "")">Revenue</a>
+            }
+            <a href="/Users" class="nav-link @(IsActive("/Users") ? "active" : "")">Users</a>
+            <a href="/Emergency" class="nav-link @(IsActive("/Emergency") ? "active" : "")">Emergency actions</a>
+        </nav>
+        <main class="content">
+            @RenderBody()
+        </main>
+    </div>
+}
+else
+{
+    @RenderBody()
+}
+</body>
+</html>
