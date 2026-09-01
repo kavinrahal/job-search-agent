@@ -185,6 +185,12 @@ export async function upgradeToTier2(): Promise<void> {
   await request("/account/upgrade-to-tier2", { method: "POST" });
 }
 
+// Forfeits any unused credit balance immediately — see the matching backend endpoint's
+// comment (TierDowngradeService). The confirm UI must warn about this before calling it.
+export async function downgradeToTier1(): Promise<void> {
+  await request("/account/downgrade-to-tier1", { method: "POST" });
+}
+
 // A real navigable link (redirects through Google's consent screen), not a fetch — same
 // direct-URL pattern as resumePdfUrl. mode "full" requests gmail.readonly instead of the
 // default gmail.settings.basic (see the matching backend endpoint's comment).

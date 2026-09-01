@@ -1679,6 +1679,17 @@ api.MapPost("/account/upgrade-to-tier2", async (HttpContext ctx, AppDbContext db
     return upgraded ? Results.Ok() : Results.BadRequest(new { error = "Already Tier 2." });
 });
 
+// POST /api/v1/account/downgrade-to-tier1 — self-serve, mirrors upgrade-to-tier2 above.
+// Forfeits any unused credit balance immediately (see TierDowngradeService) rather than
+// leaving a Tier2-sized balance on a Tier1 account — the frontend confirm copy makes this
+// explicit before the user commits.
+api.MapPost("/account/downgrade-to-tier1", async (HttpContext ctx, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var downgraded = await TierDowngradeService.DowngradeToTier1Async(db, userId);
+    return downgraded ? Results.Ok() : Results.BadRequest(new { error = "Already Tier 1." });
+});
+
 // POST /api/v1/admin/invite — owner only. Adds the email to BetaInvite (idempotent — a
 // repeat invite is a no-op, not a duplicate row) so it can sign in at all, landing straight
 // at Tier 2. Still adds the invite even if SendGrid Mail Send isn't configured or the send
@@ -1770,11 +1781,16 @@ api.MapPost("/admin/users/{id:int}/backfill-resume", async (int id, HttpContext 
 // account to keep a live grant just because the user wants their history preserved —
 // reconnecting Gmail is a normal, expected part of coming back anyway.
 //
-// deleteData is the user's own explicit choice, not a default we pick for them: RawEmails
-// and Classifications (the raw inbox-derived content) are deleted only if they asked for
-// that, so someone planning to return can keep their tracked application history intact
-// rather than starting over. Applications itself (the actually-useful derived record) is
-// never touched either way — this only ever controls the raw content behind it.
+// deleteData is the user's own explicit choice, not a default we pick for them: RawEmails,
+// Classifications (the raw inbox-derived content) and Applications (the tracked history
+// derived from it) are all deleted only if they asked for that, so someone planning to
+// return can keep their tracked application history intact rather than starting over.
+// This matches the Settings UI copy ("Removes your tracked application history and
+// everything derived from your inbox") — Applications used to be deliberately spared here,
+// but that left real data behind despite the UI promising it would go, so it's now scoped
+// by the same deleteData flag as the other two tables. ApplicationEvents cascade-delete at
+// the DB level (see AppDbContext's Application -> ApplicationEvent OnDelete(Cascade)), so
+// they don't need a separate RemoveRange here.
 api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db, UserSecretService secrets, CancelAccountRequest body) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
@@ -1810,9 +1826,12 @@ api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db, UserSecr
         db.RawEmails.RemoveRange(rawEmails);
         var classifications = await db.Classifications.Where(c => c.UserId == userId).ToListAsync();
         db.Classifications.RemoveRange(classifications);
+        var applications = await db.Applications.Where(a => a.UserId == userId).ToListAsync();
+        db.Applications.RemoveRange(applications);
     }
 
     user.DeactivatedAt = DateTime.UtcNow;
+    db.AnalyticsEvents.Add(new AnalyticsEvent { UserId = userId, EventType = AnalyticsEventType.Cancellation, CreatedAt = DateTime.UtcNow });
     await db.SaveChangesAsync();
     await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
