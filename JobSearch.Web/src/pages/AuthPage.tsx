@@ -48,6 +48,10 @@ const AUTH_ERRORS = new Map<string, string>([
     "invalid_token",
     "That account activation link is invalid, expired, or has already been used — they only last an hour. Reach out to whoever invited you for a fresh one.",
   ],
+  [
+    "deactivated",
+    "This account was cancelled and can't be signed into.",
+  ],
 ]);
 const DEFAULT_AUTH_ERROR =
   "That Google account needs an invite before it can sign in. Ask whoever invited you, or reach out via the Support page once you're in.";
