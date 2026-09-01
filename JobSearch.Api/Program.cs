@@ -114,6 +114,28 @@ builder.Services.AddAuthentication(o =>
         ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
         return Task.CompletedTask;
     };
+    // Runs on every authenticated request, not just at sign-in — closes the gap the
+    // /account/cancel endpoint's own comment already calls out ("doesn't revoke any other
+    // active session for this account elsewhere... acceptable for now"): without this, a
+    // session/cookie issued before cancellation kept working fully (any endpoint, any tier)
+    // for up to its full 7-day sliding expiry, since nothing but the initial Google
+    // OnCreatingTicket check and the sign-in moment itself ever looked at DeactivatedAt.
+    // A DB read per request is the same cost every RequireTier2Async-gated endpoint already
+    // pays for its own fresh-per-request check; this is that same pattern applied to
+    // cancellation instead of tier.
+    o.Events.OnValidatePrincipal = async ctx =>
+    {
+        var uidClaim = ctx.Principal?.FindFirstValue(UserIdClaimType);
+        if (uidClaim is null || !int.TryParse(uidClaim, out var uid)) return;
+
+        var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+        var user = await db.Users.FindAsync(uid);
+        if (user is null || user.DeactivatedAt is not null)
+        {
+            ctx.RejectPrincipal();
+            await ctx.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        }
+    };
 })
 .AddGoogle(o =>
 {
@@ -197,8 +219,15 @@ builder.Services.AddAuthentication(o =>
         // which looked so different from a normal browser navigation that a genuinely-denied
         // user couldn't tell it apart from a random glitch. This way LandingPage can show them
         // an actual explanation.
+        //
+        // "Account deactivated" (OnCreatingTicket's own ctx.Fail message above) gets its own
+        // authError value rather than folding into the generic "denied" bucket — AuthPage.tsx's
+        // AUTH_ERRORS map used to have no case for it at all, so a cancelled user trying to sign
+        // back in via Google saw "that Google account needs an invite", which is simply false
+        // and would send them chasing an invite that was never the problem.
         var redirectBase = (frontendUrl ?? "http://localhost:5173").TrimEnd('/');
-        ctx.Response.Redirect($"{redirectBase}/?authError=denied");
+        var authError = ctx.Failure?.Message == "Account deactivated" ? "deactivated" : "denied";
+        ctx.Response.Redirect($"{redirectBase}/?authError={authError}");
         ctx.HandleResponse();
         return Task.CompletedTask;
     };
@@ -525,12 +554,35 @@ app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>
 // identity (see const above), so every downstream CurrentUserId(ctx, UserIdClaimType) call —
 // which is how every protected endpoint, including Sources/Gmail-connect, resolves the
 // caller — behaves identically regardless of which path signed the user in.
-static Task SignInPasswordUserAsync(HttpContext ctx, User user)
+//
+// Returns false (and never signs in) for a cancelled account — the password path's own
+// equivalent of Google OnCreatingTicket's `if (user.DeactivatedAt is not null) ctx.Fail(...)`
+// above. Without this, POST /account/cancel's "signs you out... you just won't be able to
+// sign in again" promise only held for Google sign-in: a cancelled user could undo their own
+// cancellation just by logging back in with their existing password (LoginAsync never checked
+// DeactivatedAt), or — for an account that had proved ownership via a prior Google login but
+// never set a password — by registering a fresh password against the same email (RegisterAsync's
+// SignedIn branch). Every one of this method's four callers goes through here, so this one
+// check closes all of them at once.
+static async Task<bool> TrySignInPasswordUserAsync(HttpContext ctx, User user)
 {
+    if (user.DeactivatedAt is not null) return false;
+
     var identity = new ClaimsIdentity(CookieAuthenticationDefaults.AuthenticationScheme);
     identity.AddClaim(new Claim(UserIdClaimType, user.Id.ToString(CultureInfo.InvariantCulture)));
-    return ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+    return true;
 }
+
+// Shared response for every password-path entry point once a cancelled account is caught —
+// deliberately not the generic "invalid email or password" InvalidCredentials message, since
+// the caller here already proved they own the account (correct password, or a just-consumed
+// verification/reset token); telling them it's cancelled is more honest than pretending they
+// mistyped something, and matches what the cancel flow's own UI copy already tells them to
+// expect ("you just won't be able to sign in again unless it's reactivated"). Doesn't point
+// them at the in-app Support form — that's an authenticated-only endpoint (see POST /support
+// below), which is exactly the thing a cancelled, signed-out visitor can't reach.
+const string AccountCancelledMessage = "This account has been cancelled and can't be signed into.";
 
 // POST /api/v1/auth/register — { email, password }. Gated by the same beta-invite rules
 // Google login uses (BetaAccessService) and resolves through the same GetOrCreateAsync
@@ -561,7 +613,8 @@ app.MapPost("/api/v1/auth/register", async (HttpContext ctx, RegisterRequest bod
             return Results.BadRequest(new { error = "This email already has a password. Log in, or use forgot password." });
 
         case PasswordAuthService.RegisterOutcome.SignedIn:
-            await SignInPasswordUserAsync(ctx, result.User!);
+            if (!await TrySignInPasswordUserAsync(ctx, result.User!))
+                return Results.BadRequest(new { error = AccountCancelledMessage });
             return Results.Ok(new { status = "signed_in" });
 
         default: // RegisterOutcome.VerificationSent — the normal case for a genuinely new user
@@ -597,7 +650,8 @@ app.MapGet("/api/v1/auth/verify-email", async (HttpContext ctx, AppDbContext db,
     if (user is null)
         return Results.Redirect($"{redirectBase}/?authError=invalid_token");
 
-    await SignInPasswordUserAsync(ctx, user);
+    if (!await TrySignInPasswordUserAsync(ctx, user))
+        return Results.Redirect($"{redirectBase}/?authError=deactivated");
     return Results.Redirect(redirectBase);
 }).RequireRateLimiting("auth").AllowAnonymous();
 
@@ -623,7 +677,8 @@ app.MapPost("/api/v1/auth/login", async (HttpContext ctx, LoginRequest body, App
             return Results.BadRequest(new { error = "Verify your email first — check your inbox for the link." });
 
         default:
-            await SignInPasswordUserAsync(ctx, result.User!);
+            if (!await TrySignInPasswordUserAsync(ctx, result.User!))
+                return Results.BadRequest(new { error = AccountCancelledMessage });
             return Results.Ok();
     }
 }).RequireRateLimiting("auth").AllowAnonymous();
@@ -672,7 +727,8 @@ app.MapPost("/api/v1/auth/reset-password", async (HttpContext ctx, ResetPassword
             return Results.BadRequest(new { error = "This reset link is invalid or has expired." });
 
         default:
-            await SignInPasswordUserAsync(ctx, result.User!);
+            if (!await TrySignInPasswordUserAsync(ctx, result.User!))
+                return Results.BadRequest(new { error = AccountCancelledMessage });
             return Results.Ok();
     }
 }).RequireRateLimiting("auth").AllowAnonymous();
