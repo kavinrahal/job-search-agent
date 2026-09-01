@@ -3,6 +3,7 @@ import {
   logout,
   cancelAccount,
   upgradeToTier2,
+  downgradeToTier1,
   inviteToTier2,
   register,
   login,
@@ -32,6 +33,10 @@ export function useCancelAccount() {
 
 export function useUpgradeToTier2() {
   return useAsyncAction(upgradeToTier2);
+}
+
+export function useDowngradeToTier1() {
+  return useAsyncAction(downgradeToTier1);
 }
 
 export function useInviteToTier2() {

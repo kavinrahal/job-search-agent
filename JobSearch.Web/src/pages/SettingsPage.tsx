@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useProfile, useUpdateProfile, useParseResumePdf, useUploadResumePdf } from "../hooks/useProfile";
-import { useMe, useCancelAccount, useUpgradeToTier2, useInviteToTier2 } from "../hooks/useAuth";
+import { useMe, useCancelAccount, useUpgradeToTier2, useDowngradeToTier1, useInviteToTier2 } from "../hooks/useAuth";
 import { useSyncedState } from "../hooks/useSyncedState";
 import { resumePdfUrl } from "../api";
 import { BackgroundEditor } from "../components/BackgroundEditor";
@@ -67,6 +67,7 @@ export function SettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteResult, setInviteResult] = useState<{ email: string; emailSent: boolean } | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [confirmingDowngrade, setConfirmingDowngrade] = useState(false);
   // Deleting is the default — matches what actually happens if this choice screen is somehow
   // skipped, and "your data is gone unless you explicitly ask to keep it" is the safer
   // default to land on than the reverse.
@@ -90,6 +91,7 @@ export function SettingsPage() {
   const save = useUpdateProfile();
   const cancel = useCancelAccount();
   const upgrade = useUpgradeToTier2();
+  const downgrade = useDowngradeToTier1();
   const invite = useInviteToTier2();
   const parsePdf = useParseResumePdf();
   const uploadPdf = useUploadResumePdf();
@@ -131,6 +133,16 @@ export function SettingsPage() {
   async function handleUpgrade() {
     await upgrade.execute();
     window.location.href = "/sources";
+  }
+
+  // Same hard-reload reasoning as handleUpgrade/handleCancelAccount — useMe() only fetches
+  // once on mount, so the new tier (and the just-forfeited credit balance) needs a fresh
+  // page load to show up anywhere that reads it. Reload rather than a redirect: unlike
+  // upgrade there's no dedicated downgrade destination, and the user is already looking at
+  // the page that shows the result (Plan, Credits above).
+  async function handleDowngrade() {
+    await downgrade.execute();
+    window.location.reload();
   }
 
   async function handleInvite() {
@@ -217,6 +229,39 @@ export function SettingsPage() {
                   </Button>
                   {upgrade.error && <p className="mt-2 text-caption text-ember">{upgrade.error}</p>}
                 </div>
+              )}
+
+              {me?.tier === "Tier2" && (
+                <Surface padding="lg">
+                  <p className="mb-1 text-body font-[650] text-ink-2">Downgrade to Tier 1</p>
+                  <p className="mb-3 text-body text-muted">
+                    Turns off automatic job discovery, application tracking, and inbox alert
+                    forwarding. You can upgrade back to Tier 2 any time while the beta is running.
+                  </p>
+
+                  {!confirmingDowngrade ? (
+                    <Button variant="ghost" onClick={() => setConfirmingDowngrade(true)}>
+                      Downgrade to Tier 1
+                    </Button>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-body text-ember">
+                        {(me?.creditBalance ?? 0) > 0
+                          ? `This forfeits your remaining ${me?.creditBalance} credit${me?.creditBalance === 1 ? "" : "s"} immediately — they don't carry over to Tier 1.`
+                          : "You have no unused credits, so nothing is forfeited."}
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <Button onClick={handleDowngrade} disabled={downgrade.loading}>
+                          {downgrade.loading ? "Downgrading…" : "Confirm downgrade"}
+                        </Button>
+                        <Button variant="ghost" onClick={() => setConfirmingDowngrade(false)}>
+                          Never mind
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {downgrade.error && <p className="mt-2 text-caption text-ember">{downgrade.error}</p>}
+                </Surface>
               )}
 
               {me?.isOwner && (

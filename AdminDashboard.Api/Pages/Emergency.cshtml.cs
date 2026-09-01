@@ -104,6 +104,24 @@ public class EmergencyModel : PageModel
         return Success($"Deactivated user {targetUserId}.");
     }
 
+    public async Task<IActionResult> OnPostReactivateAsync(int targetUserId, string? confirmText)
+    {
+        if (!ConfirmTextValidator.IsValid(confirmText))
+            return await Invalid();
+
+        var user = await _writeDb.Users.FindAsync(targetUserId);
+        if (user is null) return await Invalid($"No user with id {targetUserId}.");
+        if (user.DeactivatedAt is null) return await Invalid($"User {targetUserId} is not deactivated.");
+
+        var before = user.DeactivatedAt;
+        user.DeactivatedAt = null;
+
+        await AdminAuditService.LogAsync(_writeDb, AdminAuditActions.Reactivate, targetUserId,
+            $"deactivatedAt: {before:O} -> null");
+
+        return Success($"Reactivated user {targetUserId}.");
+    }
+
     public async Task<IActionResult> OnPostClearWorkerLockAsync(string? confirmText)
     {
         if (!ConfirmTextValidator.IsValid(confirmText))
