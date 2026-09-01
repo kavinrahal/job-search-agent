@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AdminDashboard.Api.Pages;
 
@@ -13,7 +14,14 @@ namespace AdminDashboard.Api.Pages;
 // checks. On success, signs in under the independent "AdminAuth" cookie scheme
 // (AdminAuthConstants.Scheme) — see Program.cs's own comment for why that's deliberately
 // unrelated to JobSearch.Api's session cookie.
+//
+// [EnableRateLimiting] applies to the whole page (both OnGet and OnPostAsync) — Razor Pages
+// endpoint metadata is attached per-page, not per-handler-method, so there's no supported way
+// to scope it to OnPostAsync alone. That's fine here: rate-limiting page views too only means
+// an admin can reload the login screen 5x/minute, which doesn't meaningfully affect anyone
+// legitimately trying to sign in. See Program.cs's "auth" policy for the actual limit/window.
 [AllowAnonymous]
+[EnableRateLimiting("auth")]
 public class LoginModel : PageModel
 {
     private readonly IConfiguration _config;
