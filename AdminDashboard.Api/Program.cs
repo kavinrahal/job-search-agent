@@ -32,9 +32,10 @@ builder.Services.AddKeyedScoped<AppDbContext>(AdminDbContextKeys.Write, (_, _) =
     new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(writeConnectionString).Options));
 
 // ---------------------------------------------------------------------------
-// Auth — one shared secret (AdminPortalSecret), its own independent cookie scheme. No shared
-// cookie, no shared Users table dependency, nothing borrowed from JobSearch.Api's auth setup:
-// this has to keep working even when that app's session system doesn't.
+// Auth — one shared username/password pair (AdminPortalUsername/AdminPortalPassword), its own
+// independent cookie scheme. No shared cookie, no shared Users table dependency, nothing
+// borrowed from JobSearch.Api's auth setup: this has to keep working even when that app's
+// session system doesn't.
 // ---------------------------------------------------------------------------
 builder.Services.AddAuthentication(AdminAuthConstants.Scheme)
     .AddCookie(AdminAuthConstants.Scheme, o =>
