@@ -7,11 +7,12 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace AdminDashboard.Api.Pages;
 
-// The one gate in front of everything else — a single shared secret (AdminPortalSecret),
-// compared with a constant-time equality check (AdminSecretVerifier), same pattern as
-// JobSearch.Api's SendGrid/Sentry webhook secret checks. On success, signs in under the
-// independent "AdminAuth" cookie scheme (AdminAuthConstants.Scheme) — see Program.cs's own
-// comment for why that's deliberately unrelated to JobSearch.Api's session cookie.
+// The one gate in front of everything else — a shared username/password pair
+// (AdminPortalUsername/AdminPortalPassword), compared with a constant-time equality check
+// (AdminCredentialVerifier), same pattern as JobSearch.Api's SendGrid/Sentry webhook secret
+// checks. On success, signs in under the independent "AdminAuth" cookie scheme
+// (AdminAuthConstants.Scheme) — see Program.cs's own comment for why that's deliberately
+// unrelated to JobSearch.Api's session cookie.
 [AllowAnonymous]
 public class LoginModel : PageModel
 {
@@ -23,7 +24,10 @@ public class LoginModel : PageModel
     }
 
     [BindProperty]
-    public string? Secret { get; set; }
+    public string? Username { get; set; }
+
+    [BindProperty]
+    public string? Password { get; set; }
 
     public string? Error { get; set; }
 
@@ -36,17 +40,23 @@ public class LoginModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
-        var configuredSecret = _config["AdminPortalSecret"];
-        if (!AdminSecretVerifier.IsValid(Secret, configuredSecret))
+        var configuredUsername = _config["AdminPortalUsername"];
+        var configuredPassword = _config["AdminPortalPassword"];
+        if (!AdminCredentialVerifier.IsValid(Username, Password, configuredUsername, configuredPassword))
         {
-            Error = "Incorrect secret.";
+            Error = "Incorrect username or password.";
             return Page();
         }
 
-        // Single-admin tool — one fixed "owner" identity, nothing to look up. See
-        // AdminAuditLog's own doc comment for the same reasoning applied to the audit trail.
+        // Single-admin tool — still one fixed identity behind the scenes (no user lookup, no
+        // account table), but the claim now carries the real configured username instead of a
+        // hardcoded "owner" string. AdminAuditService still logs the actions themselves under
+        // its own separate "owner" constant — not wired to this claim, by design, since
+        // changing that is a separate follow-up, not part of this login change.
         var identity = new ClaimsIdentity(AdminAuthConstants.Scheme);
-        identity.AddClaim(new Claim(ClaimTypes.Name, "owner"));
+        // Non-null: AdminCredentialVerifier.IsValid already returned true above, which requires
+        // configuredUsername to be non-empty.
+        identity.AddClaim(new Claim(ClaimTypes.Name, configuredUsername!));
         await HttpContext.SignInAsync(AdminAuthConstants.Scheme, new ClaimsPrincipal(identity));
 
         return RedirectToPage("/Index");

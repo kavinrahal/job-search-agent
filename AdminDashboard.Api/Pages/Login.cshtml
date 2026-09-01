@@ -6,7 +6,7 @@
 
 <div class="login-card">
     <h1>Ops Console</h1>
-    <p class="sub">Enter the admin portal secret to continue.</p>
+    <p class="sub">Sign in to continue.</p>
 
     @if (Model.Error is not null)
     {
@@ -15,8 +15,12 @@
 
     <form method="post">
         <div class="field">
-            <label for="Secret">Secret</label>
-            <input type="password" id="Secret" name="Secret" autocomplete="current-password" autofocus />
+            <label for="Username">Username</label>
+            <input type="text" id="Username" name="Username" autocomplete="username" autofocus />
+        </div>
+        <div class="field">
+            <label for="Password">Password</label>
+            <input type="password" id="Password" name="Password" autocomplete="current-password" />
         </div>
         <button type="submit" style="width:100%">Sign in</button>
     </form>
