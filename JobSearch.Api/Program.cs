@@ -2540,7 +2540,19 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
         || !string.Equals(request.Query["secret"], sendGridInboundSecret, StringComparison.Ordinal))
         return Results.Unauthorized();
 
-    var form = await request.ReadFormAsync();
+    IFormCollection form;
+    try
+    {
+        form = await request.ReadFormAsync();
+    }
+    catch (BadHttpRequestException ex) when (ex.StatusCode == StatusCodes.Status413PayloadTooLarge)
+    {
+        // SendGrid posts the full raw email as multipart/form-data, attachments included —
+        // a forwarded message can legitimately exceed the shared 8MB Kestrel body limit set
+        // near the top of this file. Nothing to retry, since a bigger message never fits;
+        // ack it like the "no matching user" case below so SendGrid doesn't redeliver it.
+        return Results.Ok();
+    }
     var to = form["to"].ToString();
     var userId = await InboundEmailService.ResolveUserIdAsync(db, to);
 
