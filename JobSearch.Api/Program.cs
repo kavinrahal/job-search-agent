@@ -2532,7 +2532,7 @@ api.MapGet("/threads/{id:int}/docx", async (int id, HttpContext ctx, AppDbContex
 // SendGrid instead (?secret=...).
 // ---------------------------------------------------------------------------
 app.MapPost("/api/v1/sendgrid/inbound", async (
-    HttpRequest request, AppDbContext db, IServiceScopeFactory scopeFactory) =>
+    HttpRequest request, AppDbContext db, IServiceScopeFactory scopeFactory, ILogger<Program> logger) =>
 {
     // No secret configured yet (external SendGrid/DNS setup not finished) — reject
     // everything rather than accept mail with nothing to verify it against.
@@ -2551,6 +2551,11 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
         // a forwarded message can legitimately exceed the shared 8MB Kestrel body limit set
         // near the top of this file. Nothing to retry, since a bigger message never fits;
         // ack it like the "no matching user" case below so SendGrid doesn't redeliver it.
+        // Logged (not just silently dropped) so this failure mode stays observable in Sentry
+        // instead of vanishing the moment it stops throwing.
+        logger.LogWarning(ex,
+            "SendGrid inbound webhook: forwarded email exceeded the {MaxBytes}-byte Kestrel body limit, dropped. ContentLength={ContentLength}",
+            8_000_000, request.ContentLength);
         return Results.Ok();
     }
     var to = form["to"].ToString();
