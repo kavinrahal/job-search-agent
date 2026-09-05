@@ -8,6 +8,7 @@ using Google.Apis.Auth.OAuth2.Responses;
 using JobSearch.Api;
 using JobSearch.Api.Services;
 using JobSearch.Data;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
@@ -247,6 +248,37 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(policy =>
 }));
 
 // ---------------------------------------------------------------------------
+// CSRF — double-submit cookie pattern (Microsoft.AspNetCore.Antiforgery)
+// ---------------------------------------------------------------------------
+// The session cookie above is SameSite=None in production (separate-origin frontend/API), so
+// it's technically sendable cross-site by a third-party page. CORS's origin allowlist is the
+// main defence today, but it's implicit and fragile — it depends on every state-changing
+// endpoint staying JSON-only forever (a same-origin form POST skips CORS preflight entirely)
+// and on CORS_ORIGINS staying airtight. This is an explicit second layer on top of it, not a
+// replacement: every mutating request must echo back a token from a cookie a cross-site
+// attacker page can trigger the browser into *sending* but can never *read* (the Same-Origin
+// Policy blocks reading another origin's response/cookies), so a forged cross-site request can
+// never reproduce the header.
+//
+// This is the officially documented ASP.NET Core "Antiforgery with JavaScript/SPAs" pattern,
+// not the Razor Pages auto-validated-handler behavior (which doesn't apply to a minimal API
+// with no page handlers at all). Two cookies exist: the framework's own token-pair cookie below
+// (HttpOnly by default, never read by the frontend — validated internally by
+// IAntiforgery.ValidateRequestAsync) and a second, explicitly non-HttpOnly "XSRF-TOKEN" cookie
+// this app sets itself (see GET /auth/me below) carrying the actual value the frontend must
+// read and echo back — see JobSearch.Web/src/api.ts's request().
+builder.Services.AddAntiforgery(o =>
+{
+    o.HeaderName = "X-CSRF-Token";
+    // Same cross-origin reasoning as the session cookie's AddCookie call above — frontend and
+    // API are separate origins in prod, so this has to be sendable cross-site too, or the
+    // framework's own half of the token pair would never arrive on a mutating request.
+    o.Cookie.Name = isDev ? "csrf" : "__Host-csrf";
+    o.Cookie.SecurePolicy = isDev ? CookieSecurePolicy.None : CookieSecurePolicy.Always;
+    o.Cookie.SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.None;
+});
+
+// ---------------------------------------------------------------------------
 // Job search services
 // ---------------------------------------------------------------------------
 var anthropicApiKey = builder.Configuration["ANTHROPIC_API_KEY"]
@@ -477,6 +509,43 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
+// CSRF validation — runs after UseAuthorization, so a request to a protected endpoint with no
+// (or an invalid/expired) session cookie has already been rejected with 401 before it ever gets
+// here; this only ever adjudicates requests that already carry a valid session. Every path here
+// is either pre-session (no cookie to protect yet) or authenticates via its own separate secret
+// (SendGrid inbound secret / Sentry HMAC signature), not the session cookie at all.
+var csrfExemptPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+{
+    "/api/v1/auth/login",           // POST — no session cookie exists yet at this point
+    "/api/v1/auth/register",        // ditto
+    "/api/v1/auth/forgot-password", // ditto
+    "/api/v1/auth/reset-password",  // ditto — proves ownership via the emailed token, not a cookie
+    "/api/v1/sendgrid/inbound",     // verified via ?secret= query param, not cookie auth
+    "/api/v1/sentry/webhook",       // verified via HMAC signature header, not cookie auth
+};
+
+app.Use(async (ctx, next) =>
+{
+    var method = ctx.Request.Method;
+    bool isMutating = HttpMethods.IsPost(method) || HttpMethods.IsPut(method)
+        || HttpMethods.IsPatch(method) || HttpMethods.IsDelete(method);
+    if (isMutating && !csrfExemptPaths.Contains(ctx.Request.Path.Value ?? ""))
+    {
+        var antiforgery = ctx.RequestServices.GetRequiredService<IAntiforgery>();
+        try
+        {
+            await antiforgery.ValidateRequestAsync(ctx);
+        }
+        catch (AntiforgeryValidationException)
+        {
+            ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await ctx.Response.WriteAsJsonAsync(new { error = "Missing or invalid CSRF token." });
+            return;
+        }
+    }
+    await next();
+});
+
 app.UseRateLimiter();
 
 // ---------------------------------------------------------------------------
@@ -492,7 +561,7 @@ app.MapGet("/api/v1/auth/login", (HttpContext ctx) =>
         [GoogleDefaults.AuthenticationScheme]);
 }).AllowAnonymous();
 
-app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
+app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db, IAntiforgery antiforgery) =>
 {
     var uidClaim = ctx.User.FindFirstValue(UserIdClaimType);
     // TEMP diagnostic: RequireAuthorization() is passing (we got here) but the app-specific
@@ -532,6 +601,22 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db) =>
     // First name only, for a casual dashboard greeting — null until Background exists (a brand
     // new user mid-onboarding), same source as BuildDownloadFilename's applicant name below.
     string? firstName = ExtractApplicantName(profile?.Background)?.Split(' ', 2)[0];
+
+    // Called on every page load (see useMe()/App.tsx) once a session exists — this is the
+    // bootstrap point that re-issues the CSRF token pair. GetAndStoreTokens below sets the
+    // framework's own HttpOnly token-pair cookie as a side effect, configured up in
+    // AddAntiforgery. Its returned RequestToken is the other half of that pair and has to reach
+    // the frontend somehow so it can be echoed back on the next mutating call — a second,
+    // explicitly non-HttpOnly cookie is how. JobSearch.Web's src/api.ts reads this exact cookie
+    // name and mirrors its value into the X-CSRF-Token header.
+    var csrfTokens = antiforgery.GetAndStoreTokens(ctx);
+    ctx.Response.Cookies.Append("XSRF-TOKEN", csrfTokens.RequestToken!, new CookieOptions
+    {
+        HttpOnly = false,
+        Secure = !isDev,
+        SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.None,
+        Path = "/",
+    });
 
     return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsCriteria, needsSourceSelection, isOwner, firstName });
 }).RequireAuthorization();
