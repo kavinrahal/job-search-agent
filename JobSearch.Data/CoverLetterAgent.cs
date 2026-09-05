@@ -10,12 +10,14 @@ public class CoverLetterAgent
     // worst example was a cover letter whose entire generated content was the word "To".
     private const string SonnetModel = "claude-opus-4-8";
     private readonly string _skillText;
+    private readonly string _skillVersion;
     private readonly ClaudeUsageLogger? _usageLogger;
 
     public CoverLetterAgent(string apiKey, ClaudeUsageLogger? usageLogger = null)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("write_cover_letter.md");
+        _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
     }
 
@@ -57,7 +59,7 @@ public class CoverLetterAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CoverLetterAgent, SonnetModel, response.Usage);
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CoverLetterAgent, SonnetModel, response.Usage, _skillVersion);
 
         return ExtractText(response.Content);
     }
@@ -76,7 +78,7 @@ public class CoverLetterAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CoverLetterAgent, SonnetModel, response.Usage);
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CoverLetterAgent, SonnetModel, response.Usage, _skillVersion);
 
         return ExtractText(response.Content);
     }

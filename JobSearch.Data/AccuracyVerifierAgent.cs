@@ -16,6 +16,7 @@ public class AccuracyVerifierAgent
     private readonly AnthropicClient _client;
     private const string HaikuModel = "claude-haiku-4-5";
     private readonly string _skillText;
+    private readonly string _skillVersion;
     private readonly Tool _tool;
     private readonly ClaudeUsageLogger? _usageLogger;
 
@@ -23,6 +24,7 @@ public class AccuracyVerifierAgent
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("verify_accuracy.md");
+        _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
 
         _tool = new Tool
@@ -49,7 +51,7 @@ public class AccuracyVerifierAgent
         };
     }
 
-    protected AccuracyVerifierAgent() { _client = null!; _skillText = ""; _tool = null!; _usageLogger = null; }
+    protected AccuracyVerifierAgent() { _client = null!; _skillText = ""; _skillVersion = ""; _tool = null!; _usageLogger = null; }
 
     public virtual async Task<string[]> VerifyAsync(int userId, string sourceMaterial, string generatedContent)
     {
@@ -71,7 +73,7 @@ public class AccuracyVerifierAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.AccuracyVerifierAgent, HaikuModel, response.Usage);
+            await _usageLogger.LogAsync(userId, ClaudeAgentName.AccuracyVerifierAgent, HaikuModel, response.Usage, _skillVersion);
 
         foreach (var block in response.Content)
         {

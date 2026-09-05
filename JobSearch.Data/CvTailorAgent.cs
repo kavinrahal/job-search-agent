@@ -21,6 +21,7 @@ public class CvTailorAgent
     // replaced) — not revisited here, this change is about output shape, not model choice.
     private const string OpusModel = "claude-opus-4-8";
     private readonly string _skillText;
+    private readonly string _skillVersion;
     private readonly ClaudeUsageLogger? _usageLogger;
 
     private readonly Tool _summarySkillsTool;
@@ -44,6 +45,7 @@ public class CvTailorAgent
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("tailor_cv.md");
+        _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
 
         _summarySkillsTool = new Tool
@@ -168,7 +170,7 @@ public class CvTailorAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CvTailorAgent, OpusModel, response.Usage);
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CvTailorAgent, OpusModel, response.Usage, _skillVersion);
 
         return ExtractText(response.Content);
     }
@@ -189,7 +191,7 @@ public class CvTailorAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.CvTailorAgent, OpusModel, response.Usage);
+            await _usageLogger.LogAsync(userId, ClaudeAgentName.CvTailorAgent, OpusModel, response.Usage, _skillVersion);
 
         foreach (var block in response.Content)
             if (block.TryPickToolUse(out ToolUseBlock? toolUse))

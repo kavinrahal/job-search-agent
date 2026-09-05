@@ -10,6 +10,7 @@ public class PostingEvaluator
     private const string SonnetModel = "claude-sonnet-5";
 
     private readonly string _skillText;
+    private readonly string _skillVersion;
     private readonly Tool _tool;
     private readonly ClaudeUsageLogger? _usageLogger;
 
@@ -17,6 +18,7 @@ public class PostingEvaluator
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("evaluate_posting.md");
+        _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
 
         _tool = new Tool
@@ -64,7 +66,7 @@ public class PostingEvaluator
         };
     }
 
-    protected PostingEvaluator() { _client = null!; _skillText = ""; _tool = null!; _usageLogger = null; }
+    protected PostingEvaluator() { _client = null!; _skillText = ""; _skillVersion = ""; _tool = null!; _usageLogger = null; }
 
     // Per-call, not per-instance — see CvTailorAgent.BuildSystemPrompt for why.
     private string BuildSystemPrompt(UserProfile profile) => $"""
@@ -98,7 +100,7 @@ public class PostingEvaluator
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.PostingEvaluator, SonnetModel, response.Usage);
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.PostingEvaluator, SonnetModel, response.Usage, _skillVersion);
 
         foreach (var block in response.Content)
         {

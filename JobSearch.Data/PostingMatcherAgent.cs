@@ -13,6 +13,7 @@ public class PostingMatcherAgent
     private const string HaikuModel = "claude-haiku-4-5";
 
     private readonly string _systemPrompt;
+    private readonly string _skillVersion;
     private readonly Tool _tool;
     private readonly ClaudeUsageLogger? _usageLogger;
 
@@ -21,6 +22,7 @@ public class PostingMatcherAgent
         _client = new AnthropicClient { ApiKey = apiKey };
         _usageLogger = usageLogger;
         _systemPrompt = SkillLoader.Load("match_posting.md");
+        _skillVersion = SkillLoader.Version(_systemPrompt);
 
         _tool = new Tool
         {
@@ -42,7 +44,7 @@ public class PostingMatcherAgent
         };
     }
 
-    protected PostingMatcherAgent() { _client = null!; _systemPrompt = ""; _tool = null!; _usageLogger = null; }
+    protected PostingMatcherAgent() { _client = null!; _systemPrompt = ""; _skillVersion = ""; _tool = null!; _usageLogger = null; }
 
     // targetContext is a short raw excerpt of whatever's known about the job (from an alert
     // email, or a user-supplied title/company hint) — deliberately not pre-parsed into
@@ -78,7 +80,7 @@ public class PostingMatcherAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.PostingMatcherAgent, HaikuModel, response.Usage);
+            await _usageLogger.LogAsync(userId, ClaudeAgentName.PostingMatcherAgent, HaikuModel, response.Usage, _skillVersion);
 
         foreach (var block in response.Content)
         {
