@@ -40,6 +40,17 @@ public class CvTailorAgent
 
     private const string TailoringNote = "Reorder or reword to fit this posting; omit an item only when it's genuinely irrelevant to this role.";
 
+    // extra_achievements/extra_highlights inherited this field's *shape* from ResumeBackfillAgent,
+    // where "no BACKGROUND source" is legitimate (the source is the real CV_BASE document being
+    // transcribed, one-time). Per-application tailoring has no such per-request source document —
+    // reusing that same description here would read as "invent freely" to the model, and hard
+    // constraints elsewhere in tailor_cv.md ("do not fabricate experience, tools, or metrics")
+    // depend on this field not contradicting them. Tailoring's only legitimate use is copying a
+    // bullet that's already real, i.e. already rendered in CURRENT RESUME for this same role/
+    // project (typically carried over from a prior backfill) — never new text authored for this
+    // specific posting. internal, not private, so ResumeOverrideSchemaTests can assert on it.
+    internal const string ExtraAchievementsNote = "Only if a bullet with no BACKGROUND source already exists verbatim in CURRENT RESUME for this role/project — copy it exactly, unchanged. Never invent, paraphrase, or add new content here; leave empty otherwise.";
+
     public CvTailorAgent(string apiKey, ClaudeUsageLogger? usageLogger = null)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
@@ -70,7 +81,7 @@ public class CvTailorAgent
             {
                 Properties = new Dictionary<string, JsonElement>
                 {
-                    ["experience_overrides"] = ResumeOverrideSchema.PropExperienceOverrideArray(TailoringNote),
+                    ["experience_overrides"] = ResumeOverrideSchema.PropExperienceOverrideArray(TailoringNote, ExtraAchievementsNote),
                 },
                 Required = ["experience_overrides"],
             },
@@ -85,7 +96,7 @@ public class CvTailorAgent
             {
                 Properties = new Dictionary<string, JsonElement>
                 {
-                    ["project_overrides"] = ResumeOverrideSchema.PropProjectOverrideArray(TailoringNote),
+                    ["project_overrides"] = ResumeOverrideSchema.PropProjectOverrideArray(TailoringNote, ExtraAchievementsNote),
                 },
                 Required = ["project_overrides"],
             },

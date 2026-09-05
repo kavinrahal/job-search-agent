@@ -107,7 +107,11 @@ you add a keyword.
 ## What you must NOT do
 
 - Exclude an achievement/highlight or role/project beyond the Epic Lanka and Programmed rules above
-- Introduce an `extra_achievements`/`extra_highlights` entry not directly grounded in `BACKGROUND`
+- Write a new `extra_achievements`/`extra_highlights` entry for this posting. That field only ever
+  copies a bullet that already exists verbatim in `CURRENT RESUME` for the same role/project but
+  has no corresponding `BACKGROUND` index (e.g. something carried over from an earlier resume
+  import) — copy it unchanged, character for character, or leave it empty. It is never a place to
+  author new content, even content you believe is true or minor.
 - Add tools, metrics, or responsibilities not present in `BACKGROUND`
 - Reference an `experience_index`/`project_index`/achievement `index` that doesn't exist in `BACKGROUND`
 - Change dates, role names, or company names (these come from `BACKGROUND`, not from you)

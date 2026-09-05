@@ -32,6 +32,12 @@ public class ResumeBackfillAgent
 
     private const string DivergenceNote = "Only where the wording differs from BACKGROUND, or is absent — omit ones that match as-is.";
 
+    // Legitimate "no BACKGROUND source" case: backfill_resume.md's extraAchievements rule is to
+    // copy CV_BASE's exact existing text verbatim — grounded in that real, already-live document,
+    // not invented. CvTailorAgent uses a different, stricter note for the same schema field (see
+    // CvTailorAgent.ExtraAchievementsNote) since it has no analogous per-request source document.
+    private const string ExtraDivergenceNote = "Bullet in CV_BASE for this role/project with no corresponding BACKGROUND entry — copy CV_BASE's exact text verbatim; never invent, reword, or improve it.";
+
     public ResumeBackfillAgent(string apiKey, ClaudeUsageLogger? usageLogger = null)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
@@ -62,7 +68,7 @@ public class ResumeBackfillAgent
             {
                 Properties = new Dictionary<string, JsonElement>
                 {
-                    ["experience_overrides"] = ResumeOverrideSchema.PropExperienceOverrideArray(DivergenceNote),
+                    ["experience_overrides"] = ResumeOverrideSchema.PropExperienceOverrideArray(DivergenceNote, ExtraDivergenceNote),
                 },
                 Required = ["experience_overrides"],
             },
@@ -92,7 +98,7 @@ public class ResumeBackfillAgent
             {
                 Properties = new Dictionary<string, JsonElement>
                 {
-                    ["project_overrides"] = ResumeOverrideSchema.PropProjectOverrideArray(DivergenceNote),
+                    ["project_overrides"] = ResumeOverrideSchema.PropProjectOverrideArray(DivergenceNote, ExtraDivergenceNote),
                 },
                 Required = ["project_overrides"],
             },
