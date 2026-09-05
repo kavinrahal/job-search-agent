@@ -20,4 +20,9 @@ public class DiscoveredPosting
     public DateTime DiscoveredAt { get; set; }
     public DateTime? EvaluatedAt { get; set; }
     public bool EmailNotificationSent { get; set; }
+    // Evaluation failures (fetch error, Claude error, etc.) recorded against this posting,
+    // reset to 0 on a successful evaluation. Once it reaches a worker's dead-letter cap (see
+    // MaxFailureCount in JobDiscoveryWorker/JobAlertProcessor), the posting is excluded from
+    // all future retries instead of being re-fetched and re-evaluated forever.
+    public int FailureCount { get; set; }
 }
