@@ -68,6 +68,13 @@ public class PostingMatcherAgent
         {
             Model = HaikuModel,
             MaxTokens = 256,
+            // Matching decision (same job or not) — low, consistent temperature instead of the
+            // API default (1.0). See ClaudeTemperature. The SDK marks this property [Obsolete]
+            // because post-Opus-4.6 models (Sonnet 5, Opus 4.7/4.8) reject any non-default value
+            // with a 400 — claude-haiku-4-5 predates that restriction and still honors it.
+#pragma warning disable CS0618
+            Temperature = ClaudeTemperature.Classification,
+#pragma warning restore CS0618
             System = new List<TextBlockParam>
             {
                 new() { Text = _systemPrompt, CacheControl = new CacheControlEphemeral() },

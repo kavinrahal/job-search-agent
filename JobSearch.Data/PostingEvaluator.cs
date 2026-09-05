@@ -84,6 +84,11 @@ public class PostingEvaluator
         {
             Model = SonnetModel,
             MaxTokens = 1024,
+            // This is classification-shaped (fixed recommendation tier + enum fields) and would
+            // otherwise get ClaudeTemperature.Classification, but claude-sonnet-5 is one of the
+            // post-Opus-4.6 models that only accepts the API-default temperature of 1.0 — any
+            // other value is rejected with a 400 (see the [Obsolete] note on
+            // MessageCreateParams.Temperature). There is no lever here; leave unset.
             System = new List<TextBlockParam>
             {
                 new()

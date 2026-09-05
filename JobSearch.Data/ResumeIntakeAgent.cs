@@ -88,6 +88,11 @@ public class ResumeIntakeAgent
         {
             Model = SonnetModel,
             MaxTokens = MaxTokens,
+            // Faithful transcription and reorganisation of text already on the resume, not novel
+            // reasoning (see the model-choice comment above), and would otherwise get
+            // ClaudeTemperature.Classification — but claude-sonnet-5 only accepts the API-default
+            // temperature of 1.0; any other value is rejected with a 400 (see the [Obsolete] note
+            // on MessageCreateParams.Temperature). No lever available here; leave unset.
             System = new List<TextBlockParam>
             {
                 new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
