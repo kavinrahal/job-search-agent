@@ -45,6 +45,16 @@ public class User
     // account-linking safety net work — a password registration against an email that
     // already has this set (a prior Google login) skips re-verification entirely.
     public DateTime? EmailVerifiedAt { get; set; }
+
+    // Set by the worker's per-user loop (JobSearchAgent/Program.cs) the moment a
+    // TokenResponseException proves this user's GmailRefreshToken has been revoked or
+    // expired — same nullable-DateTime "state" convention as DeactivatedAt above (null means
+    // fine). Two jobs: (1) excludes the user from the activeUsers query so every subsequent
+    // cron run doesn't keep re-attempting a Gmail call already known to fail, and (2) gates
+    // the one-time "please reconnect Gmail" email — only sent on the run that first sets
+    // this, not on every run while it stays set. Cleared by the /gmail-oauth/callback
+    // reconnect flow in JobSearch.Api/Program.cs once a fresh refresh token is stored.
+    public DateTime? GmailConnectionBrokenAt { get; set; }
 }
 
 // Bare entitlement fields — Stripe/billing wiring is a separate later ticket.

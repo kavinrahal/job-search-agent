@@ -1,4 +1,5 @@
 using System.Globalization;
+using Google.Apis.Auth.OAuth2.Responses;
 using JobSearch.Data;
 using JobSearchAgent.Agents;
 using JobSearchAgent.Integrations;
@@ -214,8 +215,14 @@ if (!testMode)
 // deletes the GmailRefreshToken secret unconditionally, which normally drops a cancelled user
 // out of this query on its own — but that's an incidental side effect of cancellation's Gmail
 // cleanup, not something this query should have to rely on to stay correct.
+//
+// GmailConnectionBrokenAt == null excludes anyone whose refresh token was already caught as
+// revoked/expired by a prior run (see the TokenResponseException catch below) — there's no
+// point re-attempting a Gmail call already known to fail every single cron cycle until they
+// reconnect (JobSearch.Api's /gmail-oauth/callback clears the flag when they do).
 var activeUsers = await db.Users
     .Where(u => u.DeactivatedAt == null
+             && u.GmailConnectionBrokenAt == null
              && db.UserProfiles.Any(p => p.UserId == u.Id && p.JobCriteria != null && p.JobCriteria != "")
              && db.UserSecrets.Any(s => s.UserId == u.Id && s.Key == UserSecretKey.GmailRefreshToken))
     .ToListAsync();
@@ -234,6 +241,37 @@ foreach (var user in activeUsers)
         totalEmailsFetched += result.EmailsFetched;
         totalEmailsClassified += result.EmailsClassified;
         totalNewApplications += result.NewApplications;
+    }
+    catch (TokenResponseException)
+    {
+        // Same expected condition the interactive /gmail-forwarding-status endpoint already
+        // handles (JobSearch.Api/Program.cs) — Google invalidates the stored refresh token if
+        // the user revokes access in their Google Account or it simply goes stale. Distinct
+        // from the generic catch below: this is a known, durable failure mode, not a
+        // transient hiccup, so it's marked rather than just logged.
+        //
+        // MarkBrokenIfNewAsync's return value gates the email: false means an earlier run
+        // already marked (and emailed) this exact revocation event — activeUsers' query above
+        // should already make that structurally impossible to reach here again before a
+        // reconnect, but the check is belt-and-suspenders regardless, same spirit as the
+        // DeactivatedAt guard on that query.
+        bool newlyBroken = await GmailConnectionBrokenService.MarkBrokenIfNewAsync(db, user, DateTime.UtcNow);
+        if (newlyBroken && emailer is not null)
+        {
+            try
+            {
+                await emailer.SendAsync(user.Email, "Reconnect Gmail for Work Santa",
+                    "Work Santa lost access to your Gmail account — this happens when access is " +
+                    "revoked from your Google Account, or a stored connection simply expires. " +
+                    "Application-status tracking has paused for your account until you reconnect.\n\n" +
+                    "Sign in to Work Santa and reconnect Gmail from the Sources page to resume tracking.");
+            }
+            catch (Exception ex)
+            {
+                await Console.Error.WriteLineAsync($"Failed to send Gmail-reconnect email to {user.Email}: {ex}");
+            }
+        }
+        await Console.Error.WriteLineAsync($"[{user.Email}] Gmail connection revoked or expired — marked broken, skipping until reconnect.");
     }
     catch (Exception ex)
     {

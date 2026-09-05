@@ -1711,6 +1711,11 @@ api.MapGet("/gmail-oauth/callback", async (HttpContext ctx, AppDbContext db, Use
             if (user is not null)
             {
                 user.GmailTrackingMode = GmailTrackingMode.Full;
+                // A fresh GmailRefreshToken proves Gmail access works again — clears the
+                // worker's broken-connection flag (see GmailConnectionBrokenService /
+                // JobSearchAgent/Program.cs) so the next cron run resumes processing this
+                // user instead of continuing to skip them.
+                GmailConnectionBrokenService.ClearBroken(user);
                 await db.SaveChangesAsync();
             }
         }
