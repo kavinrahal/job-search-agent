@@ -133,6 +133,12 @@ public class ResumeBackfillAgent
         {
             Model = SonnetModel,
             MaxTokens = MaxTokens,
+            // Faithful transcription/reconciliation of existing CV_BASE text against BACKGROUND
+            // (backfill_resume.md explicitly forbids "improving" wording) is extraction, not
+            // generation, and would otherwise get ClaudeTemperature.Classification — but
+            // claude-sonnet-5 only accepts the API-default temperature of 1.0; any other value
+            // is rejected with a 400 (see the [Obsolete] note on MessageCreateParams.Temperature).
+            // No lever available here; leave unset.
             System = new List<TextBlockParam>
             {
                 new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },

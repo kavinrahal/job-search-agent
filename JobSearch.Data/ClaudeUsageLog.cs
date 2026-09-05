@@ -30,3 +30,19 @@ public static class ClaudeAgentName
     public const string CompanyExtractorAgent = "CompanyExtractorAgent";
     public const string AccuracyVerifierAgent = "AccuracyVerifierAgent";
 }
+
+// Shared sampling temperature for calls whose job is picking one of N fixed categories or
+// extracting/verifying a structured fact against ground truth, rather than writing prose.
+// Applied on EmailClassifier, PostingMatcherAgent, CompanyExtractorAgent, and
+// AccuracyVerifierAgent — all claude-haiku-4-5. Left at the API default (1.0) on the rest:
+// CvTailorAgent, CoverLetterAgent, AnswerAgent, and ResumeSummaryAgent are genuinely generative
+// (phrasing variation is fine or desirable there); PostingEvaluator, ResumeBackfillAgent, and
+// ResumeIntakeAgent are classification/extraction-shaped but run on claude-sonnet-5, which — like
+// every model released after Claude Opus 4.6 — only accepts the default temperature of 1.0 and
+// rejects any other value with a 400 (see the [Obsolete] note on MessageCreateParams.Temperature).
+// There's no lever to pull for those three; sampling consistency there would need a model swap,
+// which is out of scope for this pass.
+public static class ClaudeTemperature
+{
+    public const double Classification = 0.0;
+}
