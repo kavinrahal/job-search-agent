@@ -1,4 +1,5 @@
 using JobSearch.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace JobSearchAgent.Tests;
 
@@ -28,11 +29,13 @@ public class TenantIsolationTests
         Assert.Equal(["Globex"], asUser2.Select(a => a.Company));
     }
 
-    // TC02 — CurrentUserId unset (null) returns zero rows, not every tenant's data.
-    // This is the deliberate fail-closed default (see AppDbContext.CurrentUserId) — a caller
-    // that forgets to set it must get nothing back, not an accidental full-tenant leak.
+    // TC02 — CurrentUserId unset (null) with no CrossTenantAccess opt-in now throws instead of
+    // silently returning zero rows (see AppDbContext.CrossTenantAccess / GuardedSet — the throw
+    // fires at db.Applications property access, before the query even runs).
+    // A caller that forgets to set CurrentUserId used to get an easy-to-miss empty result; it now
+    // fails loudly and immediately, so a bug like this can't quietly ship as "no data" in prod.
     [Fact]
-    public void Query_CurrentUserIdNull_ReturnsNoRows()
+    public void Query_CurrentUserIdNullNoCrossTenantOptIn_Throws()
     {
         var db = Db.Fresh();
         db.Applications.Add(new JobSearch.Data.Application { UserId = 1, Company = "Acme", RoleTitle = "Engineer", Status = ApplicationStatus.Applied, AppliedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
@@ -40,7 +43,41 @@ public class TenantIsolationTests
 
         db.CurrentUserId = null;
 
+        Assert.Throws<InvalidOperationException>(() => db.Applications.ToList());
+    }
+
+    // TC02b — the explicit opt-in (CrossTenantAccess = true) restores the old "matches nothing"
+    // behavior instead of throwing: CurrentUserId is still null, so the filter still can't match
+    // any row by UserId. A genuine cross-tenant read additionally needs .IgnoreQueryFilters() at
+    // the call site — this opt-in alone only silences the guard, it doesn't grant visibility into
+    // other tenants' rows by itself (see AppDbContext.CrossTenantAccess).
+    [Fact]
+    public void Query_CurrentUserIdNullWithCrossTenantOptIn_ReturnsNoRowsWithoutThrowing()
+    {
+        var db = Db.Fresh();
+        db.Applications.Add(new JobSearch.Data.Application { UserId = 1, Company = "Acme", RoleTitle = "Engineer", Status = ApplicationStatus.Applied, AppliedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        db.SaveChanges();
+
+        db.CurrentUserId = null;
+        db.CrossTenantAccess = true;
+
         Assert.Empty(db.Applications.ToList());
+    }
+
+    // TC02c — CrossTenantAccess is a null-CurrentUserId-only escape hatch, not a general
+    // "ignore tenancy" switch: with CurrentUserId still set, it must not change normal
+    // per-tenant filtering behavior at all (no regression for every real request/worker
+    // context, none of which ever set this flag).
+    [Fact]
+    public void Query_CrossTenantAccessSetWithCurrentUserId_StillFiltersToOwnTenant()
+    {
+        var db = Db.Fresh();
+        db.CrossTenantAccess = true;
+        db.Applications.Add(new JobSearch.Data.Application { UserId = 1, Company = "Acme", RoleTitle = "Engineer", Status = ApplicationStatus.Applied, AppliedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        db.Applications.Add(new JobSearch.Data.Application { UserId = 2, Company = "Globex", RoleTitle = "Engineer", Status = ApplicationStatus.Applied, AppliedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        db.SaveChanges();
+
+        Assert.Equal(["Acme"], db.Applications.ToList().Select(a => a.Company));
     }
 
     // TC03 — FindAsync (not just LINQ Where queries) also respects the tenant filter, for a
@@ -82,5 +119,52 @@ public class TenantIsolationTests
 
         db.CurrentUserId = 999; // unrelated to any UserId
         Assert.Contains(db.Users, u => u.Email == "someone@example.com");
+    }
+
+    // TC05 — every entity with a UserId property must either have a query filter configured in
+    // AppDbContext.OnModelCreating, or be explicitly named below as an intentional exception
+    // (with a reason — each also has its own doc comment at its HasQueryFilter/no-filter site).
+    // Catches a future entity being added with a UserId column but no HasQueryFilter call: today
+    // that's a silent, unfiltered cross-tenant leak (the opposite failure mode from the
+    // null-CurrentUserId guard elsewhere in this file — this one is about a *missing* filter,
+    // not a missing tenant id).
+    [Fact]
+    public void EveryUserIdEntity_HasQueryFilter_UnlessExplicitlyExempted()
+    {
+        var exemptFromFiltering = new HashSet<string>
+        {
+            nameof(UserProfile),           // PK-reuse (UserId is the PK); always looked up by an exact known UserId.
+            nameof(UserResume),            // Same PK-reuse pattern/reasoning as UserProfile.
+            nameof(UserSecret),            // Always looked up by an exact, explicitly-passed userId argument.
+            nameof(UserVerificationToken), // Pre-auth lookup by token hash/exact UserId — no CurrentUserId exists yet.
+            nameof(AnalyticsEvent),        // Cross-tenant aggregation by design (owner-only analytics endpoint).
+            nameof(SupportMessage),        // Cross-tenant by design (owner views everyone's submissions).
+        };
+
+        using var db = Db.Fresh();
+        var entitiesWithUserId = db.Model.GetEntityTypes()
+            .Where(e => e.ClrType.GetProperty("UserId") is not null)
+            .ToList();
+
+        // Sanity check on the reflection itself — if this ever finds nothing, the test isn't
+        // testing anything and would pass for the wrong reason.
+        Assert.NotEmpty(entitiesWithUserId);
+
+        var namesWithUserId = entitiesWithUserId.Select(e => e.ClrType.Name).ToHashSet();
+        var staleExemptions = exemptFromFiltering.Where(n => !namesWithUserId.Contains(n)).ToList();
+        Assert.True(staleExemptions.Count == 0,
+            $"Exempted names no longer correspond to a UserId-bearing entity (stale entry, fix the list): {string.Join(", ", staleExemptions)}");
+
+        var missingFilter = entitiesWithUserId
+            .Where(e => e.GetQueryFilter() is null && !exemptFromFiltering.Contains(e.ClrType.Name))
+            .Select(e => e.ClrType.Name)
+            .ToList();
+
+        Assert.True(missingFilter.Count == 0,
+            "Entities with a UserId property but no HasQueryFilter and not in exemptFromFiltering: " +
+            $"{string.Join(", ", missingFilter)}. Either add " +
+            "HasQueryFilter(x => x.UserId == CurrentUserId) in AppDbContext.OnModelCreating (and route " +
+            "its DbSet property through GuardedSet<T>() alongside the other seven), or add the entity " +
+            "to exemptFromFiltering above with a comment explaining why not.");
     }
 }

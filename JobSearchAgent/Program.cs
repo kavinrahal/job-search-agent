@@ -53,7 +53,10 @@ string connStr = AppDbContext.GetConnectionString(config.GetConnectionString("De
 var dbOptions = new DbContextOptionsBuilder<AppDbContext>()
     .UseNpgsql(connStr)
     .Options;
-await using var db = new AppDbContext(dbOptions);
+// CrossTenantAccess: this bootstrap context is shared across the whole run for
+// cross-user bookkeeping (migration, WorkerLock, SystemHealth) before any per-user
+// AppDbContext exists — see AppDbContext.CurrentUserId/CrossTenantAccess.
+await using var db = new AppDbContext(dbOptions) { CrossTenantAccess = true };
 await db.Database.MigrateAsync();
 
 // Guards against two runs overlapping if a cron trigger fires before the previous run
@@ -67,8 +70,13 @@ if (!await WorkerLockService.TryAcquireAsync(db, DateTime.UtcNow))
 // Data Protection key ring persisted to Postgres (not the framework's local-disk default)
 // since this worker and JobSearch.Api are separate processes on ephemeral containers that
 // both need to decrypt UserSecrets encrypted by either one.
+// Own isolated ServiceCollection (not the app's DI, since there isn't one here) — the only
+// consumer resolving AppDbContext from it is PersistKeysToDbContext's internal repository,
+// which only ever touches the unfiltered DataProtectionKeys table, but it's still opted into
+// CrossTenantAccess since it deliberately never has a CurrentUserId (see
+// AppDbContext.CrossTenantAccess).
 var dataProtectionServices = new ServiceCollection();
-dataProtectionServices.AddDbContext<AppDbContext>(o => o.UseNpgsql(connStr));
+dataProtectionServices.AddScoped(_ => new AppDbContext(dbOptions) { CrossTenantAccess = true });
 dataProtectionServices.AddDataProtection().PersistKeysToDbContext<AppDbContext>().SetApplicationName("JobFindr");
 var userSecrets = new UserSecretService(dataProtectionServices.BuildServiceProvider().GetRequiredService<IDataProtectionProvider>());
 

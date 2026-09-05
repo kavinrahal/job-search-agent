@@ -445,6 +445,9 @@ int ownerUserId;
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    // Dedicated one-time scope, discarded right after this block — never shared with a
+    // per-request context, so opting in here can't weaken the guard for real requests.
+    db.CrossTenantAccess = true;
     var owner = await UserProvisioningService.GetOrCreateAsync(db, ownerEmail, UserTier.Tier2, 1_000_000);
     ownerUserId = owner.Id;
     db.CurrentUserId = ownerUserId;

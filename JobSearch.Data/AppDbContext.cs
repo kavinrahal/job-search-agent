@@ -19,18 +19,65 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     // matches nothing. Set once per web request (auth middleware) or once per worker run.
     public int? CurrentUserId { get; set; }
 
+    // Explicit opt-in for a context that is deliberately never going to have a CurrentUserId:
+    // Data Protection's key-ring resolution (worker only — see JobSearchAgent/Program.cs),
+    // the startup owner-seed scope, JobSearchAgent's bootstrap context, and
+    // AdminDashboard.Api's keyed read/write contexts. Without this set, accessing one of the
+    // seven UserId-filtered DbSet properties below while CurrentUserId is null throws (see
+    // GuardedSet) instead of silently returning zero rows — a caller that forgets to set
+    // CurrentUserId now fails loudly instead of shipping a silent empty-result bug.
+    //
+    // Setting this alone does NOT grant visibility into other tenants' rows: the underlying
+    // HasQueryFilter predicate is still `UserId == CurrentUserId`, and CurrentUserId is still
+    // null, so a filtered query still matches nothing — it just does so quietly instead of
+    // throwing. A genuine cross-tenant read (e.g. an admin view across every user)
+    // additionally needs `.IgnoreQueryFilters()` on that specific query. This flag exists only
+    // to distinguish "no tenant, and that's intentional" from "no tenant, and that's a bug".
+    public bool CrossTenantAccess { get; set; }
+
+    // Guards the seven UserId-filtered DbSet properties below (see GuardedSet). Deliberately
+    // NOT part of any HasQueryFilter predicate: EF Core's compiled-query cache is shared across
+    // every AppDbContext instance backed by the same provider configuration (confirmed via a
+    // failing test run — see PR description), so a client-evaluated subexpression inside a
+    // query filter that doesn't reference the entity gets folded into a constant ONCE, the
+    // first time that query shape compiles, and that frozen result is then reused for every
+    // later execution of the same shape regardless of which context instance runs it. Baking
+    // "throw" (or "don't throw") into a shared, cached query plan like that would either wedge
+    // every future query of that shape after one bad call, or silently stop guarding at all
+    // after one good one. Running the check as plain C# at DbSet-property-access time avoids
+    // the compiled-query cache entirely — it can't be baked into anything, because it never
+    // becomes part of a translated expression tree.
+    //
+    // This does mean access via a navigation (e.g. `.Include(a => a.Events)` off `Applications`)
+    // isn't independently guarded — only the original HasQueryFilter (unchanged, exactly as
+    // before this feature) applies there, which still fails closed (zero rows) rather than
+    // throwing. In this codebase every such navigation is reached by first going through the
+    // owning entity's own guarded DbSet property (see Application.Events usage in
+    // JobSearch.Api/Program.cs), so CurrentUserId is already guaranteed non-null (or the access
+    // already threw) by the time the navigation is evaluated.
+    private DbSet<T> GuardedSet<T>() where T : class
+    {
+        if (CurrentUserId is null && !CrossTenantAccess)
+            throw new InvalidOperationException(
+                $"Accessed {typeof(T).Name} (a tenant-scoped table) with CurrentUserId == null " +
+                "and CrossTenantAccess not set. Set CurrentUserId to scope this context to a " +
+                "tenant, or set CrossTenantAccess = true (and usually .IgnoreQueryFilters() " +
+                "too) for a deliberate cross-tenant read.");
+        return Set<T>();
+    }
+
     public DbSet<User> Users { get; set; }
     public DbSet<UserProfile> UserProfiles { get; set; }
     public DbSet<UserResume> UserResumes { get; set; }
     public DbSet<UserSecret> UserSecrets { get; set; }
-    public DbSet<RawEmailRecord> RawEmails { get; set; }
-    public DbSet<ClassificationRecord> Classifications { get; set; }
-    public DbSet<Application> Applications { get; set; }
-    public DbSet<ApplicationEvent> ApplicationEvents { get; set; }
+    public DbSet<RawEmailRecord> RawEmails => GuardedSet<RawEmailRecord>();
+    public DbSet<ClassificationRecord> Classifications => GuardedSet<ClassificationRecord>();
+    public DbSet<Application> Applications => GuardedSet<Application>();
+    public DbSet<ApplicationEvent> ApplicationEvents => GuardedSet<ApplicationEvent>();
     public DbSet<SystemHealth> SystemHealth { get; set; }
-    public DbSet<DiscoveredPosting> DiscoveredPostings { get; set; }
-    public DbSet<AgentThread> AgentThreads { get; set; }
-    public DbSet<ClaudeUsageLog> ClaudeUsageLogs { get; set; }
+    public DbSet<DiscoveredPosting> DiscoveredPostings => GuardedSet<DiscoveredPosting>();
+    public DbSet<AgentThread> AgentThreads => GuardedSet<AgentThread>();
+    public DbSet<ClaudeUsageLog> ClaudeUsageLogs => GuardedSet<ClaudeUsageLog>();
     public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; }
     public DbSet<WorkerLock> WorkerLocks { get; set; }
     public DbSet<SupportMessage> SupportMessages { get; set; }
