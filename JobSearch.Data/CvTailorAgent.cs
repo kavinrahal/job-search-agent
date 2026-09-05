@@ -97,14 +97,26 @@ public class CvTailorAgent
     // candidate's background/resume is per-user data. background is passed in already-parsed
     // rather than re-parsed here, since callers need the parsed value again afterward (the final
     // render) and BackgroundYamlParser.Parse isn't free.
-    private string BuildSystemPrompt(BackgroundData background, string backgroundYaml, UserResume resume) => $"""
+    //
+    // includeContactInfo: false strips the candidate's name/email/phone/location/linkedin/github
+    // from both halves of this prompt (the raw BACKGROUND yaml's "personal" block, and CURRENT
+    // RESUME's header/contact line) — contact info is unnecessary third-party AI data exposure
+    // for a call that only decides how to phrase a bullet. GenerateAsync's tool-use tailoring
+    // calls always pass false: they never emit a header, and the final document's contact info
+    // always comes straight from the deterministic BackgroundData via ApplyDeltaAndRender, never
+    // from anything Claude sees or returns. ReviseAsync passes true: its free-text revision output
+    // becomes the final persisted document verbatim (tailor_cv.md's revision contract asks the
+    // model to reproduce CURRENT RESUME's format exactly), so redacting contact info there would
+    // make the model drop it from the candidate's actual resume — internal, not private, so
+    // CvTailorAgentTests can assert directly on the constructed prompt string without a live call.
+    internal string BuildSystemPrompt(BackgroundData background, string backgroundYaml, UserResume resume, bool includeContactInfo) => $"""
         {_skillText}
 
         --- BACKGROUND ---
-        {backgroundYaml}
+        {(includeContactInfo ? backgroundYaml : BackgroundYamlParser.StripPersonalSection(backgroundYaml))}
 
         --- CURRENT RESUME ---
-        {ResumeRenderer.Render(background, resume, isPromptContext: true)}
+        {ResumeRenderer.Render(background, resume, isPromptContext: true, includeContactInfo: includeContactInfo)}
         """;
 
     public static string BuildInitialUserContent(string postingText, string evaluationJson) => $"""
@@ -118,7 +130,7 @@ public class CvTailorAgent
     public async Task<string> GenerateAsync(UserProfile profile, UserResume resume, string postingText, string evaluationJson)
     {
         var background = BackgroundYamlParser.Parse(profile.Background);
-        var systemPrompt = BuildSystemPrompt(background, profile.Background, resume);
+        var systemPrompt = BuildSystemPrompt(background, profile.Background, resume, includeContactInfo: false);
         var userContent = BuildInitialUserContent(postingText, evaluationJson);
 
         var summarySkillsTask = CallAsync(profile.UserId, systemPrompt, userContent, _summarySkillsTool, SummarySkillsMaxTokens);
@@ -162,7 +174,7 @@ public class CvTailorAgent
             MaxTokens = 4000,
             System = new List<TextBlockParam>
             {
-                new() { Text = BuildSystemPrompt(background, profile.Background, resume), CacheControl = new CacheControlEphemeral() },
+                new() { Text = BuildSystemPrompt(background, profile.Background, resume, includeContactInfo: true), CacheControl = new CacheControlEphemeral() },
             },
             Messages = history.ToMessages(),
         });

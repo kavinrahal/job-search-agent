@@ -110,4 +110,64 @@ public class CvTailorAgentTests
         Assert.Contains("- H1", output);
         Assert.DoesNotContain("H2", output);
     }
+
+    // BuildSystemPrompt's includeContactInfo behavior — the actual fix for "CvTailorAgent sends
+    // the candidate's contact info into the CV-tailoring prompt unnecessarily". internal (not
+    // private) specifically so this is assertable without a live API call, same rationale as
+    // ApplyDeltaAndRender's own split-out above. Constructs a real CvTailorAgent with a dummy key:
+    // the constructor only loads local skill text and stores the key on an AnthropicClient, no
+    // network call, so no live credential is needed to test prompt construction.
+    private static readonly BackgroundData ContactBackground = new()
+    {
+        Personal = new PersonalInfo
+        {
+            Name = "Jordan Rivers", Email = "jordan.rivers@example.com", Phone = "555-0199",
+            Location = "Springfield, IL", Linkedin = "linkedin.com/in/jordanrivers", Github = "github.com/jordanrivers",
+        },
+        Experience = [new ExperienceEntry { Company = "Acme", Role = "Engineer", Achievements = ["Did A."] }],
+    };
+
+    private const string ContactBackgroundYaml = """
+        personal:
+          name: Jordan Rivers
+          email: jordan.rivers@example.com
+          phone: "555-0199"
+          location: Springfield, IL
+          linkedin: linkedin.com/in/jordanrivers
+          github: github.com/jordanrivers
+        experience:
+          - company: Acme
+            role: Engineer
+        """;
+
+    [Fact]
+    public void BuildSystemPrompt_IncludeContactInfoFalse_NeverContainsContactFields()
+    {
+        var agent = new CvTailorAgent("test-key");
+
+        var prompt = agent.BuildSystemPrompt(ContactBackground, ContactBackgroundYaml, BaseResume(), includeContactInfo: false);
+
+        Assert.DoesNotContain("Jordan Rivers", prompt);
+        Assert.DoesNotContain("jordan.rivers@example.com", prompt);
+        Assert.DoesNotContain("555-0199", prompt);
+        Assert.DoesNotContain("Springfield, IL", prompt);
+        Assert.DoesNotContain("linkedin.com/in/jordanrivers", prompt);
+        Assert.DoesNotContain("github.com/jordanrivers", prompt);
+        // The content tailoring actually needs still made it into the prompt.
+        Assert.Contains("Acme", prompt);
+    }
+
+    // Documents the intentional asymmetry: ReviseAsync (the other BuildSystemPrompt caller) passes
+    // true, because its free-text revision output is persisted as the final resume verbatim — see
+    // BuildSystemPrompt's own comment for why contact info can't be redacted there too.
+    [Fact]
+    public void BuildSystemPrompt_IncludeContactInfoTrue_ContainsContactFields()
+    {
+        var agent = new CvTailorAgent("test-key");
+
+        var prompt = agent.BuildSystemPrompt(ContactBackground, ContactBackgroundYaml, BaseResume(), includeContactInfo: true);
+
+        Assert.Contains("Jordan Rivers", prompt);
+        Assert.Contains("jordan.rivers@example.com", prompt);
+    }
 }
