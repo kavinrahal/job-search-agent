@@ -160,4 +160,33 @@ public class ResumeOverrideSchemaTests
 
         Assert.True(Assert.Single(result).Included);
     }
+
+    // Regression coverage for the CV-tailoring hardening finding: extra_achievements/
+    // extra_highlights used to carry one hardcoded schema description ("Bullets for this role
+    // with no BACKGROUND source") shared by both callers, which was accurate for
+    // ResumeBackfillAgent (transcribing a real CV_BASE document) but read as "invent freely" when
+    // reused verbatim for CvTailorAgent's per-application calls, contradicting tailor_cv.md's own
+    // "do not fabricate" rule. The fix makes the description caller-supplied instead of hardcoded
+    // — these tests confirm the schema builder actually plumbs it through rather than ignoring it.
+    [Fact]
+    public void PropExperienceOverrideArray_EmbedsCallerSuppliedExtraAchievementsDescription()
+    {
+        var schema = ResumeOverrideSchema.PropExperienceOverrideArray("achievements rule", "custom extra-achievements grounding rule");
+
+        var description = schema.GetProperty("items").GetProperty("properties")
+            .GetProperty("extra_achievements").GetProperty("description").GetString();
+
+        Assert.Equal("custom extra-achievements grounding rule", description);
+    }
+
+    [Fact]
+    public void PropProjectOverrideArray_EmbedsCallerSuppliedExtraHighlightsDescription()
+    {
+        var schema = ResumeOverrideSchema.PropProjectOverrideArray("highlights rule", "custom extra-highlights grounding rule");
+
+        var description = schema.GetProperty("items").GetProperty("properties")
+            .GetProperty("extra_highlights").GetProperty("description").GetString();
+
+        Assert.Equal("custom extra-highlights grounding rule", description);
+    }
 }

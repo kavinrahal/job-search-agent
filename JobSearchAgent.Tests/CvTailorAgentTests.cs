@@ -110,4 +110,21 @@ public class CvTailorAgentTests
         Assert.Contains("- H1", output);
         Assert.DoesNotContain("H2", output);
     }
+
+    // Regression test for the CV-tailoring hardening finding: extra_achievements/extra_highlights
+    // was a labeled exception with no requirement that its content trace back to real source
+    // material — its schema description used to just say "Bullets for this role with no
+    // BACKGROUND source", identical to (and copied from) ResumeBackfillAgent's one-time
+    // transcription-of-a-real-document use case, which read as unconditional license to invent
+    // when reused for per-application tailoring. This asserts the actual production string
+    // (wired into both submit_experience_overrides and submit_project_overrides via
+    // ResumeOverrideSchema) now requires the bullet already be real (verbatim in CURRENT RESUME)
+    // and explicitly forbids invention, rather than being silent on sourcing.
+    [Fact]
+    public void ExtraAchievementsNote_RequiresExistingCurrentResumeContent_ForbidsInvention()
+    {
+        Assert.Contains("Never invent", CvTailorAgent.ExtraAchievementsNote);
+        Assert.Contains("CURRENT RESUME", CvTailorAgent.ExtraAchievementsNote);
+        Assert.DoesNotContain("no BACKGROUND source.", CvTailorAgent.ExtraAchievementsNote);
+    }
 }
