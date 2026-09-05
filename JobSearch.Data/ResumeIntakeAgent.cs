@@ -82,31 +82,27 @@ public class ResumeIntakeAgent
         return new ParsedResume(backgroundTask.Result, cvBaseTask.Result);
     }
 
-    private async Task<string> ExtractFieldAsync(int userId, List<ContentBlockParam> content, Tool tool, string fieldName)
-    {
-        var response = await _client.Messages.Create(new MessageCreateParams
-        {
-            Model = SonnetModel,
-            MaxTokens = MaxTokens,
-            System = new List<TextBlockParam>
+    private Task<string> ExtractFieldAsync(int userId, List<ContentBlockParam> content, Tool tool, string fieldName) =>
+        ClaudeToolCallRetry.CallAsync(
+            _client,
+            buildRequest: messages => new MessageCreateParams
             {
-                new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
+                Model = SonnetModel,
+                MaxTokens = MaxTokens,
+                System = new List<TextBlockParam>
+                {
+                    new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
+                },
+                Tools = [tool],
+                ToolChoice = new ToolChoiceAny(),
+                Messages = [.. messages],
             },
-            Tools = [tool],
-            ToolChoice = new ToolChoiceAny(),
-            Messages = [new() { Role = Role.User, Content = content }],
-        });
-
-        if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeIntakeAgent, SonnetModel, response.Usage);
-
-        foreach (var block in response.Content)
-        {
-            if (block.TryPickToolUse(out ToolUseBlock? toolUse))
-                return ExtractField(toolUse.Input, fieldName);
-        }
-        throw new InvalidOperationException($"Resume intake did not return a tool use block for \"{fieldName}\".");
-    }
+            initialMessages: [new() { Role = Role.User, Content = content }],
+            toolName: tool.Name,
+            parse: input => ExtractField(input, fieldName),
+            missingToolUseMessage: $"Resume intake did not return a tool use block for \"{fieldName}\".",
+            logLabel: nameof(ResumeIntakeAgent),
+            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeIntakeAgent, SonnetModel, usage));
 
     // Split out from ExtractFieldAsync so this failure mode is unit-testable without a live
     // API call. A missing field (rather than a truncated-but-present one) is exactly what a

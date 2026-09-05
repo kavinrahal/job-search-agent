@@ -173,30 +173,27 @@ public class CvTailorAgent
         return ExtractText(response.Content);
     }
 
-    private async Task<IReadOnlyDictionary<string, JsonElement>> CallAsync(int userId, string systemPrompt, string userContent, Tool tool, int maxTokens)
-    {
-        var response = await _client.Messages.Create(new MessageCreateParams
-        {
-            Model = OpusModel,
-            MaxTokens = maxTokens,
-            System = new List<TextBlockParam>
+    private Task<IReadOnlyDictionary<string, JsonElement>> CallAsync(int userId, string systemPrompt, string userContent, Tool tool, int maxTokens) =>
+        ClaudeToolCallRetry.CallAsync(
+            _client,
+            buildRequest: messages => new MessageCreateParams
             {
-                new() { Text = systemPrompt, CacheControl = new CacheControlEphemeral() },
+                Model = OpusModel,
+                MaxTokens = maxTokens,
+                System = new List<TextBlockParam>
+                {
+                    new() { Text = systemPrompt, CacheControl = new CacheControlEphemeral() },
+                },
+                Tools = [tool],
+                ToolChoice = new ToolChoiceAny(),
+                Messages = [.. messages],
             },
-            Tools = [tool],
-            ToolChoice = new ToolChoiceAny(),
-            Messages = [new() { Role = Role.User, Content = userContent }],
-        });
-
-        if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.CvTailorAgent, OpusModel, response.Usage);
-
-        foreach (var block in response.Content)
-            if (block.TryPickToolUse(out ToolUseBlock? toolUse))
-                return toolUse.Input;
-
-        throw new InvalidOperationException($"CV tailoring did not return a tool use block for \"{tool.Name}\".");
-    }
+            initialMessages: [new() { Role = Role.User, Content = userContent }],
+            toolName: tool.Name,
+            parse: input => input,
+            missingToolUseMessage: $"CV tailoring did not return a tool use block for \"{tool.Name}\".",
+            logLabel: nameof(CvTailorAgent),
+            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(userId, ClaudeAgentName.CvTailorAgent, OpusModel, usage));
 
     private static string ExtractText(IReadOnlyList<ContentBlock> blocks)
     {
