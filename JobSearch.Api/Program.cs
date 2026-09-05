@@ -114,6 +114,28 @@ builder.Services.AddAuthentication(o =>
         ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
         return Task.CompletedTask;
     };
+    // Runs on every authenticated request, not just at sign-in — closes the gap the
+    // /account/cancel endpoint's own comment already calls out ("doesn't revoke any other
+    // active session for this account elsewhere... acceptable for now"): without this, a
+    // session/cookie issued before cancellation kept working fully (any endpoint, any tier)
+    // for up to its full 7-day sliding expiry, since nothing but the initial Google
+    // OnCreatingTicket check and the sign-in moment itself ever looked at DeactivatedAt.
+    // A DB read per request is the same cost every RequireTier2Async-gated endpoint already
+    // pays for its own fresh-per-request check; this is that same pattern applied to
+    // cancellation instead of tier.
+    o.Events.OnValidatePrincipal = async ctx =>
+    {
+        var uidClaim = ctx.Principal?.FindFirstValue(UserIdClaimType);
+        if (uidClaim is null || !int.TryParse(uidClaim, out var uid)) return;
+
+        var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+        var user = await db.Users.FindAsync(uid);
+        if (user is null || user.DeactivatedAt is not null)
+        {
+            ctx.RejectPrincipal();
+            await ctx.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        }
+    };
 })
 .AddGoogle(o =>
 {
@@ -197,8 +219,15 @@ builder.Services.AddAuthentication(o =>
         // which looked so different from a normal browser navigation that a genuinely-denied
         // user couldn't tell it apart from a random glitch. This way LandingPage can show them
         // an actual explanation.
+        //
+        // "Account deactivated" (OnCreatingTicket's own ctx.Fail message above) gets its own
+        // authError value rather than folding into the generic "denied" bucket — AuthPage.tsx's
+        // AUTH_ERRORS map used to have no case for it at all, so a cancelled user trying to sign
+        // back in via Google saw "that Google account needs an invite", which is simply false
+        // and would send them chasing an invite that was never the problem.
         var redirectBase = (frontendUrl ?? "http://localhost:5173").TrimEnd('/');
-        ctx.Response.Redirect($"{redirectBase}/?authError=denied");
+        var authError = ctx.Failure?.Message == "Account deactivated" ? "deactivated" : "denied";
+        ctx.Response.Redirect($"{redirectBase}/?authError={authError}");
         ctx.HandleResponse();
         return Task.CompletedTask;
     };
@@ -525,12 +554,35 @@ app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>
 // identity (see const above), so every downstream CurrentUserId(ctx, UserIdClaimType) call —
 // which is how every protected endpoint, including Sources/Gmail-connect, resolves the
 // caller — behaves identically regardless of which path signed the user in.
-static Task SignInPasswordUserAsync(HttpContext ctx, User user)
+//
+// Returns false (and never signs in) for a cancelled account — the password path's own
+// equivalent of Google OnCreatingTicket's `if (user.DeactivatedAt is not null) ctx.Fail(...)`
+// above. Without this, POST /account/cancel's "signs you out... you just won't be able to
+// sign in again" promise only held for Google sign-in: a cancelled user could undo their own
+// cancellation just by logging back in with their existing password (LoginAsync never checked
+// DeactivatedAt), or — for an account that had proved ownership via a prior Google login but
+// never set a password — by registering a fresh password against the same email (RegisterAsync's
+// SignedIn branch). Every one of this method's four callers goes through here, so this one
+// check closes all of them at once.
+static async Task<bool> TrySignInPasswordUserAsync(HttpContext ctx, User user)
 {
+    if (user.DeactivatedAt is not null) return false;
+
     var identity = new ClaimsIdentity(CookieAuthenticationDefaults.AuthenticationScheme);
     identity.AddClaim(new Claim(UserIdClaimType, user.Id.ToString(CultureInfo.InvariantCulture)));
-    return ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+    return true;
 }
+
+// Shared response for every password-path entry point once a cancelled account is caught —
+// deliberately not the generic "invalid email or password" InvalidCredentials message, since
+// the caller here already proved they own the account (correct password, or a just-consumed
+// verification/reset token); telling them it's cancelled is more honest than pretending they
+// mistyped something, and matches what the cancel flow's own UI copy already tells them to
+// expect ("you just won't be able to sign in again unless it's reactivated"). Doesn't point
+// them at the in-app Support form — that's an authenticated-only endpoint (see POST /support
+// below), which is exactly the thing a cancelled, signed-out visitor can't reach.
+const string AccountCancelledMessage = "This account has been cancelled and can't be signed into.";
 
 // POST /api/v1/auth/register — { email, password }. Gated by the same beta-invite rules
 // Google login uses (BetaAccessService) and resolves through the same GetOrCreateAsync
@@ -561,7 +613,8 @@ app.MapPost("/api/v1/auth/register", async (HttpContext ctx, RegisterRequest bod
             return Results.BadRequest(new { error = "This email already has a password. Log in, or use forgot password." });
 
         case PasswordAuthService.RegisterOutcome.SignedIn:
-            await SignInPasswordUserAsync(ctx, result.User!);
+            if (!await TrySignInPasswordUserAsync(ctx, result.User!))
+                return Results.BadRequest(new { error = AccountCancelledMessage });
             return Results.Ok(new { status = "signed_in" });
 
         default: // RegisterOutcome.VerificationSent — the normal case for a genuinely new user
@@ -597,7 +650,8 @@ app.MapGet("/api/v1/auth/verify-email", async (HttpContext ctx, AppDbContext db,
     if (user is null)
         return Results.Redirect($"{redirectBase}/?authError=invalid_token");
 
-    await SignInPasswordUserAsync(ctx, user);
+    if (!await TrySignInPasswordUserAsync(ctx, user))
+        return Results.Redirect($"{redirectBase}/?authError=deactivated");
     return Results.Redirect(redirectBase);
 }).RequireRateLimiting("auth").AllowAnonymous();
 
@@ -623,7 +677,8 @@ app.MapPost("/api/v1/auth/login", async (HttpContext ctx, LoginRequest body, App
             return Results.BadRequest(new { error = "Verify your email first — check your inbox for the link." });
 
         default:
-            await SignInPasswordUserAsync(ctx, result.User!);
+            if (!await TrySignInPasswordUserAsync(ctx, result.User!))
+                return Results.BadRequest(new { error = AccountCancelledMessage });
             return Results.Ok();
     }
 }).RequireRateLimiting("auth").AllowAnonymous();
@@ -672,7 +727,8 @@ app.MapPost("/api/v1/auth/reset-password", async (HttpContext ctx, ResetPassword
             return Results.BadRequest(new { error = "This reset link is invalid or has expired." });
 
         default:
-            await SignInPasswordUserAsync(ctx, result.User!);
+            if (!await TrySignInPasswordUserAsync(ctx, result.User!))
+                return Results.BadRequest(new { error = AccountCancelledMessage });
             return Results.Ok();
     }
 }).RequireRateLimiting("auth").AllowAnonymous();
@@ -1679,6 +1735,17 @@ api.MapPost("/account/upgrade-to-tier2", async (HttpContext ctx, AppDbContext db
     return upgraded ? Results.Ok() : Results.BadRequest(new { error = "Already Tier 2." });
 });
 
+// POST /api/v1/account/downgrade-to-tier1 — self-serve, mirrors upgrade-to-tier2 above.
+// Forfeits any unused credit balance immediately (see TierDowngradeService) rather than
+// leaving a Tier2-sized balance on a Tier1 account — the frontend confirm copy makes this
+// explicit before the user commits.
+api.MapPost("/account/downgrade-to-tier1", async (HttpContext ctx, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var downgraded = await TierDowngradeService.DowngradeToTier1Async(db, userId);
+    return downgraded ? Results.Ok() : Results.BadRequest(new { error = "Already Tier 1." });
+});
+
 // POST /api/v1/admin/invite — owner only. Adds the email to BetaInvite (idempotent — a
 // repeat invite is a no-op, not a duplicate row) so it can sign in at all, landing straight
 // at Tier 2. Still adds the invite even if SendGrid Mail Send isn't configured or the send
@@ -1770,11 +1837,16 @@ api.MapPost("/admin/users/{id:int}/backfill-resume", async (int id, HttpContext 
 // account to keep a live grant just because the user wants their history preserved —
 // reconnecting Gmail is a normal, expected part of coming back anyway.
 //
-// deleteData is the user's own explicit choice, not a default we pick for them: RawEmails
-// and Classifications (the raw inbox-derived content) are deleted only if they asked for
-// that, so someone planning to return can keep their tracked application history intact
-// rather than starting over. Applications itself (the actually-useful derived record) is
-// never touched either way — this only ever controls the raw content behind it.
+// deleteData is the user's own explicit choice, not a default we pick for them: RawEmails,
+// Classifications (the raw inbox-derived content) and Applications (the tracked history
+// derived from it) are all deleted only if they asked for that, so someone planning to
+// return can keep their tracked application history intact rather than starting over.
+// This matches the Settings UI copy ("Removes your tracked application history and
+// everything derived from your inbox") — Applications used to be deliberately spared here,
+// but that left real data behind despite the UI promising it would go, so it's now scoped
+// by the same deleteData flag as the other two tables. ApplicationEvents cascade-delete at
+// the DB level (see AppDbContext's Application -> ApplicationEvent OnDelete(Cascade)), so
+// they don't need a separate RemoveRange here.
 api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db, UserSecretService secrets, CancelAccountRequest body) =>
 {
     int userId = CurrentUserId(ctx, UserIdClaimType);
@@ -1810,9 +1882,12 @@ api.MapPost("/account/cancel", async (HttpContext ctx, AppDbContext db, UserSecr
         db.RawEmails.RemoveRange(rawEmails);
         var classifications = await db.Classifications.Where(c => c.UserId == userId).ToListAsync();
         db.Classifications.RemoveRange(classifications);
+        var applications = await db.Applications.Where(a => a.UserId == userId).ToListAsync();
+        db.Applications.RemoveRange(applications);
     }
 
     user.DeactivatedAt = DateTime.UtcNow;
+    db.AnalyticsEvents.Add(new AnalyticsEvent { UserId = userId, EventType = AnalyticsEventType.Cancellation, CreatedAt = DateTime.UtcNow });
     await db.SaveChangesAsync();
     await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
@@ -2457,7 +2532,7 @@ api.MapGet("/threads/{id:int}/docx", async (int id, HttpContext ctx, AppDbContex
 // SendGrid instead (?secret=...).
 // ---------------------------------------------------------------------------
 app.MapPost("/api/v1/sendgrid/inbound", async (
-    HttpRequest request, AppDbContext db, IServiceScopeFactory scopeFactory) =>
+    HttpRequest request, AppDbContext db, IServiceScopeFactory scopeFactory, ILogger<Program> logger) =>
 {
     // No secret configured yet (external SendGrid/DNS setup not finished) — reject
     // everything rather than accept mail with nothing to verify it against.
@@ -2465,7 +2540,24 @@ app.MapPost("/api/v1/sendgrid/inbound", async (
         || !string.Equals(request.Query["secret"], sendGridInboundSecret, StringComparison.Ordinal))
         return Results.Unauthorized();
 
-    var form = await request.ReadFormAsync();
+    IFormCollection form;
+    try
+    {
+        form = await request.ReadFormAsync();
+    }
+    catch (BadHttpRequestException ex) when (ex.StatusCode == StatusCodes.Status413PayloadTooLarge)
+    {
+        // SendGrid posts the full raw email as multipart/form-data, attachments included —
+        // a forwarded message can legitimately exceed the shared 8MB Kestrel body limit set
+        // near the top of this file. Nothing to retry, since a bigger message never fits;
+        // ack it like the "no matching user" case below so SendGrid doesn't redeliver it.
+        // Logged (not just silently dropped) so this failure mode stays observable in Sentry
+        // instead of vanishing the moment it stops throwing.
+        logger.LogWarning(ex,
+            "SendGrid inbound webhook: forwarded email exceeded the {MaxBytes}-byte Kestrel body limit, dropped. ContentLength={ContentLength}",
+            8_000_000, request.ContentLength);
+        return Results.Ok();
+    }
     var to = form["to"].ToString();
     var userId = await InboundEmailService.ResolveUserIdAsync(db, to);
 

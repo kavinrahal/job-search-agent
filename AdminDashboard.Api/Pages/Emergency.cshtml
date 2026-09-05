@@ -146,6 +146,22 @@
             <button type="submit" data-confirm-submit disabled>Save</button>
         </form>
     </div>
+
+    <div class="card action-card">
+        <h3>7 — Reactivate account</h3>
+        <p>Undoes a deactivation (self-cancelled or admin) — clears DeactivatedAt so the user can sign in again.</p>
+        <form method="post" asp-page-handler="Reactivate">
+            <div class="field">
+                <label>User ID</label>
+                <input type="number" name="targetUserId" required min="1" />
+            </div>
+            <div class="field confirm-field">
+                <label>Type CONFIRM</label>
+                <input type="text" name="confirmText" autocomplete="off" data-confirm-input />
+            </div>
+            <button type="submit" data-confirm-submit disabled>Reactivate</button>
+        </form>
+    </div>
 </div>
 
 <div class="card">

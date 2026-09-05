@@ -20,6 +20,7 @@ public static class AdminAuditActions
     public const string CreditAdjust = "credit_adjust";
     public const string TierChange = "tier_change";
     public const string Deactivate = "deactivate";
+    public const string Reactivate = "reactivate";
     public const string WorkerLockCleared = "worker_lock_cleared";
     public const string MaintenanceModeToggled = "maintenance_mode_toggled";
     public const string BannerUpdated = "banner_updated";

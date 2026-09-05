@@ -168,8 +168,15 @@ if (!testMode)
     // JobCriteria has to be fetched here (not just checked for existence via Any()) since
     // TargetJobTitles.Parse needs the actual text — filtered in-memory after, since EF Core
     // can't translate that parse into SQL.
+    // DeactivatedAt == null matters here specifically: unlike activeUsers/filterModeUsers below,
+    // nothing about discovery eligibility depends on a Gmail secret (cancellation always revokes
+    // and deletes those, which incidentally drops a cancelled user out of those two queries on
+    // its own) — Tier2 + EnabledSources + JobCriteria are untouched by /account/cancel, so
+    // without this filter a cancelled Tier2 user's automatic discovery (real Claude API spend,
+    // real email notifications) kept running indefinitely after cancellation. Confirmed live on
+    // staging during the pre-launch cancellation audit.
     var discoveryCandidates = await db.Users
-        .Where(u => u.Tier == UserTier.Tier2)
+        .Where(u => u.Tier == UserTier.Tier2 && u.DeactivatedAt == null)
         .Select(u => new
         {
             User = u,
@@ -203,8 +210,13 @@ if (!testMode)
 // Anyone missing either is skipped for now — no partial-pipeline branching for a case with no
 // real users yet.
 // ---------------------------------------------------------------------------
+// DeactivatedAt == null is belt-and-suspenders here — /account/cancel already revokes and
+// deletes the GmailRefreshToken secret unconditionally, which normally drops a cancelled user
+// out of this query on its own — but that's an incidental side effect of cancellation's Gmail
+// cleanup, not something this query should have to rely on to stay correct.
 var activeUsers = await db.Users
-    .Where(u => db.UserProfiles.Any(p => p.UserId == u.Id && p.JobCriteria != null && p.JobCriteria != "")
+    .Where(u => u.DeactivatedAt == null
+             && db.UserProfiles.Any(p => p.UserId == u.Id && p.JobCriteria != null && p.JobCriteria != "")
              && db.UserSecrets.Any(s => s.UserId == u.Id && s.Key == UserSecretKey.GmailRefreshToken))
     .ToListAsync();
 
@@ -243,8 +255,10 @@ foreach (var user in activeUsers)
 // ---------------------------------------------------------------------------
 if (!testMode)
 {
+    // Same belt-and-suspenders DeactivatedAt filter as activeUsers above.
     var filterModeUsers = await db.Users
-        .Where(u => u.GmailTrackingMode == GmailTrackingMode.Filter
+        .Where(u => u.DeactivatedAt == null
+                 && u.GmailTrackingMode == GmailTrackingMode.Filter
                  && db.UserProfiles.Any(p => p.UserId == u.Id && p.JobCriteria != null && p.JobCriteria != "")
                  && db.UserSecrets.Any(s => s.UserId == u.Id && s.Key == UserSecretKey.GmailSettingsRefreshToken))
         .ToListAsync();
