@@ -15,6 +15,7 @@ public class ResumeIntakeAgent
     private const string SonnetModel = "claude-sonnet-5";
     private const int MaxTokens = 8000;
     private readonly string _skillText;
+    private readonly string _skillVersion;
     private readonly Tool _backgroundTool;
     private readonly Tool _cvBaseTool;
     private readonly ClaudeUsageLogger? _usageLogger;
@@ -23,6 +24,7 @@ public class ResumeIntakeAgent
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("parse_resume_intake.md");
+        _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
 
         // Two separate tools/calls rather than one combined one — a single call asking for
@@ -98,7 +100,7 @@ public class ResumeIntakeAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeIntakeAgent, SonnetModel, response.Usage);
+            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeIntakeAgent, SonnetModel, response.Usage, _skillVersion);
 
         foreach (var block in response.Content)
         {

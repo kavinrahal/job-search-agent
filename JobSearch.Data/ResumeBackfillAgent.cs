@@ -23,6 +23,7 @@ public class ResumeBackfillAgent
     private const string SonnetModel = "claude-sonnet-5";
     private const int MaxTokens = 4000;
     private readonly string _skillText;
+    private readonly string _skillVersion;
     private readonly ClaudeUsageLogger? _usageLogger;
 
     private readonly Tool _summaryConfigTool;
@@ -36,6 +37,7 @@ public class ResumeBackfillAgent
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("backfill_resume.md");
+        _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
 
         _summaryConfigTool = new Tool
@@ -143,7 +145,7 @@ public class ResumeBackfillAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeBackfillAgent, SonnetModel, response.Usage);
+            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeBackfillAgent, SonnetModel, response.Usage, _skillVersion);
 
         foreach (var block in response.Content)
             if (block.TryPickToolUse(out ToolUseBlock? toolUse))

@@ -9,7 +9,7 @@ namespace JobSearch.Data;
 // log write must never break the CV/letter/evaluation/classification call it's attached to.
 public class ClaudeUsageLogger(DbContextOptions<AppDbContext> dbOptions)
 {
-    public async Task LogAsync(int userId, string agentName, string model, Usage usage)
+    public async Task LogAsync(int userId, string agentName, string model, Usage usage, string? skillVersion = null)
     {
         try
         {
@@ -24,6 +24,7 @@ public class ClaudeUsageLogger(DbContextOptions<AppDbContext> dbOptions)
                 OutputTokens = usage.OutputTokens,
                 CacheReadInputTokens = usage.CacheReadInputTokens ?? 0,
                 CacheCreationInputTokens = usage.CacheCreationInputTokens ?? 0,
+                SkillVersion = skillVersion,
                 CreatedAt = DateTime.UtcNow,
             });
             await db.SaveChangesAsync();
