@@ -54,35 +54,27 @@ public class AnswerAgent
           """
         : $"Application question: {question}";
 
-    public async Task<(string Mode, string Content)> RespondAsync(UserProfile profile, IReadOnlyList<AgentThreadTurn> history)
-    {
-        var response = await _client.Messages.Create(new MessageCreateParams
-        {
-            Model = SonnetModel,
-            MaxTokens = 1024,
-            System = new List<TextBlockParam>
+    public Task<(string Mode, string Content)> RespondAsync(UserProfile profile, IReadOnlyList<AgentThreadTurn> history) =>
+        ClaudeToolCallRetry.CallAsync(
+            _client,
+            buildRequest: messages => new MessageCreateParams
             {
-                new() { Text = BuildSystemPrompt(profile), CacheControl = new CacheControlEphemeral() },
+                Model = SonnetModel,
+                MaxTokens = 1024,
+                System = new List<TextBlockParam>
+                {
+                    new() { Text = BuildSystemPrompt(profile), CacheControl = new CacheControlEphemeral() },
+                },
+                Tools = [_tool],
+                ToolChoice = new ToolChoiceAny(),
+                Messages = [.. messages],
             },
-            Tools = [_tool],
-            ToolChoice = new ToolChoiceAny(),
-            Messages = history.ToMessages(),
-        });
-
-        if (_usageLogger is not null)
-            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.AnswerAgent, SonnetModel, response.Usage);
-
-        foreach (var block in response.Content)
-        {
-            if (block.TryPickToolUse(out ToolUseBlock? toolUse))
-            {
-                var i = toolUse.Input;
-                return (i["mode"].GetString() ?? "final_answer", i["content"].GetString() ?? "");
-            }
-        }
-
-        throw new InvalidOperationException("Answer agent did not return a tool use block.");
-    }
+            initialMessages: history.ToMessages(),
+            toolName: _tool.Name,
+            parse: i => (i["mode"].GetString() ?? "final_answer", i["content"].GetString() ?? ""),
+            missingToolUseMessage: "Answer agent did not return a tool use block.",
+            logLabel: nameof(AnswerAgent),
+            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.AnswerAgent, SonnetModel, usage));
 
     private static JsonElement Prop(string type, string description) =>
         JsonSerializer.SerializeToElement(new { type, description });

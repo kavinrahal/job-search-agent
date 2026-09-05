@@ -66,26 +66,25 @@ public class ResumeSummaryAgent
     {
         var userContent = BuildUserContent(backgroundYaml, targetJobTitles);
 
-        var response = await _client.Messages.Create(new MessageCreateParams
-        {
-            Model = SonnetModel,
-            MaxTokens = MaxTokens,
-            System = new List<TextBlockParam>
+        return await ClaudeToolCallRetry.CallAsync(
+            _client,
+            buildRequest: messages => new MessageCreateParams
             {
-                new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
+                Model = SonnetModel,
+                MaxTokens = MaxTokens,
+                System = new List<TextBlockParam>
+                {
+                    new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
+                },
+                Tools = [_summaryTool],
+                ToolChoice = new ToolChoiceAny(),
+                Messages = [.. messages],
             },
-            Tools = [_summaryTool],
-            ToolChoice = new ToolChoiceAny(),
-            Messages = [new() { Role = Role.User, Content = userContent }],
-        });
-
-        if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeSummaryAgent, SonnetModel, response.Usage);
-
-        foreach (var block in response.Content)
-            if (block.TryPickToolUse(out ToolUseBlock? toolUse))
-                return toolUse.Input.TryGetValue("summary", out var s) ? s.GetString() ?? "" : "";
-
-        throw new InvalidOperationException("Resume summary generation did not return a tool use block for \"submit_summary\".");
+            initialMessages: [new() { Role = Role.User, Content = userContent }],
+            toolName: _summaryTool.Name,
+            parse: input => input.TryGetValue("summary", out var s) ? s.GetString() ?? "" : "",
+            missingToolUseMessage: "Resume summary generation did not return a tool use block for \"submit_summary\".",
+            logLabel: nameof(ResumeSummaryAgent),
+            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeSummaryAgent, SonnetModel, usage));
     }
 }
