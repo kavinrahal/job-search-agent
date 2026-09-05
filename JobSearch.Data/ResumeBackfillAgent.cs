@@ -129,34 +129,31 @@ public class ResumeBackfillAgent
             ProjectOverrides: ResumeOverrideSchema.ExtractProjectOverrides(projectsTask.Result, "project_overrides"));
     }
 
-    private async Task<IReadOnlyDictionary<string, JsonElement>> CallAsync(int userId, string userContent, Tool tool)
-    {
-        var response = await _client.Messages.Create(new MessageCreateParams
-        {
-            Model = SonnetModel,
-            MaxTokens = MaxTokens,
-            // Faithful transcription/reconciliation of existing CV_BASE text against BACKGROUND
-            // (backfill_resume.md explicitly forbids "improving" wording) is extraction, not
-            // generation, and would otherwise get ClaudeTemperature.Classification — but
-            // claude-sonnet-5 only accepts the API-default temperature of 1.0; any other value
-            // is rejected with a 400 (see the [Obsolete] note on MessageCreateParams.Temperature).
-            // No lever available here; leave unset.
-            System = new List<TextBlockParam>
+    private Task<IReadOnlyDictionary<string, JsonElement>> CallAsync(int userId, string userContent, Tool tool) =>
+        ClaudeToolCallRetry.CallAsync(
+            _client,
+            buildRequest: messages => new MessageCreateParams
             {
-                new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
+                Model = SonnetModel,
+                MaxTokens = MaxTokens,
+                // Faithful transcription/reconciliation of existing CV_BASE text against BACKGROUND
+                // (backfill_resume.md explicitly forbids "improving" wording) is extraction, not
+                // generation, and would otherwise get ClaudeTemperature.Classification — but
+                // claude-sonnet-5 only accepts the API-default temperature of 1.0; any other value
+                // is rejected with a 400 (see the [Obsolete] note on MessageCreateParams.Temperature).
+                // No lever available here; leave unset.
+                System = new List<TextBlockParam>
+                {
+                    new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
+                },
+                Tools = [tool],
+                ToolChoice = new ToolChoiceAny(),
+                Messages = [.. messages],
             },
-            Tools = [tool],
-            ToolChoice = new ToolChoiceAny(),
-            Messages = [new() { Role = Role.User, Content = userContent }],
-        });
-
-        if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeBackfillAgent, SonnetModel, response.Usage, _skillVersion);
-
-        foreach (var block in response.Content)
-            if (block.TryPickToolUse(out ToolUseBlock? toolUse))
-                return toolUse.Input;
-
-        throw new InvalidOperationException($"Resume backfill did not return a tool use block for \"{tool.Name}\".");
-    }
+            initialMessages: [new() { Role = Role.User, Content = userContent }],
+            toolName: tool.Name,
+            parse: input => input,
+            missingToolUseMessage: $"Resume backfill did not return a tool use block for \"{tool.Name}\".",
+            logLabel: nameof(ResumeBackfillAgent),
+            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeBackfillAgent, SonnetModel, usage, _skillVersion));
 }

@@ -82,38 +82,35 @@ public class PostingEvaluator
             ? $"Source URL: {sourceUrl}\n\n{postingText}"
             : postingText;
 
-        var response = await _client.Messages.Create(new MessageCreateParams
-        {
-            Model = SonnetModel,
-            MaxTokens = 1024,
-            // This is classification-shaped (fixed recommendation tier + enum fields) and would
-            // otherwise get ClaudeTemperature.Classification, but claude-sonnet-5 is one of the
-            // post-Opus-4.6 models that only accepts the API-default temperature of 1.0 — any
-            // other value is rejected with a 400 (see the [Obsolete] note on
-            // MessageCreateParams.Temperature). There is no lever here; leave unset.
-            System = new List<TextBlockParam>
+        return await ClaudeToolCallRetry.CallAsync(
+            _client,
+            buildRequest: messages => new MessageCreateParams
             {
-                new()
+                Model = SonnetModel,
+                MaxTokens = 1024,
+                // This is classification-shaped (fixed recommendation tier + enum fields) and would
+                // otherwise get ClaudeTemperature.Classification, but claude-sonnet-5 is one of the
+                // post-Opus-4.6 models that only accepts the API-default temperature of 1.0 — any
+                // other value is rejected with a 400 (see the [Obsolete] note on
+                // MessageCreateParams.Temperature). There is no lever here; leave unset.
+                System = new List<TextBlockParam>
                 {
-                    Text = BuildSystemPrompt(profile),
-                    CacheControl = new CacheControlEphemeral(),
+                    new()
+                    {
+                        Text = BuildSystemPrompt(profile),
+                        CacheControl = new CacheControlEphemeral(),
+                    },
                 },
+                Tools = [_tool],
+                ToolChoice = new ToolChoiceAny(),
+                Messages = [.. messages],
             },
-            Tools = [_tool],
-            ToolChoice = new ToolChoiceAny(),
-            Messages = [new() { Role = Role.User, Content = userContent }],
-        });
-
-        if (_usageLogger is not null)
-            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.PostingEvaluator, SonnetModel, response.Usage, _skillVersion);
-
-        foreach (var block in response.Content)
-        {
-            if (block.TryPickToolUse(out ToolUseBlock? toolUse))
-                return ParseEvaluation(toolUse.Input, sourceUrl);
-        }
-
-        throw new InvalidOperationException("Evaluator did not return a tool use block.");
+            initialMessages: [new() { Role = Role.User, Content = userContent }],
+            toolName: _tool.Name,
+            parse: input => ParseEvaluation(input, sourceUrl),
+            missingToolUseMessage: "Evaluator did not return a tool use block.",
+            logLabel: nameof(PostingEvaluator),
+            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.PostingEvaluator, SonnetModel, usage, _skillVersion));
     }
 
     // Split out from EvaluateAsync so the tool-input-to-DTO mapping (including the literal-"null"
