@@ -4,11 +4,41 @@ import { useEditThread } from "../hooks/useGeneration";
 import { useMeContext } from "../hooks/useMeContext";
 import type { GenerationResult } from "../types";
 import { ResumePdfViewer } from "./ResumePdfViewer";
-import { Button, Input } from "../ui";
+import { Button, Input, WarningIcon } from "../ui";
 
 // The rendered result of a CV/cover-letter generation, extracted from GeneratePage so the
 // Discover tab's one-tap drawer shows the identical thing (same PDF preview, revision box,
-// downloads) rather than a second, drifting copy of it.
+// downloads and accuracy warnings) rather than a second, drifting copy of it.
+
+// Non-blocking by design (see AccuracyVerifierAgent's own comment) — the content above this is
+// already generated and downloadable either way, this just tells the user what to double-check
+// before they actually submit it somewhere.
+//
+// Hand-rolled rather than Callout, despite Callout's own doc naming this exact banner as its main
+// job in this product — Callout's title is a single bold lead-in with the rest flowing inline
+// after it, and a warning list of unknown length needs a real <ul>, which does not fit inside that
+// inline slot. Same bg-brass-wash/WarningIcon/text tokens Callout's warning variant uses, so it
+// still reads as the same notice.
+//
+// Was removed for a spell (PR #81) as "redundant" with GeneratePage's static "Worth checking
+// before you send" Callout — but that Callout is a generic, always-shown reminder ("double-check
+// names, dates, and specific claims"), not the specific, data-backed claims AccuracyVerifierAgent
+// actually flagged for this result. The two are complementary, not duplicates: restored here so
+// the real per-result check people already pay a credit for is actually visible again.
+export function AccuracyWarningBanner({ warnings }: { warnings?: string[] }) {
+  if (!warnings || warnings.length === 0) return null;
+  return (
+    <div className="mb-3 flex items-start gap-2.5 rounded-ctl bg-brass-wash px-3 py-2.5 text-control text-ink-2">
+      <WarningIcon className="mt-0.5 h-3.5 w-3.5 flex-none text-brass" />
+      <div className="min-w-0">
+        <p className="m-0 font-[650] text-ink">Worth double-checking before you send this:</p>
+        <ul className="m-0 mt-1 list-inside list-disc space-y-0.5 p-0">
+          {warnings.map((w, i) => <li key={i}>{w}</li>)}
+        </ul>
+      </div>
+    </div>
+  );
+}
 
 // Same input drives two things depending on the thread's state (the backend endpoint
 // handles both transparently): replying to an answer-agent follow-up question, or
@@ -62,6 +92,7 @@ export function CvResult({ result, onRevised }: {
 
   return (
     <>
+      <AccuracyWarningBanner warnings={result.accuracyWarnings} />
       <ResumePdfViewer source={`${threadPdfUrl(result.threadId)}?r=${revision}`} />
       <Button href={threadPdfUrl(result.threadId)} variant="ghost" size="sm" className="mt-3">
         Download PDF
@@ -100,6 +131,7 @@ export function LetterResult({ result, onRevised }: {
       {copied && (
         <p className="mb-2 text-caption text-pos">Copied to clipboard.</p>
       )}
+      <AccuracyWarningBanner warnings={result.accuracyWarnings} />
       <pre className="whitespace-pre-wrap font-sans text-body text-ink-2">{result.text}</pre>
       <div className="mt-3 flex gap-2">
         <Button href={threadPdfUrl(result.threadId)} variant="ghost" size="sm">
