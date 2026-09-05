@@ -296,4 +296,86 @@ public class ApplicationTrackerTests
     {
         Assert.Equal(expected, ApplicationTracker.ExtractDomain(fromHeader));
     }
+
+    // TC21 — The dedup gap this PR closes: previously CompanyDomain was only ever populated by
+    // the manual filter-tracking path (POST /applications), so the reliable-domain match never
+    // helped an organically email-tracked application. The first email now persists its sender
+    // domain on creation; a later email with a differently-spelled company name from the same
+    // domain should attach to that same application instead of creating a duplicate.
+    [Fact]
+    public async Task SecondEmailSameDomainDifferentSpelling_MatchesApplicationCreatedFromFirstEmail()
+    {
+        var db = Db.Fresh();
+        var firstEmail = Make.Email(messageId: "msg-1", fromAddress: "HR <hr@acmecorp.com>");
+        var firstClf = Make.Classification(category: "application_confirmation", company: "Acme Corp", roleTitle: "Engineer");
+        var secondEmail = Make.Email(messageId: "msg-2", fromAddress: "notifications@acmecorp.com");
+        var secondClf = Make.Classification(category: "interview_invitation", company: "Acme Corporation", roleTitle: "Engineer");
+
+        var result = await ApplicationTracker.ProcessClassificationsAsync(
+            db, [Fixtures.Pair(firstEmail, firstClf), Fixtures.Pair(secondEmail, secondClf)]);
+
+        Assert.Equal(1, db.Applications.Count()); // no duplicate created for the second email
+        Assert.Equal(1, result.Created);
+        var app = db.Applications.First();
+        Assert.Equal("acmecorp.com", app.CompanyDomain); // persisted from the first email, not just the manual path
+        Assert.Equal(ApplicationStatus.Interviewing, app.Status);
+    }
+
+    // TC22 — Guards the false-merge risk this PR's domain-persistence change could otherwise
+    // introduce: many unrelated companies send application email through the same shared ATS
+    // platform (here, Lever's hire.lever.co — see GmailSettingsClient.KnownAckDomains). Two
+    // different real companies using the same ATS must NOT be merged into one application just
+    // because their emails share a sender domain.
+    [Fact]
+    public async Task DifferentCompaniesSameSharedAtsDomain_DoesNotMerge()
+    {
+        var db = Db.Fresh();
+        var firstEmail = Make.Email(messageId: "msg-1", fromAddress: "no-reply@hire.lever.co");
+        var firstClf = Make.Classification(category: "application_confirmation", company: "Initech", roleTitle: "Engineer");
+        var secondEmail = Make.Email(messageId: "msg-2", fromAddress: "no-reply@hire.lever.co");
+        var secondClf = Make.Classification(category: "application_confirmation", company: "Globex", roleTitle: "Analyst");
+
+        var result = await ApplicationTracker.ProcessClassificationsAsync(
+            db, [Fixtures.Pair(firstEmail, firstClf), Fixtures.Pair(secondEmail, secondClf)]);
+
+        Assert.Equal(2, db.Applications.Count()); // two distinct companies, not merged via the shared ATS domain
+        Assert.Equal(2, result.Created);
+        Assert.All(db.Applications.ToList(), a => Assert.Null(a.CompanyDomain)); // shared ATS domain never persisted as an identity key
+    }
+
+    // TC23 — The normalized-name fallback: no reliable domain signal is available (the incoming
+    // email's own domain doesn't match anything on file), but the company name is a benign
+    // legal-suffix variant of an existing application's name, so it should still attach there
+    // rather than splitting into a second row.
+    [Fact]
+    public async Task SuffixVariantCompanyName_NoDomainSignal_MatchesExistingApplication()
+    {
+        var db = Db.Fresh();
+        Seed.Application(db, company: "Acme Corp", roleTitle: "", status: ApplicationStatus.Applied);
+
+        var email = Make.Email(fromAddress: "notifications@example.com");
+        var clf = Make.Classification(category: "interview_invitation", company: "Acme, Inc.", roleTitle: "");
+
+        var result = await ApplicationTracker.ProcessClassificationsAsync(db, [Fixtures.Pair(email, clf)]);
+
+        Assert.Equal(1, db.Applications.Count()); // no duplicate created for the suffix variant
+        Assert.Equal(0, result.Created);
+        Assert.Equal(ApplicationStatus.Interviewing, db.Applications.First().Status);
+    }
+
+    // TC24 — NormalizeCompanyName in isolation, same rationale as ExtractDomain's own dedicated
+    // test above: a plain string-transform helper that's easy to get subtly wrong (over-stripping,
+    // or leaving a stray comma) without a test failure surfacing anywhere else.
+    [Theory]
+    [InlineData("Acme Corp", "acme")]
+    [InlineData("Acme Corporation", "acme")]
+    [InlineData("Acme, Inc.", "acme")]
+    [InlineData("Acme LLC", "acme")]
+    [InlineData("acme", "acme")]
+    [InlineData("Bank of America Corp", "bank of america")]
+    [InlineData("Corp", "corp")] // single-word name is never stripped down to nothing
+    public void NormalizeCompanyName_VariousSuffixes_FoldsToSameKey(string company, string expected)
+    {
+        Assert.Equal(expected, ApplicationTracker.NormalizeCompanyName(company));
+    }
 }
