@@ -25,8 +25,28 @@ const BASE = (import.meta.env.VITE_API_URL ?? "") + "/api/v1";
 
 export class InsufficientCreditsError extends Error {}
 
+// The readable half of the backend's CSRF double-submit-cookie pair (see JobSearch.Api's
+// AddAntiforgery config and GET /auth/me, which (re)issues this cookie on every bootstrap
+// call). Not HttpOnly, by design — the whole point is that this file can read it and mirror it
+// into a header, something a cross-site attacker page cannot do (Same-Origin Policy blocks
+// reading another origin's cookies), even though the browser will happily attach the actual
+// session cookie to a forged cross-site request.
+function readCsrfCookie(): string | null {
+  const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { ...options, credentials: "include" });
+  const method = (options.method ?? "GET").toUpperCase();
+  const headers = new Headers(options.headers);
+  // Mirrors the backend's exempt-path list (Program.cs): every mutating call needs the header
+  // except the pre-session auth endpoints, which have no CSRF cookie to read yet anyway (the
+  // header would just be absent — harmless, the server exempts those paths by name).
+  if (method !== "GET" && method !== "HEAD") {
+    const csrfToken = readCsrfCookie();
+    if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
+  }
+  const res = await fetch(`${BASE}${path}`, { ...options, headers, credentials: "include" });
   if (res.status === 402) throw new InsufficientCreditsError("Insufficient credits");
   // Every protected endpoint 401s via the same RequireAuthorization() cookie challenge (see
   // Program.cs) — mid-visit, that only means the session cookie died (expired, cleared,
