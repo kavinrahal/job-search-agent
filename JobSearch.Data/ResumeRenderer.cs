@@ -48,12 +48,25 @@ public static class ResumeRenderer
     // preview, saved/tailored resume, backfill diagnostics). A blank Summary means different
     // things to each: the LLM needs the "write one, see tailoring instructions" nudge; a person
     // just needs to know the section is empty so far.
-    public static string Render(BackgroundData background, UserResume resume, bool isPromptContext = false)
+    //
+    // includeContactInfo is independent of isPromptContext: CvTailorAgent's first-generation
+    // tool-use tailoring calls are prompt context that must NOT see the name/contact header (the
+    // model never needs contact info to phrase a bullet, and the final render always splices real
+    // contact info in afterward from this same BackgroundData, not from anything the model
+    // returns — see CvTailorAgent.ApplyDeltaAndRender). CvTailorAgent's free-text revision calls
+    // are prompt context that DOES need it — tailor_cv.md's revision contract asks the model to
+    // reproduce "CURRENT RESUME" verbatim (same headers, same format) as its own output, which is
+    // then persisted as-is, so redacting the header there would just make the model omit the
+    // candidate's real contact info from the final document. Every other caller wants it: true.
+    public static string Render(BackgroundData background, UserResume resume, bool isPromptContext = false, bool includeContactInfo = true)
     {
         var sb = new StringBuilder();
 
-        sb.Append("# ").Append(background.Personal.Name).Append('\n').Append('\n');
-        sb.Append(ContactLine(background.Personal)).Append('\n').Append('\n');
+        if (includeContactInfo)
+        {
+            sb.Append("# ").Append(background.Personal.Name).Append('\n').Append('\n');
+            sb.Append(ContactLine(background.Personal)).Append('\n').Append('\n');
+        }
 
         if (string.IsNullOrWhiteSpace(resume.Summary))
         {

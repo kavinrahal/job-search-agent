@@ -129,6 +129,46 @@ public class BackgroundYamlParserTests
         Assert.Empty(data.Experience);
     }
 
+    // StripPersonalSection backs CvTailorAgent's GenerateAsync prompt (includeContactInfo: false)
+    // — the raw yaml text sent to Claude for CV tailoring must never contain the candidate's
+    // contact details. Uses the real fixture, same rationale as the Parse_RealFixture_* tests
+    // above: this is the actual document shape the strip has to handle correctly, comments,
+    // section-divider lines, and all — not a synthetic snippet that happens to be tidy.
+    [Fact]
+    public void StripPersonalSection_RealFixture_RemovesContactFieldsKeepsOtherContent()
+    {
+        var stripped = BackgroundYamlParser.StripPersonalSection(RealYaml);
+
+        Assert.DoesNotContain("Kavin Abeysinghe", stripped);
+        Assert.DoesNotContain("kavinrahal@gmail.com", stripped);
+        Assert.DoesNotContain("+61 468 884 472", stripped);
+        Assert.DoesNotContain("Melbourne, VIC, Australia", stripped);
+        Assert.DoesNotContain("linkedin.com/in/kavinrahal", stripped);
+        Assert.DoesNotContain("github.com/kavinrahal", stripped);
+
+        // Everything else — the content tailoring actually needs — survives untouched.
+        Assert.Contains("Willow Inc.", stripped);
+        Assert.Contains("Royal Melbourne Institute of Technology", stripped);
+    }
+
+    [Fact]
+    public void StripPersonalSection_RealFixture_ParsesToEmptyPersonalInfoButFullExperience()
+    {
+        var stripped = BackgroundYamlParser.StripPersonalSection(RealYaml);
+        var data = BackgroundYamlParser.Parse(stripped);
+
+        Assert.Equal("", data.Personal.Name);
+        Assert.Equal("", data.Personal.Email);
+        Assert.Equal(4, data.Experience.Count);
+    }
+
+    [Fact]
+    public void StripPersonalSection_EmptyOrBlank_ReturnsInputUnchanged()
+    {
+        Assert.Equal("", BackgroundYamlParser.StripPersonalSection(""));
+        Assert.Null(BackgroundYamlParser.StripPersonalSection(null!));
+    }
+
     [Fact]
     public void Parse_NewOptionalSections_RoundTripWhenPresent()
     {
