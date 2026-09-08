@@ -103,51 +103,45 @@ public class EmailClassifier
             {body}
             """;
 
-        var response = await _client.Messages.Create(new MessageCreateParams
-        {
-            Model = HaikuModel,
-            MaxTokens = 256,
-            // Fixed-category classification whose output drives Application status — low,
-            // consistent temperature instead of the API default (1.0). See ClaudeTemperature.
-            // The SDK marks this property [Obsolete] because post-Opus-4.6 models (Sonnet 5,
-            // Opus 4.7/4.8) reject any non-default value with a 400 — claude-haiku-4-5 predates
-            // that restriction and still honors it, so the warning doesn't apply here.
+        return await ClaudeToolCallRetry.CallAsync(
+            _client,
+            buildRequest: messages => new MessageCreateParams
+            {
+                Model = HaikuModel,
+                MaxTokens = 256,
+                // Fixed-category classification whose output drives Application status — low,
+                // consistent temperature instead of the API default (1.0). See ClaudeTemperature.
+                // The SDK marks this property [Obsolete] because post-Opus-4.6 models (Sonnet 5,
+                // Opus 4.7/4.8) reject any non-default value with a 400 — claude-haiku-4-5 predates
+                // that restriction and still honors it, so the warning doesn't apply here.
 #pragma warning disable CS0618
-            Temperature = ClaudeTemperature.Classification,
+                Temperature = ClaudeTemperature.Classification,
 #pragma warning restore CS0618
-            System = new List<TextBlockParam>
-            {
-                new()
+                System = new List<TextBlockParam>
                 {
-                    Text = _systemPrompt,
-                    CacheControl = new CacheControlEphemeral(),
+                    new()
+                    {
+                        Text = _systemPrompt,
+                        CacheControl = new CacheControlEphemeral(),
+                    },
                 },
+                Tools = [_tool],
+                ToolChoice = new ToolChoiceAny(),
+                Messages = [.. messages],
             },
-            Tools = [_tool],
-            ToolChoice = new ToolChoiceAny(),
-            Messages = [new() { Role = Role.User, Content = userContent }],
-        });
-
-        if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.EmailClassifier, HaikuModel, response.Usage, _skillVersion);
-
-        foreach (var block in response.Content)
-        {
-            if (block.TryPickToolUse(out ToolUseBlock? toolUse))
+            initialMessages: [new() { Role = Role.User, Content = userContent }],
+            toolName: _tool.Name,
+            parse: input => new EmailClassification
             {
-                var input = toolUse.Input;
-                return new EmailClassification
-                {
-                    IsJobRelated = input["is_job_related"].GetBoolean(),
-                    Category = input["category"].GetString() ?? "not_relevant",
-                    Confidence = input["confidence"].GetDouble(),
-                    Company = input["company"].GetString() ?? "",
-                    RoleTitle = input["role_title"].GetString() ?? "",
-                };
-            }
-        }
-
-        throw new InvalidOperationException("Classifier did not return a tool use block.");
+                IsJobRelated = input["is_job_related"].GetBoolean(),
+                Category = input["category"].GetString() ?? "not_relevant",
+                Confidence = input["confidence"].GetDouble(),
+                Company = input["company"].GetString() ?? "",
+                RoleTitle = input["role_title"].GetString() ?? "",
+            },
+            missingToolUseMessage: "Classifier did not return a tool use block.",
+            logLabel: nameof(EmailClassifier),
+            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(userId, ClaudeAgentName.EmailClassifier, HaikuModel, usage, _skillVersion));
     }
 
     public async Task<List<(RawEmail Email, EmailClassification Classification)>> ClassifyBatchAsync(

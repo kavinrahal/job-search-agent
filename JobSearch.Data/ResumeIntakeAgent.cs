@@ -84,36 +84,32 @@ public class ResumeIntakeAgent
         return new ParsedResume(backgroundTask.Result, cvBaseTask.Result);
     }
 
-    private async Task<string> ExtractFieldAsync(int userId, List<ContentBlockParam> content, Tool tool, string fieldName)
-    {
-        var response = await _client.Messages.Create(new MessageCreateParams
-        {
-            Model = SonnetModel,
-            MaxTokens = MaxTokens,
-            // Faithful transcription and reorganisation of text already on the resume, not novel
-            // reasoning (see the model-choice comment above), and would otherwise get
-            // ClaudeTemperature.Classification — but claude-sonnet-5 only accepts the API-default
-            // temperature of 1.0; any other value is rejected with a 400 (see the [Obsolete] note
-            // on MessageCreateParams.Temperature). No lever available here; leave unset.
-            System = new List<TextBlockParam>
+    private Task<string> ExtractFieldAsync(int userId, List<ContentBlockParam> content, Tool tool, string fieldName) =>
+        ClaudeToolCallRetry.CallAsync(
+            _client,
+            buildRequest: messages => new MessageCreateParams
             {
-                new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
+                Model = SonnetModel,
+                MaxTokens = MaxTokens,
+                // Faithful transcription and reorganisation of text already on the resume, not novel
+                // reasoning (see the model-choice comment above), and would otherwise get
+                // ClaudeTemperature.Classification — but claude-sonnet-5 only accepts the API-default
+                // temperature of 1.0; any other value is rejected with a 400 (see the [Obsolete] note
+                // on MessageCreateParams.Temperature). No lever available here; leave unset.
+                System = new List<TextBlockParam>
+                {
+                    new() { Text = _skillText, CacheControl = new CacheControlEphemeral() },
+                },
+                Tools = [tool],
+                ToolChoice = new ToolChoiceAny(),
+                Messages = [.. messages],
             },
-            Tools = [tool],
-            ToolChoice = new ToolChoiceAny(),
-            Messages = [new() { Role = Role.User, Content = content }],
-        });
-
-        if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeIntakeAgent, SonnetModel, response.Usage, _skillVersion);
-
-        foreach (var block in response.Content)
-        {
-            if (block.TryPickToolUse(out ToolUseBlock? toolUse))
-                return ExtractField(toolUse.Input, fieldName);
-        }
-        throw new InvalidOperationException($"Resume intake did not return a tool use block for \"{fieldName}\".");
-    }
+            initialMessages: [new() { Role = Role.User, Content = content }],
+            toolName: tool.Name,
+            parse: input => ExtractField(input, fieldName),
+            missingToolUseMessage: $"Resume intake did not return a tool use block for \"{fieldName}\".",
+            logLabel: nameof(ResumeIntakeAgent),
+            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeIntakeAgent, SonnetModel, usage, _skillVersion));
 
     // Split out from ExtractFieldAsync so this failure mode is unit-testable without a live
     // API call. A missing field (rather than a truncated-but-present one) is exactly what a
