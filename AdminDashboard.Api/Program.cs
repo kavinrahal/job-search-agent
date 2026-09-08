@@ -29,10 +29,15 @@ var readConnectionString = AdminConnectionStringBuilder.Build(readDatabaseUrl, m
 var writeConnectionString = AdminConnectionStringBuilder.ResolveWrite(
     builder.Configuration["WriteDatabaseUrl"], readConnectionString, maxPoolSize: 5);
 
+// CrossTenantAccess = true: this app is an owner-only admin surface that is genuinely
+// cross-tenant by design and never sets CurrentUserId. That opt-in only silences
+// AppDbContext's "no tenant, no CrossTenantAccess" guard (see AppDbContext.CurrentUserId) — a
+// query against a UserId-filtered table here still needs `.IgnoreQueryFilters()` at the call
+// site to see every tenant's rows; without it, it still returns zero rows, just quietly.
 builder.Services.AddKeyedScoped<AppDbContext>(AdminDbContextKeys.Read, (_, _) =>
-    new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(readConnectionString).Options));
+    new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(readConnectionString).Options) { CrossTenantAccess = true });
 builder.Services.AddKeyedScoped<AppDbContext>(AdminDbContextKeys.Write, (_, _) =>
-    new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(writeConnectionString).Options));
+    new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(writeConnectionString).Options) { CrossTenantAccess = true });
 
 // ---------------------------------------------------------------------------
 // Auth — one shared username/password pair (AdminPortalUsername/AdminPortalPassword), its own
