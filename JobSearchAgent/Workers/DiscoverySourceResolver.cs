@@ -10,8 +10,7 @@ public static class DiscoverySourceResolver
 {
     // Null EnabledSources (Tier 2, sources step not yet completed) defaults to every automatic
     // source, so discovery has value from the moment someone subscribes. An explicit empty
-    // selection means the user turned everything off; that's respected as-is. Jooble has no
-    // fetcher yet — selecting it is a no-op until one exists.
+    // selection means the user turned everything off; that's respected as-is.
     //
     // adzunaKeywords is per-user (the user's own target_job_titles field, see
     // TargetJobTitles.Parse and JobCriteriaEditor.tsx) — not defaulted here to anything
@@ -19,8 +18,14 @@ public static class DiscoverySourceResolver
     // since a keyword-search source with no keywords has nothing useful to do; that's the
     // safe failure, not falling back to some generic default that would only really suit one
     // profession.
+    //
+    // adzunaLocation is likewise per-user (JobLocation.Parse, from the same JobCriteria's
+    // `location` block) — a missing value isn't a skip condition like keywords, though: unlike
+    // "nothing to search for", "no declared location yet" still has a reasonable fallback
+    // (AdzunaFetcher's own Melbourne default), so discovery still runs, just less targeted.
     public static List<IJobFetcher> Resolve(
-        string? enabledSources, string? adzunaAppId, string? adzunaAppKey, IReadOnlyList<string>? adzunaKeywords = null)
+        string? enabledSources, string? adzunaAppId, string? adzunaAppKey,
+        IReadOnlyList<string>? adzunaKeywords = null, string? adzunaLocation = null)
     {
         var keys = enabledSources is null
             ? JobSource.Catalog.Where(c => c.Automatic).Select(c => c.Key).ToHashSet()
@@ -29,7 +34,7 @@ public static class DiscoverySourceResolver
         var fetchers = new List<IJobFetcher>();
         if (keys.Contains(JobSource.Adzuna) && adzunaAppId is not null && adzunaAppKey is not null
             && adzunaKeywords is { Count: > 0 })
-            fetchers.Add(new AdzunaFetcher(adzunaAppId, adzunaAppKey, adzunaKeywords));
+            fetchers.Add(new AdzunaFetcher(adzunaAppId, adzunaAppKey, adzunaKeywords, adzunaLocation));
         if (keys.Contains(JobSource.Greenhouse))
             fetchers.Add(new GreenhouseFetcher());
         if (keys.Contains(JobSource.Lever))

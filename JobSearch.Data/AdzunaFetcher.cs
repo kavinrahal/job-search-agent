@@ -19,14 +19,34 @@ public class AdzunaFetcher : IJobFetcher
     // directly, not inferred.
     private readonly IReadOnlyList<string> _keywords;
 
-    public AdzunaFetcher(string appId, string appKey, IReadOnlyList<string>? keywords = null)
-        : this(appId, appKey, keywords, new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
+    // Where FetchAllAsync's proactive sweep searches — the user's own location (see
+    // JobLocation.Parse, threaded in via DiscoverySourceResolver), not a hardcoded region.
+    // Falls back to Melbourne only when the caller genuinely has nothing (no location captured
+    // yet). Never left as an empty string: Adzuna's `where` narrows results when set, and while
+    // omitting it is documented to fall back to nationwide results rather than erroring, an
+    // empty string specifically isn't — a real fallback value is the safer default. SearchAsync
+    // (the cross-check path — JobAlertProcessor / the /cv,/letter,/answer endpoints) is
+    // unaffected: it always takes its own explicit `location` argument per call, never this one.
+    public const string DefaultLocation = "melbourne";
+    private readonly string _location;
+
+    // Test-only seam (see JobSearch.Data.csproj's InternalsVisibleTo) so DiscoverySourceResolverTests
+    // can assert which location actually got threaded through, without adding public API surface
+    // or standing up an HTTP stub just to inspect a query string for that particular test.
+    internal string Location => _location;
+
+    public AdzunaFetcher(string appId, string appKey, IReadOnlyList<string>? keywords = null, string? location = null)
+        : this(appId, appKey, keywords, location, new HttpClient { Timeout = TimeSpan.FromSeconds(15) }) { }
 
     public AdzunaFetcher(string appId, string appKey, IReadOnlyList<string>? keywords, HttpClient http)
+        : this(appId, appKey, keywords, null, http) { }
+
+    public AdzunaFetcher(string appId, string appKey, IReadOnlyList<string>? keywords, string? location, HttpClient http)
     {
         _appId = appId;
         _appKey = appKey;
         _keywords = keywords ?? [];
+        _location = string.IsNullOrWhiteSpace(location) ? DefaultLocation : location;
         _http = http;
     }
 
@@ -39,7 +59,7 @@ public class AdzunaFetcher : IJobFetcher
         {
             try
             {
-                var items = await FetchKeywordAsync(keyword, "melbourne");
+                var items = await FetchKeywordAsync(keyword, _location);
                 foreach (var item in items.Where(i => seen.Add(i.Url)))
                     results.Add(item);
                 Console.WriteLine($"[Adzuna] '{keyword}': {items.Count} results");

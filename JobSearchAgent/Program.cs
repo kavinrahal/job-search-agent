@@ -372,8 +372,9 @@ async Task<(int Discovered, int Evaluated, int Notified)> RunDiscoveryForUserAsy
     // carrying state across for.
     var profile = await userDb.UserProfiles.FindAsync(user.Id);
     var adzunaKeywords = TargetJobTitles.Parse(profile?.JobCriteria);
+    var adzunaLocation = JobLocation.Parse(profile?.JobCriteria);
 
-    var fetchers = DiscoverySourceResolver.Resolve(user.EnabledSources, adzunaAppId, adzunaAppKey, adzunaKeywords);
+    var fetchers = DiscoverySourceResolver.Resolve(user.EnabledSources, adzunaAppId, adzunaAppKey, adzunaKeywords, adzunaLocation);
     if (fetchers.Count == 0)
     {
         Console.WriteLine("    (no automatic sources enabled — skipped)");

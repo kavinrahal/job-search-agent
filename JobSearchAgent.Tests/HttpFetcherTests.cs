@@ -189,6 +189,38 @@ public class HttpFetcherTests
             Task.FromResult(factory());
     }
 
+    // TC10b — FetchAllAsync's proactive sweep (the automatic-discovery path) uses whatever
+    // location was passed into the constructor, not a hardcoded "melbourne" — the whole point
+    // of this fix. Asserted against the real `where=` query param, not just constructor state.
+    [Fact]
+    public async Task Adzuna_FetchAll_UsesPassedInLocation_NotHardcodedMelbourne()
+    {
+        var handler = new SequenceStubHandler(Fixture("adzuna_response.json"));
+        var fetcher = new AdzunaFetcher("id", "key", ["software engineer"], "Sydney", new HttpClient(handler));
+
+        await fetcher.FetchAllAsync();
+
+        var query = Assert.Single(handler.RequestedUris).Query;
+        Assert.Contains("where=Sydney", query);
+        Assert.DoesNotContain("where=melbourne", query);
+    }
+
+    // TC10c — No location supplied (e.g. the user hasn't filled in Location criteria yet) falls
+    // back to AdzunaFetcher.DefaultLocation rather than passing an empty `where=` value through
+    // to Adzuna, whose behavior for a genuinely empty (as opposed to omitted) location isn't
+    // documented/confirmed safe.
+    [Fact]
+    public async Task Adzuna_FetchAll_NoLocationGiven_FallsBackToDefault()
+    {
+        var handler = new SequenceStubHandler(Fixture("adzuna_response.json"));
+        var fetcher = new AdzunaFetcher("id", "key", ["software engineer"], location: null, http: new HttpClient(handler));
+
+        await fetcher.FetchAllAsync();
+
+        var query = Assert.Single(handler.RequestedUris).Query;
+        Assert.Contains($"where={AdzunaFetcher.DefaultLocation}", query);
+    }
+
     // -------------------------------------------------------------------------
     // AdzunaFetcher — company-driven pagination (same shape as Jora's, see below —
     // a real structured API here rather than a scrape, so paging further is low-risk)

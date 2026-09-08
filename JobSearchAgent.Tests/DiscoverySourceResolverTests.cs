@@ -79,4 +79,39 @@ public class DiscoverySourceResolverTests
         Assert.Single(result);
         Assert.IsType<LeverFetcher>(result[0]);
     }
+
+    // TC06 — A stale "jooble" entry left over from before it was removed from the catalog
+    // (see JobSource.cs) is silently dropped, same as any other unrecognized key — not
+    // rejected, and doesn't take Adzuna/Greenhouse/Lever down with it.
+    [Fact]
+    public void Resolve_StaleJoobleInSelection_IgnoredWithoutThrowing()
+    {
+        var result = DiscoverySourceResolver.Resolve("jooble,lever", "app-id", "app-key", Keywords);
+
+        Assert.Single(result);
+        Assert.IsType<LeverFetcher>(result[0]);
+    }
+
+    // TC07 — A user-derived location (JobLocation.Parse's output) is threaded all the way
+    // through to the AdzunaFetcher instance Resolve constructs, not dropped along the way.
+    [Fact]
+    public void Resolve_WithAdzunaLocation_ThreadsLocationIntoFetcher()
+    {
+        var result = DiscoverySourceResolver.Resolve("adzuna", "app-id", "app-key", Keywords, adzunaLocation: "Sydney");
+
+        var adzuna = Assert.IsType<AdzunaFetcher>(Assert.Single(result));
+        Assert.Equal("Sydney", adzuna.Location);
+    }
+
+    // TC08 — No location derived (e.g. user hasn't filled in Location criteria yet) doesn't
+    // block Adzuna from running — it falls back to AdzunaFetcher's own default rather than
+    // being treated as a skip condition the way empty keywords are.
+    [Fact]
+    public void Resolve_NoAdzunaLocation_FallsBackToFetcherDefault()
+    {
+        var result = DiscoverySourceResolver.Resolve("adzuna", "app-id", "app-key", Keywords);
+
+        var adzuna = Assert.IsType<AdzunaFetcher>(Assert.Single(result));
+        Assert.Equal(AdzunaFetcher.DefaultLocation, adzuna.Location);
+    }
 }

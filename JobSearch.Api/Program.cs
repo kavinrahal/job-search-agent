@@ -1596,7 +1596,10 @@ api.MapGet("/sources", async (HttpContext ctx, AppDbContext db) =>
     if (error is not null) return error;
 
     var catalog = JobSource.Catalog.Select(c => new { key = c.Key, label = c.Label, automatic = c.Automatic });
-    var enabled = user!.EnabledSources?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
+    // Sanitized the same way PUT below sanitizes on write, so a key that's since been dropped
+    // from the catalog (e.g. a stale "jooble" saved before it was removed) never round-trips
+    // back to the frontend as a selected-but-unrenderable entry.
+    var enabled = JobSource.Sanitize(user!.EnabledSources?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? []);
     // Existence check only — no need to decrypt the token just to know it's there.
     var gmailConnected = await db.UserSecrets.AnyAsync(s => s.UserId == user.Id && s.Key == UserSecretKey.GmailSettingsRefreshToken);
     var gmailReadonlyConnected = await db.UserSecrets.AnyAsync(s => s.UserId == user.Id && s.Key == UserSecretKey.GmailRefreshToken);
