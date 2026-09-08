@@ -11,6 +11,12 @@ public class JobDiscoveryWorker
 
     private const int FullFetchThreshold = 400; // chars — below this, attempt a full page fetch
 
+    // Once a posting has failed evaluation this many times (fetch error, Claude error, etc.),
+    // treat it as permanently dead rather than retrying forever — a job board that 403s all
+    // scraper traffic, or a since-deleted listing, would otherwise burn an HTTP fetch and a
+    // Claude call every single run indefinitely with no backoff.
+    private const int MaxFailureCount = 3;
+
     private readonly AppDbContext _db;
     private readonly IEnumerable<IJobFetcher> _fetchers;
     private readonly JobPostingFetcher _pageFetcher;
@@ -51,8 +57,11 @@ public class JobDiscoveryWorker
         var recent = feedItems.Where(i => i.PublishedAt >= cutoff).ToList();
         Console.WriteLine($"Job discovery: {feedItems.Count} total, {recent.Count} within {MaxAgeDays} days.");
 
+        // "Seen" = successfully evaluated, OR permanently given up on (hit MaxFailureCount).
+        // A still-retryable error record (FailureCount < MaxFailureCount) is deliberately NOT
+        // seen, so it gets picked up again next run.
         var existingUrls = await _db.DiscoveredPostings
-            .Where(d => d.Recommendation != "error")
+            .Where(d => d.Recommendation != "error" || d.FailureCount >= MaxFailureCount)
             .Select(d => d.Url)
             .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
 
@@ -120,6 +129,7 @@ public class JobDiscoveryWorker
                 record.EvaluationJson = JsonSerializer.Serialize(eval);
                 record.DisqualifierHit = eval.DisqualifierHit;
                 record.EvaluatedAt = DateTime.UtcNow;
+                record.FailureCount = 0;
                 await _db.SaveChangesAsync();
 
                 evaluated++;
@@ -141,6 +151,9 @@ public class JobDiscoveryWorker
                 Console.WriteLine($"    ! Error: {ex.Message}");
                 record.Recommendation = "error";
                 record.EvaluatedAt = DateTime.UtcNow;
+                record.FailureCount++;
+                if (record.FailureCount >= MaxFailureCount)
+                    Console.WriteLine($"    ! Giving up permanently after {record.FailureCount} failures — will not retry.");
                 await _db.SaveChangesAsync();
             }
 

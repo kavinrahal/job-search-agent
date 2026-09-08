@@ -275,6 +275,110 @@ public class JobAlertProcessorTests
         Assert.Equal("error", record.Recommendation);
     }
 
+    // TC-P6b — Errored URL under the dead-letter cap (FailureCount < 3) is still picked up
+    // and retried — no behavior change for a posting that's failed once or twice.
+    [Fact]
+    public async Task ProcessAsync_ErroredUrlUnderCap_StillRetried()
+    {
+        var db = Db.Fresh();
+        var url = "https://au.seek.com/job/51000001";
+        db.DiscoveredPostings.Add(new DiscoveredPosting
+        {
+            UserId = Db.TestUserId,
+            Url = url, Source = "seek_alert", Title = "",
+            Recommendation = "error", FailureCount = 2,
+            DiscoveredAt = DateTime.UtcNow, EvaluatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+        var processor = MakeProcessor(db, evaluator: new FakeEvaluator(_ => StubEval("weak_match")));
+        var email = Make.Email(bodyText: $"Job: {url}");
+
+        var (found, evaluated, _) = await processor.ProcessAsync([email]);
+
+        Assert.Equal(1, found);
+        Assert.Equal(1, evaluated);
+        var record = db.DiscoveredPostings.Single(d => d.Url == url);
+        Assert.Equal("weak_match", record.Recommendation);
+    }
+
+    // TC-P6c — Errored URL that has hit the dead-letter cap (FailureCount == 3) is excluded
+    // from the dedup query entirely — never retried again.
+    [Fact]
+    public async Task ProcessAsync_ErroredUrlAtCap_ExcludedFromRetry()
+    {
+        var db = Db.Fresh();
+        var url = "https://au.seek.com/job/51000002";
+        db.DiscoveredPostings.Add(new DiscoveredPosting
+        {
+            UserId = Db.TestUserId,
+            Url = url, Source = "seek_alert", Title = "",
+            Recommendation = "error", FailureCount = 3,
+            DiscoveredAt = DateTime.UtcNow, EvaluatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+        int evalCallCount = 0;
+        var processor = MakeProcessor(db, evaluator: new FakeEvaluator(_ =>
+        {
+            evalCallCount++;
+            return StubEval("weak_match");
+        }));
+        var email = Make.Email(bodyText: $"Job: {url}");
+
+        var (found, evaluated, _) = await processor.ProcessAsync([email]);
+
+        Assert.Equal(1, found);
+        Assert.Equal(0, evaluated);
+        Assert.Equal(0, evalCallCount);
+    }
+
+    // TC-P6d — FailureCount increments by exactly 1 per failed run, and stops changing once
+    // the posting has hit the cap and is excluded from future runs.
+    [Fact]
+    public async Task ProcessAsync_RepeatedFailures_FailureCountIncrementsEachRun()
+    {
+        var db = Db.Fresh();
+        var url = "https://au.seek.com/job/51000003";
+        var processor = MakeProcessor(db, evaluator: new FakeEvaluator(_ =>
+            throw new InvalidOperationException("LLM unavailable")));
+        var email = Make.Email(bodyText: $"Job: {url}");
+
+        await processor.ProcessAsync([email]);
+        Assert.Equal(1, db.DiscoveredPostings.Single(d => d.Url == url).FailureCount);
+
+        await processor.ProcessAsync([email]);
+        Assert.Equal(2, db.DiscoveredPostings.Single(d => d.Url == url).FailureCount);
+
+        await processor.ProcessAsync([email]);
+        Assert.Equal(3, db.DiscoveredPostings.Single(d => d.Url == url).FailureCount);
+
+        // Now at the cap — a further run must not touch it at all.
+        await processor.ProcessAsync([email]);
+        Assert.Equal(3, db.DiscoveredPostings.Single(d => d.Url == url).FailureCount);
+    }
+
+    // TC-P6e — A URL that fails, then later succeeds, has its FailureCount reset to 0 — an
+    // old failure streak shouldn't count against a posting that's evaluating fine now.
+    [Fact]
+    public async Task ProcessAsync_SuccessAfterFailure_ResetsFailureCountToZero()
+    {
+        var db = Db.Fresh();
+        var url = "https://au.seek.com/job/51000004";
+        db.DiscoveredPostings.Add(new DiscoveredPosting
+        {
+            UserId = Db.TestUserId,
+            Url = url, Source = "seek_alert", Title = "",
+            Recommendation = "error", FailureCount = 2,
+            DiscoveredAt = DateTime.UtcNow, EvaluatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+        var processor = MakeProcessor(db, evaluator: new FakeEvaluator(_ => StubEval("weak_match")));
+        var email = Make.Email(bodyText: $"Job: {url}");
+
+        await processor.ProcessAsync([email]);
+
+        Assert.Equal(0, db.DiscoveredPostings.Single(d => d.Url == url).FailureCount);
+    }
+
     // TC-P7 — strong_match with an emailer configured → EmailNotificationSent=true, notified=1
     // Silent failure: a broken notification flag means the same posting could be re-notified
     // on the next run if the record is ever reset.

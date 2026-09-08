@@ -193,6 +193,109 @@ public class JobDiscoveryWorkerTests
         Assert.Equal("error", record.Recommendation);
     }
 
+    // TC09b — Errored posting under the dead-letter cap (FailureCount < 3) is still picked up
+    // and retried — no behavior change for a posting that's failed once or twice.
+    [Fact]
+    public async Task RunAsync_ErroredPostingUnderCap_StillRetried()
+    {
+        var db = Db.Fresh();
+        var item = FeedItem();
+        db.DiscoveredPostings.Add(new DiscoveredPosting
+        {
+            UserId = Db.TestUserId,
+            Url = item.Url, Source = "greenhouse", Title = item.Title,
+            Recommendation = "error", FailureCount = 2,
+            DiscoveredAt = DateTime.UtcNow, EvaluatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+        var worker = MakeWorker(db,
+            fetchers: [new FakeFetcher([item])],
+            evaluator: new FakeEval(_ => StubEval("weak_match")));
+
+        var (discovered, evaluated, _) = await worker.RunAsync();
+
+        Assert.Equal(1, discovered);
+        Assert.Equal(1, evaluated);
+        var record = db.DiscoveredPostings.Single(d => d.Url == item.Url);
+        Assert.Equal("weak_match", record.Recommendation);
+    }
+
+    // TC09c — Errored posting that has hit the dead-letter cap (FailureCount == 3) is excluded
+    // from the dedup query entirely — never retried again.
+    [Fact]
+    public async Task RunAsync_ErroredPostingAtCap_ExcludedFromRetry()
+    {
+        var db = Db.Fresh();
+        var item = FeedItem();
+        db.DiscoveredPostings.Add(new DiscoveredPosting
+        {
+            UserId = Db.TestUserId,
+            Url = item.Url, Source = "greenhouse", Title = item.Title,
+            Recommendation = "error", FailureCount = 3,
+            DiscoveredAt = DateTime.UtcNow, EvaluatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+        int evalCount = 0;
+        var worker = MakeWorker(db,
+            fetchers: [new FakeFetcher([item])],
+            evaluator: new FakeEval(_ => { evalCount++; return StubEval("weak_match"); }));
+
+        var (discovered, evaluated, _) = await worker.RunAsync();
+
+        Assert.Equal(0, discovered);
+        Assert.Equal(0, evaluated);
+        Assert.Equal(0, evalCount);
+    }
+
+    // TC09d — FailureCount increments by exactly 1 per failed run, and stops changing once
+    // the posting has hit the cap and is excluded from future runs.
+    [Fact]
+    public async Task RunAsync_RepeatedFailures_FailureCountIncrementsEachRun()
+    {
+        var db = Db.Fresh();
+        var item = FeedItem();
+        var worker = MakeWorker(db,
+            fetchers: [new FakeFetcher([item])],
+            evaluator: new FakeEval(_ => throw new InvalidOperationException("LLM down")));
+
+        await worker.RunAsync();
+        Assert.Equal(1, db.DiscoveredPostings.Single(d => d.Url == item.Url).FailureCount);
+
+        await worker.RunAsync();
+        Assert.Equal(2, db.DiscoveredPostings.Single(d => d.Url == item.Url).FailureCount);
+
+        await worker.RunAsync();
+        Assert.Equal(3, db.DiscoveredPostings.Single(d => d.Url == item.Url).FailureCount);
+
+        // Now at the cap — a further run must not touch it at all.
+        await worker.RunAsync();
+        Assert.Equal(3, db.DiscoveredPostings.Single(d => d.Url == item.Url).FailureCount);
+    }
+
+    // TC09e — A posting that fails, then later succeeds, has its FailureCount reset to 0 —
+    // an old failure streak shouldn't count against a posting that's evaluating fine now.
+    [Fact]
+    public async Task RunAsync_SuccessAfterFailure_ResetsFailureCountToZero()
+    {
+        var db = Db.Fresh();
+        var item = FeedItem();
+        db.DiscoveredPostings.Add(new DiscoveredPosting
+        {
+            UserId = Db.TestUserId,
+            Url = item.Url, Source = "greenhouse", Title = item.Title,
+            Recommendation = "error", FailureCount = 2,
+            DiscoveredAt = DateTime.UtcNow, EvaluatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+        var worker = MakeWorker(db,
+            fetchers: [new FakeFetcher([item])],
+            evaluator: new FakeEval(_ => StubEval("weak_match")));
+
+        await worker.RunAsync();
+
+        Assert.Equal(0, db.DiscoveredPostings.Single(d => d.Url == item.Url).FailureCount);
+    }
+
     // TC10 — strong_match with an emailer configured → EmailNotificationSent=true, notified=1
     [Fact]
     public async Task RunAsync_StrongMatchWithEmailer_EmailNotificationSent()
