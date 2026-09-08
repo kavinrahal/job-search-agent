@@ -468,6 +468,32 @@ async Task<(int EmailsFetched, int EmailsClassified, int NewApplications)> Proce
             .ToList();
         var seen = new HashSet<string>(fresh.Select(e => e.MessageId));
         emailsToClassify = fresh.Concat(unclassified.Where(e => !seen.Contains(e.MessageId))).ToList();
+
+        // Cheap deterministic pre-filter before the Claude call — see ObviousNonJobEmailFilter
+        // for the heuristic and why each signal is conservative. Full-mode (gmail.readonly)
+        // users have no equivalent of filter-mode's real Gmail-side pre-filter (see
+        // GmailSettingsClient), so without this every fetched email — including obvious
+        // newsletters/receipts/social notifications — paid for a full classification call.
+        var obviousNonJob = emailsToClassify.Where(ObviousNonJobEmailFilter.IsObviousNonJob).ToList();
+        if (obviousNonJob.Count > 0)
+        {
+            var filteredIds = obviousNonJob.Select(e => e.MessageId).ToHashSet();
+            emailsToClassify = emailsToClassify.Where(e => !filteredIds.Contains(e.MessageId)).ToList();
+
+            // Same retention treatment a classified not-relevant email would get (see
+            // RawEmailRetentionPolicy) — nothing will ever read these bodies again. These
+            // deliberately do NOT get a ClassificationRecord: they were never actually judged,
+            // and a fake "not_relevant" row would misrepresent that they were.
+            var toScrub = await userDb.RawEmails
+                .Where(r => filteredIds.Contains(r.MessageId) && r.BodyText != "")
+                .ToListAsync();
+            foreach (var raw in toScrub)
+                raw.BodyText = "";
+            if (toScrub.Count > 0)
+                await userDb.SaveChangesAsync();
+
+            Console.WriteLine($"Filtered {obviousNonJob.Count} obvious non-job email(s) before classification (no Claude call).");
+        }
     }
 
     Console.WriteLine($"Fetched {emails.Count} — classifying {emailsToClassify.Count}...");
