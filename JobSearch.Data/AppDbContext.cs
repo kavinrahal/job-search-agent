@@ -140,6 +140,10 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<BetaInvite>()
             .HasIndex(i => i.Email).IsUnique();
 
+        // Same optimistic-concurrency pattern as User.CreditVersion above — see
+        // WorkerLockService.TryAcquireAsync.
+        modelBuilder.Entity<WorkerLock>(e => e.Property(w => w.LockVersion).IsConcurrencyToken());
+
         // No query filter — same reasoning as UserSecret: always looked up by an exact hash
         // (pre-auth, so there's no CurrentUserId to filter by yet) or an exact UserId, never
         // a broad list query.

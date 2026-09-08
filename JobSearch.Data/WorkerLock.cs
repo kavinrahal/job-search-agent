@@ -7,14 +7,23 @@ public class WorkerLock
 {
     public int Id { get; set; }
     public DateTime? AcquiredAt { get; set; }
+
+    // Optimistic concurrency token guarding the claim in TryAcquireAsync below — same
+    // pattern as User.CreditVersion / CreditService's guard.
+    public int LockVersion { get; set; }
 }
 
 // A cron-triggered worker run can take a while; if the next trigger fires before the
 // previous run has finished, this stops the two runs from processing the same users at
-// once. Not built for millisecond-scale races (unlike CreditService's concurrency guard) —
-// cron triggers are minutes to hours apart, so a plain load-then-save check is enough; by
-// the time a second run's TryAcquireAsync executes, the first run's acquire has long since
-// committed.
+// once. Guarded by WorkerLock.LockVersion, an optimistic concurrency token — the same
+// pattern CreditService uses for User.CreditVersion. Two overlapping claims can both load
+// the row and both see it as free/stale, but only one SaveChangesAsync can win: whichever
+// lands first bumps LockVersion, and the second's save then fails with
+// DbUpdateConcurrencyException instead of silently overwriting the first claim. That makes
+// the claim itself atomic (backed by Postgres's row-level MVCC check on UPDATE), rather
+// than merely safe by convention because cron triggers happen to fire minutes-to-hours
+// apart — this now also holds if a second trigger fires seconds later, or eventually if
+// there's more than one worker replica.
 public static class WorkerLockService
 {
     // ponytail: no try/finally release on crash — if the process dies mid-run the lock
@@ -37,8 +46,18 @@ public static class WorkerLockService
             return false;
 
         existing.AcquiredAt = now;
-        await db.SaveChangesAsync();
-        return true;
+        existing.LockVersion += 1;
+        try
+        {
+            await db.SaveChangesAsync();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another claim's SaveChangesAsync landed first and moved LockVersion out from
+            // under us — we lost the race, not an error.
+            return false;
+        }
     }
 
     public static async Task ReleaseAsync(AppDbContext db)
