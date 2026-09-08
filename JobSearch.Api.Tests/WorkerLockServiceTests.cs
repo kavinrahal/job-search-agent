@@ -49,6 +49,49 @@ public class WorkerLockServiceTests
         Assert.True(reacquired);
     }
 
+    // TC03b — The actual regression test for the bug being fixed. Two independent contexts
+    // both load the free lock *before* either commits a claim (the real race window an
+    // overlapping cron trigger would hit), then db1 claims it first. db2's tracked copy is
+    // now stale relative to the store, so its own claim attempt must fail rather than
+    // silently overwrite db1's.
+    //
+    // This is staged explicitly (load, load, claim, claim) rather than via Task.WhenAll:
+    // EF Core's InMemory provider resolves every await synchronously, so two "concurrent"
+    // TryAcquireAsync calls started via Task.WhenAll never actually interleave — they just
+    // run to completion sequentially, which would pass even against the old, unguarded
+    // load-then-save code (confirmed while writing this test: CreditServiceTests'
+    // Task.WhenAll-based concurrent test has this same property). Explicit staging is the
+    // one shape that reliably forces the race on this provider, which is what "most
+    // rigorous approximation this repo's test conventions support" comes down to here.
+    //
+    // Silent failure without the fix: a plain load-then-save check has no way to detect
+    // db2's copy went stale — it would unconditionally overwrite db1's claim and return
+    // true for both, letting two worker runs process the same users at once.
+    [Fact]
+    public async Task TryAcquireAsync_SecondClaimOnStaleLoad_FailsInsteadOfOverwriting()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using (var seedDb = new AppDbContext(options))
+        {
+            Assert.True(await WorkerLockService.TryAcquireAsync(seedDb, Now));
+            await WorkerLockService.ReleaseAsync(seedDb);
+        }
+
+        await using var db1 = new AppDbContext(options);
+        await using var db2 = new AppDbContext(options);
+
+        // Both contexts load the free row into their own change tracker before either
+        // claims — this is what makes db2's later claim operate on stale data.
+        await db1.WorkerLocks.FirstOrDefaultAsync();
+        await db2.WorkerLocks.FirstOrDefaultAsync();
+
+        Assert.True(await WorkerLockService.TryAcquireAsync(db1, Now.AddMinutes(10)));
+        Assert.False(await WorkerLockService.TryAcquireAsync(db2, Now.AddMinutes(10)));
+    }
+
     // TC04 — Releasing lets the next acquire succeed immediately, not just after the stale window.
     [Fact]
     public async Task ReleaseAsync_ThenAcquire_SucceedsImmediately()
