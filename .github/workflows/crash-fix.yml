@@ -54,7 +54,7 @@ jobs:
       # `gh`/`git` commands the agent runs itself via Bash later in this job.
       - run: echo "GH_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           # An App installation token, not the built-in GITHUB_TOKEN: pushes made with the
