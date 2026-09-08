@@ -3,6 +3,7 @@ using System;
 using JobSearch.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JobSearch.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260905064233_AddGmailConnectionBrokenAt")]
+    partial class AddGmailConnectionBrokenAt
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -313,9 +316,6 @@ namespace JobSearch.Data.Migrations
                     b.Property<long>("OutputTokens")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("SkillVersion")
-                        .HasColumnType("text");
-
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
 
@@ -387,9 +387,6 @@ namespace JobSearch.Data.Migrations
 
                     b.Property<string>("EvaluationJson")
                         .HasColumnType("text");
-
-                    b.Property<int>("FailureCount")
-                        .HasColumnType("integer");
 
                     b.Property<string>("PostingText")
                         .HasColumnType("text");
