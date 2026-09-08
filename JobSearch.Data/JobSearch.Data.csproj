@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Anthropic" Version="12.29.0" />
-    <PackageReference Include="Google.Apis.Gmail.v1" Version="1.74.0.4162" />
+    <PackageReference Include="Google.Apis.Gmail.v1" Version="1.75.0.4225" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="9.0.5" />
     <!-- Just the password hasher (PasswordHasher<T>), not full ASP.NET Core Identity's
          membership/UserManager/SignInManager — this app's custom User entity and cookie-auth
