@@ -90,10 +90,22 @@ public class CreditServiceTests
     }
 
     // TC07 — Two simultaneous spends against a balance of 1 credit: exactly one succeeds,
-    // and the balance never goes negative. Uses two independent contexts against the same
-    // InMemory database (mirroring two separate HTTP requests, each with their own scoped
-    // DbContext) rather than two calls sharing one context's tracker, which wouldn't
-    // exercise the concurrency guard at all.
+    // and the balance never goes negative. Two independent contexts against the same InMemory
+    // database (mirroring two separate HTTP requests, each with their own scoped DbContext)
+    // both load the same user row *before* either one calls SaveChangesAsync, then db1 spends
+    // first. db2's tracked copy is now stale relative to the store (its CreditVersion no longer
+    // matches), so its own spend must fail rather than silently overwriting db1's.
+    //
+    // This is staged explicitly (load, load, spend, spend) rather than via Task.WhenAll:
+    // EF Core's InMemory provider resolves every await synchronously, so two "concurrent"
+    // SpendCreditAsync calls started via Task.WhenAll never actually interleave — they just run
+    // to completion sequentially, which would pass even against a completely broken concurrency
+    // guard (confirmed empirically while fixing the worker-lock bug in PR #103: temporarily
+    // breaking CreditService's guard left the old Task.WhenAll version of this test passing).
+    // See WorkerLockServiceTests.TryAcquireAsync_SecondClaimOnStaleLoad_FailsInsteadOfOverwriting
+    // for the same pitfall and the same fix on that service. Explicit staging is the one shape
+    // that reliably forces the race on this provider, deterministically, every run.
+    //
     // Silent failure: without CreditVersion as a concurrency token, both calls would load
     // balance=1, both decrement to 0 independently, and the second save would silently
     // overwrite the first — a real double-spend that no exception would ever surface.
@@ -113,11 +125,13 @@ public class CreditServiceTests
         await using var db1 = new AppDbContext(options);
         await using var db2 = new AppDbContext(options);
 
-        var results = await Task.WhenAll(
-            CreditService.SpendCreditAsync(db1, userId),
-            CreditService.SpendCreditAsync(db2, userId));
+        // Both contexts load the user row into their own change tracker before either
+        // spends — this is what makes db2's later spend operate on stale data.
+        await db1.Users.FindAsync(userId);
+        await db2.Users.FindAsync(userId);
 
-        Assert.Equal(1, results.Count(r => r));
+        Assert.True(await CreditService.SpendCreditAsync(db1, userId));
+        Assert.False(await CreditService.SpendCreditAsync(db2, userId));
 
         await using var verifyDb = new AppDbContext(options);
         var finalUser = await verifyDb.Users.FindAsync(userId);
