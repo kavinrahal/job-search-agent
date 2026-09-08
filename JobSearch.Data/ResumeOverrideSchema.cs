@@ -116,7 +116,13 @@ internal static class ResumeOverrideSchema
         },
     });
 
-    public static JsonElement PropExperienceOverrideArray(string achievementsDescription) => JsonSerializer.SerializeToElement(new
+    // extraAchievementsDescription is caller-supplied, not hardcoded. The grounding rule for a
+    // BACKGROUND-less bullet differs by caller: ResumeBackfillAgent is transcribing a real,
+    // already-existing CV_BASE document (grounded in that document, verbatim, one-time).
+    // CvTailorAgent has no such per-request source document to transcribe from — a description
+    // that reads as "no source required" here would read as license to fabricate on every single
+    // generation. See each caller's own note constant for its exact rule.
+    public static JsonElement PropExperienceOverrideArray(string achievementsDescription, string extraAchievementsDescription) => JsonSerializer.SerializeToElement(new
     {
         type = "array",
         description = "One entry per BACKGROUND experience index, in order.",
@@ -129,7 +135,7 @@ internal static class ResumeOverrideSchema
                 included = new { type = "boolean" },
                 company_description_override = new { type = "string", description = "Only if the rendered wording should differ from BACKGROUND's; omit/null otherwise." },
                 achievements = PropItemOverrideArray(achievementsDescription),
-                extra_achievements = new { type = "array", items = new { type = "string" }, description = "Bullets for this role with no BACKGROUND source." },
+                extra_achievements = new { type = "array", items = new { type = "string" }, description = extraAchievementsDescription },
                 notes = new { type = "string" },
             },
             required = new[] { "experience_index", "included", "achievements", "extra_achievements" },
@@ -151,7 +157,10 @@ internal static class ResumeOverrideSchema
         },
     });
 
-    public static JsonElement PropProjectOverrideArray(string highlightsDescription) => JsonSerializer.SerializeToElement(new
+    // extraHighlightsDescription: same reasoning as PropExperienceOverrideArray's
+    // extraAchievementsDescription — caller-supplied, not hardcoded, since the grounding rule
+    // differs between a one-time transcription of a real document and per-application tailoring.
+    public static JsonElement PropProjectOverrideArray(string highlightsDescription, string extraHighlightsDescription) => JsonSerializer.SerializeToElement(new
     {
         type = "array",
         description = "One entry per BACKGROUND project index, in order.",
@@ -164,7 +173,7 @@ internal static class ResumeOverrideSchema
                 included = new { type = "boolean" },
                 description_override = new { type = "string" },
                 highlights = PropItemOverrideArray(highlightsDescription),
-                extra_highlights = new { type = "array", items = new { type = "string" } },
+                extra_highlights = new { type = "array", items = new { type = "string" }, description = extraHighlightsDescription },
             },
             required = new[] { "project_index", "included", "highlights", "extra_highlights" },
         },
