@@ -21,6 +21,7 @@ public class EmailClassifier
     private const string HaikuModel = "claude-haiku-4-5";
 
     private readonly string _systemPrompt;
+    private readonly string _skillVersion;
     private readonly Tool _tool;
     private readonly ClaudeUsageLogger? _usageLogger;
 
@@ -30,6 +31,7 @@ public class EmailClassifier
         _usageLogger = usageLogger;
 
         string categoriesText = SkillLoader.Load("email_categories.md");
+        _skillVersion = SkillLoader.Version(categoriesText);
         _systemPrompt = $"""
             You are an email classifier for a software engineer's active job search.
             Classify each email based on its full content and context, not on individual keywords.
@@ -119,7 +121,7 @@ public class EmailClassifier
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.EmailClassifier, HaikuModel, response.Usage);
+            await _usageLogger.LogAsync(userId, ClaudeAgentName.EmailClassifier, HaikuModel, response.Usage, _skillVersion);
 
         foreach (var block in response.Content)
         {

@@ -16,6 +16,7 @@ public class ResumeSummaryAgent
     private const string SonnetModel = "claude-sonnet-5";
     private const int MaxTokens = 1000;
     private readonly string _skillText;
+    private readonly string _skillVersion;
     private readonly ClaudeUsageLogger? _usageLogger;
     private readonly Tool _summaryTool;
 
@@ -23,6 +24,7 @@ public class ResumeSummaryAgent
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("generate_resume_summary.md");
+        _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
 
         _summaryTool = new Tool
@@ -80,7 +82,7 @@ public class ResumeSummaryAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeSummaryAgent, SonnetModel, response.Usage);
+            await _usageLogger.LogAsync(userId, ClaudeAgentName.ResumeSummaryAgent, SonnetModel, response.Usage, _skillVersion);
 
         foreach (var block in response.Content)
             if (block.TryPickToolUse(out ToolUseBlock? toolUse))

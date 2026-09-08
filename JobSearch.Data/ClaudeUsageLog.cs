@@ -13,6 +13,10 @@ public class ClaudeUsageLog
     public long OutputTokens { get; set; }
     public long CacheReadInputTokens { get; set; }
     public long CacheCreationInputTokens { get; set; }
+    // First 16 hex chars of the SHA-256 of the skill file's content as loaded by SkillLoader at
+    // process startup (SkillLoader.Version) — which version of the skill-file text produced this
+    // call's prompt. Null for calls made by an agent with no skill file (CompanyExtractorAgent).
+    public string? SkillVersion { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

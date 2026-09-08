@@ -10,6 +10,7 @@ public class AnswerAgent
     private const string SonnetModel = "claude-sonnet-5";
 
     private readonly string _skillText;
+    private readonly string _skillVersion;
     private readonly Tool _tool;
     private readonly ClaudeUsageLogger? _usageLogger;
 
@@ -17,6 +18,7 @@ public class AnswerAgent
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("answer_application_question.md");
+        _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
 
         _tool = new Tool
@@ -70,7 +72,7 @@ public class AnswerAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.AnswerAgent, SonnetModel, response.Usage);
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.AnswerAgent, SonnetModel, response.Usage, _skillVersion);
 
         foreach (var block in response.Content)
         {
