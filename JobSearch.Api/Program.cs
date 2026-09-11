@@ -1603,7 +1603,8 @@ api.MapPost("/resume/generate-summary", async (HttpContext ctx, AppDbContext db,
 
 // GET /api/v1/sources — Tier 2 only. Source catalog, the user's current selection, and
 // whether Gmail is already connected (so the frontend can hide the Connect Gmail button
-// instead of inviting a pointless re-consent).
+// instead of inviting a pointless re-consent) plus whether that connection is known-broken
+// (so the frontend can show a reconnect button again instead of hiding it forever).
 api.MapGet("/sources", async (HttpContext ctx, AppDbContext db) =>
 {
     var (user, error) = await RequireTier2Async(db, CurrentUserId(ctx, UserIdClaimType));
@@ -1614,10 +1615,19 @@ api.MapGet("/sources", async (HttpContext ctx, AppDbContext db) =>
     // from the catalog (e.g. a stale "jooble" saved before it was removed) never round-trips
     // back to the frontend as a selected-but-unrenderable entry.
     var enabled = JobSource.Sanitize(user!.EnabledSources?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? []);
-    // Existence check only — no need to decrypt the token just to know it's there.
+    // Existence check only — no need to decrypt the token just to know it's there. Existence
+    // alone can't tell "connected and healthy" apart from "connected but the stored token has
+    // since been revoked/expired" — gmailConnectionBroken below is what lets the frontend tell
+    // those two apart instead of showing a stale green "connected" state forever.
     var gmailConnected = await db.UserSecrets.AnyAsync(s => s.UserId == user.Id && s.Key == UserSecretKey.GmailSettingsRefreshToken);
     var gmailReadonlyConnected = await db.UserSecrets.AnyAsync(s => s.UserId == user.Id && s.Key == UserSecretKey.GmailRefreshToken);
-    return Results.Ok(new { catalog, enabled, gmailConnected, gmailReadonlyConnected, gmailTrackingMode = user.GmailTrackingMode });
+    // Set by the background worker (JobSearchAgent/Program.cs) when it catches a
+    // TokenResponseException against the stored GmailRefreshToken, cleared by a successful
+    // full-access /gmail-oauth/callback re-grant — see GmailConnectionBrokenService. A single
+    // account-level flag rather than one per token, so it's the best signal either connect flow
+    // has available.
+    var gmailConnectionBroken = user.GmailConnectionBrokenAt is not null;
+    return Results.Ok(new { catalog, enabled, gmailConnected, gmailReadonlyConnected, gmailConnectionBroken, gmailTrackingMode = user.GmailTrackingMode });
 });
 
 // PUT /api/v1/sources — body: { sources: string[] }. Unknown keys are dropped silently

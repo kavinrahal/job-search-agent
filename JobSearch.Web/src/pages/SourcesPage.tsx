@@ -67,7 +67,14 @@ function GmailForwardingSetup() {
           {status?.status === "pending" ? "Waiting for you to confirm in Gmail" : status?.status === "not_added" ? "Not added yet" : ""}
         </span>
       </div>
-      {error && <p className="mt-2 text-caption text-ember">{error}</p>}
+      {error && (
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <p className="text-caption text-ember">{error}</p>
+          <Button href={gmailOAuthStartUrl()} size="sm">
+            Reconnect Gmail
+          </Button>
+        </div>
+      )}
     </Surface>
   );
 }
@@ -127,19 +134,41 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
         ))}
       </div>
 
+      {/* Filter mode: three states — never connected (connect), connected-but-broken
+          (reconnect, reusing the same button/URL), connected-and-healthy (nothing extra here;
+          GmailForwardingSetup above covers that confirmation). gmailConnectionBroken is a
+          single account-level flag (see types.ts), not split per token, so "broken" only ever
+          shows once the worker (or a live check) has actually caught a failure — a merely
+          never-connected filter token correctly falls into the first branch instead. */}
       {mode === "filter" && !sources.gmailConnected && (
         <div className="mt-3 flex items-center gap-3">
           <Button href={gmailOAuthStartUrl()}>Connect Gmail</Button>
           <span className="text-body text-muted">Needed to install per-company filters.</span>
         </div>
       )}
+      {mode === "filter" && sources.gmailConnected && sources.gmailConnectionBroken && (
+        <div className="mt-3 flex items-center gap-3">
+          <Button href={gmailOAuthStartUrl()}>Reconnect Gmail</Button>
+          <span className="text-body text-ember">Access expired or was revoked. Reconnect to resume filters.</span>
+        </div>
+      )}
+
+      {/* Full mode: same three states, plus the green confirmation only when actually healthy —
+          this is the case that used to stay stuck on "✓ Connected" forever once broken, since
+          gmailReadonlyConnected is only an existence check. */}
       {mode === "full" && !sources.gmailReadonlyConnected && (
         <div className="mt-3 flex items-center gap-3">
           <Button href={gmailOAuthStartUrl("full")}>Grant full inbox access</Button>
           <span className="text-body text-muted">Redirects to Google's consent screen.</span>
         </div>
       )}
-      {mode === "full" && sources.gmailReadonlyConnected && (
+      {mode === "full" && sources.gmailReadonlyConnected && sources.gmailConnectionBroken && (
+        <div className="mt-3 flex items-center gap-3">
+          <Button href={gmailOAuthStartUrl("full")}>Reconnect Gmail</Button>
+          <span className="text-body text-ember">Access expired or was revoked. Reconnect to resume tracking.</span>
+        </div>
+      )}
+      {mode === "full" && sources.gmailReadonlyConnected && !sources.gmailConnectionBroken && (
         <p className="mt-3 text-body text-pos">✓ Connected, tracking automatically.</p>
       )}
     </Surface>
