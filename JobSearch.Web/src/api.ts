@@ -146,6 +146,7 @@ export async function fetchMe(): Promise<{
   needsOnboarding: boolean;
   needsCriteria: boolean;
   needsSourceSelection: boolean;
+  gmailConnectionBroken: boolean;
   isOwner: boolean;
   firstName: string | null;
 }> {

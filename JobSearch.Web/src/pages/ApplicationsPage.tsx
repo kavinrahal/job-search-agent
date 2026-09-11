@@ -1,5 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useApplications, useCreateApplication, useUpdateApplicationStatus } from "../hooks/useDashboardData";
+import { useMeContext } from "../hooks/useMeContext";
+import { GmailConnectionBanner } from "../components/GmailConnectionBanner";
 import { APPLICATION_STATUSES, type Application } from "../types";
 import {
   Button,
@@ -199,6 +201,7 @@ function ApplicationRow({ app, reload }: { app: Application; reload: () => void 
 }
 
 export function ApplicationsPage() {
+  const { me } = useMeContext();
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [showLogForm, setShowLogForm] = useState(false);
 
@@ -223,6 +226,7 @@ export function ApplicationsPage() {
 
   return (
     <div className="space-y-3">
+      <GmailConnectionBanner broken={me.gmailConnectionBroken} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl
           label="Filter applications"
