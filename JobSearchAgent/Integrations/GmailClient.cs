@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using Google;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Auth.OAuth2.Responses;
@@ -81,7 +83,7 @@ public class GmailClient
             listReq.Q = q;
             if (pageToken != null) listReq.PageToken = pageToken;
 
-            var result = await listReq.ExecuteAsync();
+            var result = await ExecuteWithRateLimitRetryAsync(() => listReq.ExecuteAsync());
             if (result.Messages != null) messageRefs.AddRange(result.Messages);
             pageToken = result.NextPageToken;
         } while (pageToken != null);
@@ -91,12 +93,47 @@ public class GmailClient
         {
             var getReq = _service.Users.Messages.Get("me", msgRef.Id);
             getReq.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Full;
-            var msg = await getReq.ExecuteAsync();
+            var msg = await ExecuteWithRateLimitRetryAsync(() => getReq.ExecuteAsync());
             emails.Add(ParseMessage(msg));
         }
 
         return emails;
     }
+
+    // A backlog catch-up (e.g. after the sync worker was down for a while) fetches one
+    // messages.get call per message with no other throttling, which can burst past Gmail's
+    // per-minute-per-user quota well before the message list is exhausted — this crashed the
+    // whole sync unrecoverably (see the 2026-09 production incident: 16 days of backlog on one
+    // account tripped 'rateLimitExceeded' immediately, and since nothing had been persisted
+    // yet, every retry of the whole job hit the identical wall again). Retrying with backoff
+    // just on the specific rate-limit reason — not other 403s, like a genuinely revoked grant,
+    // which should still fail fast — lets a burst drain instead of aborting the sync outright.
+    internal static async Task<T> ExecuteWithRateLimitRetryAsync<T>(
+        Func<Task<T>> execute, int maxAttempts = 5, TimeSpan? initialDelay = null)
+    {
+        var delay = initialDelay ?? TimeSpan.FromSeconds(2);
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                return await execute();
+            }
+            catch (GoogleApiException ex) when (attempt < maxAttempts && IsRateLimited(ex))
+            {
+                await Task.Delay(delay);
+                delay += delay; // exponential backoff
+            }
+        }
+
+        // Unreachable: attempt == maxAttempts either returns above or lets the exception
+        // propagate uncaught (the when-clause excludes that attempt), so the loop never falls
+        // through — this only exists to satisfy the compiler's "not all paths return" check.
+        throw new UnreachableException();
+    }
+
+    internal static bool IsRateLimited(GoogleApiException ex) =>
+        ex.Error?.Errors?.Any(e => e.Reason is "rateLimitExceeded" or "userRateLimitExceeded") ?? false;
 
     private static RawEmail ParseMessage(Message msg)
     {
