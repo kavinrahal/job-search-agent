@@ -78,7 +78,20 @@ if (!await WorkerLockService.TryAcquireAsync(db, DateTime.UtcNow))
 // AppDbContext.CrossTenantAccess).
 var dataProtectionServices = new ServiceCollection();
 dataProtectionServices.AddScoped(_ => new AppDbContext(dbOptions) { CrossTenantAccess = true });
-dataProtectionServices.AddDataProtection().PersistKeysToDbContext<AppDbContext>().SetApplicationName("JobFindr");
+var dataProtectionBuilder = dataProtectionServices.AddDataProtection()
+    .PersistKeysToDbContext<AppDbContext>()
+    .SetApplicationName("JobFindr");
+
+// Wraps the key ring above with a certificate so a DB compromise alone can't decrypt it.
+// Staging-only rollout today: DP_CERT_PFX_B64 / DP_CERT_PFX_PASSWORD are set on Railway for
+// staging only, so both are absent locally and in production, and the key ring stays exactly
+// as it's always been — persisted, unprotected — until they're verified there and rolled out.
+// Must be wired identically in JobSearch.Api/Program.cs, since both processes share this one
+// key ring; see DataProtectionCertificateLoader for the load logic and its own tests.
+var dpCert = DataProtectionCertificateLoader.TryLoad(config["DP_CERT_PFX_B64"], config["DP_CERT_PFX_PASSWORD"]);
+if (dpCert is not null)
+    dataProtectionBuilder.ProtectKeysWithCertificate(dpCert);
+
 var userSecrets = new UserSecretService(dataProtectionServices.BuildServiceProvider().GetRequiredService<IDataProtectionProvider>());
 
 // Shared across every user processed this run — creates its own fresh AppDbContext per

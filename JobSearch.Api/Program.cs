@@ -59,7 +59,21 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 // UserSecrets encrypted by either one. Must match JobSearchAgent's ApplicationName exactly
 // (JobSearchAgent/Program.cs) or the two processes derive different keys from the same
 // stored key material and neither can read the other's ciphertext.
-builder.Services.AddDataProtection().PersistKeysToDbContext<AppDbContext>().SetApplicationName("JobFindr");
+var dataProtectionBuilder = builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<AppDbContext>()
+    .SetApplicationName("JobFindr");
+
+// Wraps the key ring above with a certificate so a DB compromise alone can't decrypt it.
+// Staging-only rollout today: DP_CERT_PFX_B64 / DP_CERT_PFX_PASSWORD are set on Railway for
+// staging only, so both are absent locally and in production, and the key ring stays exactly
+// as it's always been — persisted, unprotected — until they're verified there and rolled out.
+// Must be wired identically in JobSearchAgent/Program.cs, since both processes share this one
+// key ring; see DataProtectionCertificateLoader for the load logic and its own tests.
+var dpCert = DataProtectionCertificateLoader.TryLoad(
+    builder.Configuration["DP_CERT_PFX_B64"], builder.Configuration["DP_CERT_PFX_PASSWORD"]);
+if (dpCert is not null)
+    dataProtectionBuilder.ProtectKeysWithCertificate(dpCert);
+
 builder.Services.AddSingleton<UserSecretService>();
 
 // ---------------------------------------------------------------------------
