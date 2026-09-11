@@ -51,12 +51,30 @@ public class JobSourceTests
         bool AutomaticFlag(string key) => JobSource.Catalog.Single(c => c.Key == key).Automatic;
 
         Assert.True(AutomaticFlag(JobSource.Adzuna));
-        Assert.True(AutomaticFlag(JobSource.Jooble));
         Assert.True(AutomaticFlag(JobSource.Greenhouse));
         Assert.True(AutomaticFlag(JobSource.Lever));
         Assert.False(AutomaticFlag(JobSource.SeekAlert));
         Assert.False(AutomaticFlag(JobSource.LinkedinAlert));
         Assert.False(AutomaticFlag(JobSource.IndeedAlert));
         Assert.False(AutomaticFlag(JobSource.JoraAlert));
+    }
+
+    // TC06 — Jooble was removed from the catalog (never had a fetcher — selecting it was a
+    // permanent no-op). Regression guard against it quietly reappearing.
+    [Fact]
+    public void Catalog_DoesNotContainJooble()
+    {
+        Assert.DoesNotContain(JobSource.Catalog, c => c.Key == "jooble");
+    }
+
+    // TC07 — A user who saved "jooble" as one of their EnabledSources before it was removed
+    // isn't broken by the removal: Sanitize drops it silently rather than throwing or rejecting
+    // the whole selection, same as any other now-unrecognized key.
+    [Fact]
+    public void Sanitize_StaleJoobleSelection_DroppedWithoutThrowing()
+    {
+        var result = JobSource.Sanitize(["jooble", JobSource.Adzuna]);
+
+        Assert.Equal([JobSource.Adzuna], result);
     }
 }
