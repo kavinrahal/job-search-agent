@@ -25,26 +25,22 @@ const BASE = (import.meta.env.VITE_API_URL ?? "") + "/api/v1";
 
 export class InsufficientCreditsError extends Error {}
 
-// The readable half of the backend's CSRF double-submit-cookie pair (see JobSearch.Api's
-// AddAntiforgery config and GET /auth/me, which (re)issues this cookie on every bootstrap
-// call). Not HttpOnly, by design — the whole point is that this file can read it and mirror it
-// into a header, something a cross-site attacker page cannot do (Same-Origin Policy blocks
-// reading another origin's cookies), even though the browser will happily attach the actual
-// session cookie to a forged cross-site request.
-function readCsrfCookie(): string | null {
-  const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
+// The readable half of the backend's CSRF double-submit pair, cached in memory from GET
+// /auth/me's response body (re-issued on every bootstrap call — see that handler in
+// Program.cs). Not a cookie: frontend and API are separate top-level domains in prod
+// (worksanta.com vs. the Railway API host), so a cookie the API sets with no Domain attribute
+// is invisible to document.cookie on the frontend's own origin. The JSON body has no such
+// restriction — it only ever reaches this module via a same-flow fetch response.
+let csrfToken: string | null = null;
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
   const headers = new Headers(options.headers);
   // Mirrors the backend's exempt-path list (Program.cs): every mutating call needs the header
-  // except the pre-session auth endpoints, which have no CSRF cookie to read yet anyway (the
-  // header would just be absent — harmless, the server exempts those paths by name).
-  if (method !== "GET" && method !== "HEAD") {
-    const csrfToken = readCsrfCookie();
-    if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
+  // except the pre-session auth endpoints, which have no token to send yet anyway (the header
+  // would just be absent — harmless, the server exempts those paths by name).
+  if (method !== "GET" && method !== "HEAD" && csrfToken) {
+    headers.set("X-CSRF-Token", csrfToken);
   }
   const res = await fetch(`${BASE}${path}`, { ...options, headers, credentials: "include" });
   if (res.status === 402) throw new InsufficientCreditsError("Insufficient credits");
@@ -71,7 +67,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   // Some endpoints reply 200 with an empty body (Results.Ok() with no value) rather than 204
   // — checking status alone isn't enough, so parse whatever text actually came back instead.
   const text = await res.text();
-  return text ? JSON.parse(text) : (undefined as T);
+  const parsed = text ? JSON.parse(text) : (undefined as T);
+  // /auth/me is the sole source of the CSRF token (see the module-level comment above) — every
+  // page load re-caches it here before any mutating call has a chance to need it.
+  if (path === "/auth/me" && parsed && typeof (parsed as { csrfToken?: string }).csrfToken === "string") {
+    csrfToken = (parsed as { csrfToken: string }).csrfToken;
+  }
+  return parsed;
 }
 
 function json(body: object): RequestInit {

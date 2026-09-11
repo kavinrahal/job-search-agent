@@ -629,19 +629,17 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db, IAntiforg
     // bootstrap point that re-issues the CSRF token pair. GetAndStoreTokens below sets the
     // framework's own HttpOnly token-pair cookie as a side effect, configured up in
     // AddAntiforgery. Its returned RequestToken is the other half of that pair and has to reach
-    // the frontend somehow so it can be echoed back on the next mutating call — a second,
-    // explicitly non-HttpOnly cookie is how. JobSearch.Web's src/api.ts reads this exact cookie
-    // name and mirrors its value into the X-CSRF-Token header.
+    // the frontend somehow so it can be echoed back on the next mutating call. That used to be a
+    // second, explicitly non-HttpOnly cookie — but frontend and API are separate top-level
+    // domains in prod (worksanta.com vs. the Railway API host), and a cookie with no Domain
+    // attribute is scoped to the host that set it, so document.cookie on the frontend's own
+    // origin could never see it. Every mutating request landed here missing the header and
+    // 400'd. Returning it in this JSON body instead sidesteps cross-origin cookie visibility
+    // entirely — JobSearch.Web's src/api.ts caches it from this response and echoes it back as
+    // the X-CSRF-Token header on the next mutating call.
     var csrfTokens = antiforgery.GetAndStoreTokens(ctx);
-    ctx.Response.Cookies.Append("XSRF-TOKEN", csrfTokens.RequestToken!, new CookieOptions
-    {
-        HttpOnly = false,
-        Secure = !isDev,
-        SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.None,
-        Path = "/",
-    });
 
-    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsCriteria, needsSourceSelection, gmailConnectionBroken, isOwner, firstName });
+    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsCriteria, needsSourceSelection, gmailConnectionBroken, isOwner, firstName, csrfToken = csrfTokens.RequestToken });
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>
