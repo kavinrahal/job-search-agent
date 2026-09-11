@@ -614,6 +614,12 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db, IAntiforg
     bool needsCriteria = string.IsNullOrEmpty(profile?.JobCriteria)
         || (user.Tier == UserTier.Tier2 && TargetJobTitles.Parse(profile?.JobCriteria).Length == 0);
     bool needsSourceSelection = user.Tier == UserTier.Tier2 && user.EnabledSources is null;
+    // Surfaces User.GmailConnectionBrokenAt (see GmailConnectionBrokenService) as a plain flag,
+    // same nullable-DateTime-to-boolean convention as needsOnboarding/needsCriteria/
+    // needsSourceSelection above — cheap to include on every bootstrap load so the frontend can
+    // show an in-app banner even if the one-time reconnect email (JobSearchAgent/Program.cs) was
+    // missed. The exact timestamp isn't needed client-side, only the fact of it.
+    bool gmailConnectionBroken = user.GmailConnectionBrokenAt is not null;
     bool isOwner = string.Equals(user.Email, ownerEmail, StringComparison.OrdinalIgnoreCase);
     // First name only, for a casual dashboard greeting — null until Background exists (a brand
     // new user mid-onboarding), same source as BuildDownloadFilename's applicant name below.
@@ -635,7 +641,7 @@ app.MapGet("/api/v1/auth/me", async (HttpContext ctx, AppDbContext db, IAntiforg
         Path = "/",
     });
 
-    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsCriteria, needsSourceSelection, isOwner, firstName });
+    return Results.Ok(new { user.Id, user.Email, user.Tier, user.CreditBalance, needsOnboarding, needsCriteria, needsSourceSelection, gmailConnectionBroken, isOwner, firstName });
 }).RequireAuthorization();
 
 app.MapPost("/api/v1/auth/logout", async (HttpContext ctx) =>

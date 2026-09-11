@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useDiscoveries } from "../hooks/useDashboardData";
+import { useMeContext } from "../hooks/useMeContext";
 import type { DiscoveredPosting } from "../types";
 import { GenerationDrawer, type GenerationKind } from "../components/GenerationDrawer";
 import { MatchBreakdownModal } from "../components/MatchBreakdownModal";
+import { GmailConnectionBanner } from "../components/GmailConnectionBanner";
 import { computeMatchScore, matchSummaryLine, tierOf, TIER_LABEL, TIER_BADGE, type Tier } from "../lib/matchScore";
 import {
   Badge,
@@ -171,6 +173,7 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
 // Page
 // ---------------------------------------------------------------------------
 export function DiscoveriesPage() {
+  const { me } = useMeContext();
   const [activeTab, setActiveTab] = useState<Tier>("all");
   const [searchParams] = useSearchParams();
   // Set once on mount, from the ?posting= a Today "Worth a look" row links in with. Not
@@ -237,6 +240,7 @@ export function DiscoveriesPage() {
 
   return (
     <div className="space-y-3">
+      <GmailConnectionBanner broken={me.gmailConnectionBroken} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl
           label="Filter discoveries"
