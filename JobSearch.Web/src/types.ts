@@ -217,6 +217,12 @@ export interface SourcesResponse {
   enabled: string[];
   gmailConnected: boolean;
   gmailReadonlyConnected: boolean;
+  // True once the background worker has caught the stored (full-access) Gmail token being
+  // revoked/expired — see Program.cs's GET /sources. Existence (gmailConnected /
+  // gmailReadonlyConnected) alone can't distinguish "connected and healthy" from "connected but
+  // broken", so the frontend needs this to show a reconnect control instead of hiding it once a
+  // token has ever been connected.
+  gmailConnectionBroken: boolean;
   gmailTrackingMode: "full" | "filter" | "manual" | null;
 }
 
