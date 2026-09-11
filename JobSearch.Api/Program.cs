@@ -1748,9 +1748,15 @@ api.MapGet("/gmail-forwarding-status", async (HttpContext ctx, AppDbContext db, 
 // connection on top of it. 503 if the app's own Gmail OAuth client isn't configured yet
 // (see the GMAIL_CLIENT_ID comment above).
 //
-// ?mode=full requests gmail.readonly (application-tracking full-access mode) instead of the
-// default gmail.settings.basic (filter mode, and the alert-forwarding flow that predates
-// tracking-mode choice — absent/unrecognized mode keeps that original behavior unchanged).
+// ?mode=full requests gmail.readonly (application-tracking full-access mode) *together with*
+// gmail.settings.basic, instead of just the default gmail.settings.basic alone (filter mode,
+// and the alert-forwarding flow that predates tracking-mode choice — absent/unrecognized mode
+// keeps that original behavior unchanged). Full mode's grant covers both because a full-mode
+// user's single refresh token is meant to cover everything Gmail-related the app does for
+// them — split tokens meant a user could reconnect the forwarding-only flow (e.g. from the
+// error text on the Sources page's forwarding card) while their actual tracking token stayed
+// broken, since that flow never requested or touched the readonly scope. One combined grant,
+// one button that actually fixes whichever half broke.
 // The mode travels to /gmail-oauth/callback via a second short-lived cookie, the same
 // pattern as the "state" CSRF cookie below — Google's redirect back only carries "state"
 // and "code", not any arbitrary query param we'd want to pass through ourselves.
@@ -1764,7 +1770,9 @@ api.MapGet("/gmail-oauth/start", async (HttpContext ctx, AppDbContext db, string
         return Results.Json(new { error = "Gmail connection isn't set up yet." }, statusCode: StatusCodes.Status503ServiceUnavailable);
 
     bool full = mode == GmailTrackingMode.Full;
-    var scope = full ? GmailOAuthService.ReadonlyScope : GmailOAuthService.SettingsBasicScope;
+    var scope = full
+        ? $"{GmailOAuthService.ReadonlyScope} {GmailOAuthService.SettingsBasicScope}"
+        : GmailOAuthService.SettingsBasicScope;
 
     // CSRF protection: a random nonce round-tripped through a short-lived cookie, checked
     // against the "state" Google echoes back to /gmail-oauth/callback below.
@@ -1817,8 +1825,12 @@ api.MapGet("/gmail-oauth/callback", async (HttpContext ctx, AppDbContext db, Use
     try
     {
         var refreshToken = await gmailOAuth.ExchangeCodeForRefreshTokenAsync(code);
-        var key = full ? UserSecretKey.GmailRefreshToken : UserSecretKey.GmailSettingsRefreshToken;
-        await secrets.SetAsync(db, userId, key, refreshToken);
+        // Full mode requested both scopes together above (see /gmail-oauth/start), so this one
+        // refresh token is valid for both — store it under both keys so a full-mode reconnect
+        // always fixes whichever half (tracking, forwarding) actually broke, not just tracking.
+        await secrets.SetAsync(db, userId, UserSecretKey.GmailSettingsRefreshToken, refreshToken);
+        if (full)
+            await secrets.SetAsync(db, userId, UserSecretKey.GmailRefreshToken, refreshToken);
 
         // A successful full-access grant is the mode confirmation itself for that path —
         // filter mode is instead set explicitly via PUT /gmail-tracking-mode, since
