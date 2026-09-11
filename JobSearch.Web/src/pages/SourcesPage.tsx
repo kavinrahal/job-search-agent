@@ -23,6 +23,11 @@ function hardNavigateHome() {
 // let a third-party app add a NEW forwarding address for a personal account (a Google
 // restriction, not a gap here), so this is a status check + auto-install, not a one-click
 // setup — the one manual step happens in Gmail's own settings.
+//
+// The address itself stays visible in every status, including "verified" — a user who needs
+// to re-check it later (re-creating a deleted Gmail filter, confirming they set it up right)
+// has nowhere else on the page to find it once setup finished, so this can't collapse down to
+// just a confirmation message the way it used to.
 function GmailForwardingSetup() {
   const { data: status, loading, error, reload } = useGmailForwardingStatus();
   const [copied, setCopied] = useState(false);
@@ -34,23 +39,19 @@ function GmailForwardingSetup() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (status?.status === "verified") {
-    return (
-      <div className="rounded-core bg-pos-wash p-5">
-        <p className="text-body font-[650] text-pos">✓ Forwarding confirmed. The job-alert filter is installed automatically.</p>
-      </div>
-    );
-  }
-
   return (
     <Surface padding="lg">
-      <label className={LABEL}>Set up alert forwarding</label>
-      <p className="mb-3 text-body text-muted">
-        Gmail requires you to add this yourself. In Gmail, go to Settings → Forwarding and
-        POP/IMAP → Add a forwarding address, paste the address below, then confirm it via
-        the email Gmail sends you. Once confirmed, the app automatically installs a filter
-        that forwards matching job alerts here, no manual filter setup needed.
-      </p>
+      <label className={LABEL}>Alert forwarding address</label>
+      {status?.status === "verified" ? (
+        <p className="mb-3 text-body font-[650] text-pos">✓ Forwarding confirmed. The job-alert filter is installed automatically.</p>
+      ) : (
+        <p className="mb-3 text-body text-muted">
+          Gmail requires you to add this yourself. In Gmail, go to Settings → Forwarding and
+          POP/IMAP → Add a forwarding address, paste the address below, then confirm it via
+          the email Gmail sends you. Once confirmed, the app automatically installs a filter
+          that forwards matching job alerts here, no manual filter setup needed.
+        </p>
+      )}
       {status && (
         <div className="mb-3 flex items-center gap-2">
           <Well className="px-3 py-2 text-body text-ink-2">{status.address}</Well>
@@ -59,14 +60,16 @@ function GmailForwardingSetup() {
           </Button>
         </div>
       )}
-      <div className="flex items-center gap-3">
-        <Button onClick={reload} disabled={loading}>
-          {loading ? "Checking…" : "Check status"}
-        </Button>
-        <span className="text-body text-muted">
-          {status?.status === "pending" ? "Waiting for you to confirm in Gmail" : status?.status === "not_added" ? "Not added yet" : ""}
-        </span>
-      </div>
+      {status?.status !== "verified" && (
+        <div className="flex items-center gap-3">
+          <Button onClick={reload} disabled={loading}>
+            {loading ? "Checking…" : "Check status"}
+          </Button>
+          <span className="text-body text-muted">
+            {status?.status === "pending" ? "Waiting for you to confirm in Gmail" : status?.status === "not_added" ? "Not added yet" : ""}
+          </span>
+        </div>
+      )}
       {error && (
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <p className="text-caption text-ember">{error}</p>
@@ -220,6 +223,11 @@ export function SourcesPage({ hideHeader = false, onboarding = false }: { hideHe
   const alertKeys = new Set(alertBased.map(s => s.key));
   const needsGmail = selected.some(k => alertKeys.has(k));
   const gmailStatus = searchParams.get("gmail");
+  // The same forwarding address also backs "filter" application-tracking mode (see
+  // EnsureAcknowledgmentFilterAsync on the backend) — not only alert-based sources — so a
+  // user who picked filter tracking mode without enabling any alert source still needs a
+  // persistent place to find/copy their address, not just while an alert source is toggled on.
+  const showForwardingAddress = (needsGmail || data?.gmailTrackingMode === "filter") && data?.gmailConnected;
 
   return (
     <div className="space-y-6">
@@ -258,7 +266,7 @@ export function SourcesPage({ hideHeader = false, onboarding = false }: { hideHe
         </div>
       </Surface>
 
-      {needsGmail && data?.gmailConnected && <GmailForwardingSetup />}
+      {showForwardingAddress && <GmailForwardingSetup />}
 
       {needsGmail && !data?.gmailConnected && (
         <Surface padding="lg">
