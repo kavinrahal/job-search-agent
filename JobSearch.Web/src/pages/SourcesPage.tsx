@@ -28,7 +28,16 @@ function hardNavigateHome() {
 // to re-check it later (re-creating a deleted Gmail filter, confirming they set it up right)
 // has nowhere else on the page to find it once setup finished, so this can't collapse down to
 // just a confirmation message the way it used to.
-function GmailForwardingSetup() {
+//
+// trackingMode decides which scope the reconnect button below asks for. A full-mode user's
+// forwarding token and tracking token used to be reconnected independently — clicking the
+// error's "Reconnect Gmail" here only ever refreshed the settings-basic token, so a full-mode
+// user who landed here first (this card renders above GmailTrackingModeSection) could "fix"
+// forwarding while their actual broken tracking connection, and the banner reporting it,
+// stayed broken. /gmail-oauth/start now requests both scopes together under ?mode=full and
+// stores one token for both, so routing this button through the same mode for full-mode users
+// means either reconnect button on this page fixes everything, not just its own half.
+function GmailForwardingSetup({ trackingMode }: { trackingMode: "full" | "filter" | "manual" | null }) {
   const { data: status, loading, error, reload } = useGmailForwardingStatus();
   const [copied, setCopied] = useState(false);
 
@@ -73,7 +82,7 @@ function GmailForwardingSetup() {
       {error && (
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <p className="text-caption text-ember">{error}</p>
-          <Button href={gmailOAuthStartUrl()} size="sm">
+          <Button href={gmailOAuthStartUrl(trackingMode === "full" ? "full" : undefined)} size="sm">
             Reconnect Gmail
           </Button>
         </div>
@@ -266,7 +275,7 @@ export function SourcesPage({ hideHeader = false, onboarding = false }: { hideHe
         </div>
       </Surface>
 
-      {showForwardingAddress && <GmailForwardingSetup />}
+      {showForwardingAddress && data && <GmailForwardingSetup trackingMode={data.gmailTrackingMode} />}
 
       {needsGmail && !data?.gmailConnected && (
         <Surface padding="lg">
