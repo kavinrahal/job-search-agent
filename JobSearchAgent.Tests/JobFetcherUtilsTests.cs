@@ -118,6 +118,94 @@ public class JobFetcherUtilsTests
         Assert.False(JobFetcherUtils.IsAuLocation("San Francisco, CA"));
     }
 
+    // TC17 — "AU - HQ - NSW" → true. Real Greenhouse location string (Eucalyptus) that was
+    // silently dropped before AU/NSW coverage was added: contains none of the original
+    // melbourne/vic/victoria/australia/remote/hybrid tokens despite being a genuine AU posting.
+    [Fact]
+    public void IsAuLocation_AuDashNsw_ReturnsTrue()
+    {
+        Assert.True(JobFetcherUtils.IsAuLocation("AU - HQ - NSW"));
+    }
+
+    // TC18 — "Sydney, Australia" → true
+    [Fact]
+    public void IsAuLocation_SydneyAustralia_ReturnsTrue()
+    {
+        Assert.True(JobFetcherUtils.IsAuLocation("Sydney, Australia"));
+    }
+
+    // TC19 — "Remote (QLD)" → true
+    [Fact]
+    public void IsAuLocation_RemoteQld_ReturnsTrue()
+    {
+        Assert.True(JobFetcherUtils.IsAuLocation("Remote (QLD)"));
+    }
+
+    // TC20 — each newly-added state/territory abbreviation matches as a realistic location string.
+    [Theory]
+    [InlineData("Perth, WA")]
+    [InlineData("Adelaide, SA")]
+    [InlineData("Hobart, TAS")]
+    [InlineData("Canberra, ACT")]
+    [InlineData("Darwin, NT")]
+    [InlineData("Brisbane, QLD")]
+    public void IsAuLocation_StateAbbreviations_ReturnTrue(string location)
+    {
+        Assert.True(JobFetcherUtils.IsAuLocation(location));
+    }
+
+    // TC21 — each newly-added full state/territory name matches.
+    [Theory]
+    [InlineData("Sydney, New South Wales")]
+    [InlineData("Brisbane, Queensland")]
+    [InlineData("Perth, Western Australia")]
+    [InlineData("Adelaide, South Australia")]
+    [InlineData("Hobart, Tasmania")]
+    [InlineData("Canberra, Australian Capital Territory")]
+    [InlineData("Darwin, Northern Territory")]
+    public void IsAuLocation_FullStateNames_ReturnTrue(string location)
+    {
+        Assert.True(JobFetcherUtils.IsAuLocation(location));
+    }
+
+    // TC22 — each newly-added major city name matches on its own (no state suffix needed).
+    [Theory]
+    [InlineData("Sydney")]
+    [InlineData("Brisbane")]
+    [InlineData("Perth")]
+    [InlineData("Adelaide")]
+    [InlineData("Canberra")]
+    [InlineData("Darwin")]
+    [InlineData("Hobart")]
+    public void IsAuLocation_CityNames_ReturnTrue(string location)
+    {
+        Assert.True(JobFetcherUtils.IsAuLocation(location));
+    }
+
+    // TC23 — word-boundary fix: "vic" must NOT match as a bare substring inside an unrelated
+    // word. Silent failure (pre-fix): "Customer Service, London" would incorrectly be treated
+    // as AU-relevant because "service" contains "vic" as a raw substring.
+    [Fact]
+    public void IsAuLocation_VicSubstringInService_DoesNotMatch()
+    {
+        Assert.False(JobFetcherUtils.IsAuLocation("Customer Service, London"));
+    }
+
+    // TC24 — word-boundary fix, second example: "au" must not match inside an unrelated word.
+    [Fact]
+    public void IsAuLocation_AuSubstringInSaudi_DoesNotMatch()
+    {
+        Assert.False(JobFetcherUtils.IsAuLocation("Riyadh, Saudi Arabia"));
+    }
+
+    // TC25 — "VIC" as a genuine standalone token (all-caps, as commonly written) still matches
+    // after the word-boundary fix — confirms the fix didn't regress the real case it must catch.
+    [Fact]
+    public void IsAuLocation_VicStandaloneToken_StillMatches()
+    {
+        Assert.True(JobFetcherUtils.IsAuLocation("Geelong, VIC"));
+    }
+
     // =========================================================================
     // RankByCompany
     // =========================================================================
