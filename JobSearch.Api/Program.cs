@@ -2274,8 +2274,17 @@ static async Task<IResult> GenerateArtifactAsync(
     // (see architecture-conventions.md), so a refusal there already surfaces as a thrown
     // exception WithCreditAsync refunds on, not a 200 response that needs a content check.
     Func<string, bool>? isValidOutput = null,
-    string invalidOutputError = "Couldn't generate this document — try again, or add more detail to your profile.")
+    string invalidOutputError = "Couldn't generate this document — try again, or add more detail to your profile.",
+    string? clientRequestId = null)
 {
+    // Replay of a request whose response the caller never got (see AgentThread.ClientRequestId)
+    // — hand back what that key already produced instead of resolving the posting again,
+    // spending a second credit, and running a second Claude call. Checked before anything else,
+    // including posting resolution, since none of that matters if the key already resolved.
+    var existing = await GenerationIdempotencyService.FindExistingAsync(db, userId, clientRequestId);
+    if (existing is not null)
+        return Results.Ok(ThreadStateResponse.From(existing));
+
     var (resolvedText, evalJson, company, error) = await ResolvePostingTextAsync(
         db, fetcher, crossCheck, userId, discoveryId, postingText, postingUrl, postingTitle, postingCompany);
     if (resolvedText is null)
@@ -2322,6 +2331,7 @@ static async Task<IResult> GenerateArtifactAsync(
             AccuracyWarningsJson = JsonSerializer.Serialize(warnings),
             Company = company,
             Status = AgentThreadStatus.Complete,
+            ClientRequestId = clientRequestId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
@@ -2364,7 +2374,8 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
         body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingTitle, body.PostingCompany,
         AgentThreadType.Cv,
         (text, evalJson) => cvAgent.GenerateAsync(profile, resume, text, evalJson),
-        CvTailorAgent.BuildInitialUserContent);
+        CvTailorAgent.BuildInitialUserContent,
+        clientRequestId: body.ClientRequestId);
 }).RequireRateLimiting("generation");
 
 // POST /api/v1/letter — body: { discoveryId?: int, postingText?: string, postingUrl?: string, postingTitle?: string, postingCompany?: string }
@@ -2387,7 +2398,8 @@ api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContex
         (text, evalJson) => letterAgent.GenerateAsync(profile, text, evalJson),
         CoverLetterAgent.BuildInitialUserContent,
         CoverLetterOutputValidator.LooksLikeCoverLetter,
-        "Couldn't generate a cover letter — your background details may be too sparse for this role. Try adding more to your profile.");
+        "Couldn't generate a cover letter — your background details may be too sparse for this role. Try adding more to your profile.",
+        clientRequestId: body.ClientRequestId);
 }).RequireRateLimiting("generation");
 
 // POST /api/v1/answer — body: { question: string, discoveryId?: int, postingUrl?: string, postingTitle?: string, postingCompany?: string }
@@ -2617,6 +2629,20 @@ api.MapGet("/threads/{id:int}", async (int id, HttpContext ctx, AppDbContext db)
     // Explicit ownership check, defense-in-depth (see /applications/{id}/events above).
     var thread = await db.AgentThreads.FindAsync(id);
     if (thread is null || thread.UserId != userId) return Results.NotFound();
+
+    return Results.Ok(ThreadStateResponse.From(thread));
+});
+
+// GET /api/v1/threads/by-request/{clientRequestId} — same restore-after-refresh purpose as
+// GET /threads/{id} above, but keyed by the frontend's own idempotency key instead of the
+// (not yet known, if the response never arrived) numeric id — see AgentThread.ClientRequestId
+// and GenerateArtifactAsync's idempotency check. The route literal "by-request" never collides
+// with {id:int} above since it isn't an int.
+api.MapGet("/threads/by-request/{clientRequestId}", async (string clientRequestId, HttpContext ctx, AppDbContext db) =>
+{
+    int userId = CurrentUserId(ctx, UserIdClaimType);
+    var thread = await GenerationIdempotencyService.FindExistingAsync(db, userId, clientRequestId);
+    if (thread is null) return Results.NotFound();
 
     return Results.Ok(ThreadStateResponse.From(thread));
 });

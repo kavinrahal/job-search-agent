@@ -324,12 +324,18 @@ export async function searchPostingCandidates(title: string, company?: string): 
 // discoveryId is the Discover tab's one-tap path: the backend resolves the posting text from
 // the discovery record itself (cached at discovery time — see DiscoveredPosting.PostingText),
 // so nothing has to be re-fetched from a job board that may block us by then.
+//
+// clientRequestId: an idempotency key the caller mints once per generation attempt (see
+// lib/lastGeneration's rememberPending) and resubmits verbatim if it has to replay the request —
+// GenerateArtifactAsync in Program.cs returns the already-completed thread for a repeated key
+// instead of spending a second credit and generating a second time.
 export interface GenerateInput {
   discoveryId?: number;
   postingUrl?: string;
   postingText?: string;
   postingTitle?: string;
   postingCompany?: string;
+  clientRequestId?: string;
 }
 
 export async function generateCv(input: GenerateInput): Promise<GenerationResult> {
@@ -353,6 +359,15 @@ export async function editThread(threadId: number, message: string): Promise<Gen
 // gone or isn't the caller's.
 export async function fetchThread(threadId: number): Promise<GenerationResult> {
   return request(`/threads/${threadId}`);
+}
+
+// Same as fetchThread, but looked up by the client-generated idempotency key instead of the
+// (possibly never-received) numeric threadId — for restoring a generation after a refresh that
+// happened before the original POST /cv or /letter response ever arrived. 404s if nothing has
+// been saved under this key yet, which is expected while the original request is still in
+// flight — see useGenerationRecovery, which polls this rather than treating one 404 as final.
+export async function fetchThreadByRequest(clientRequestId: string): Promise<GenerationResult> {
+  return request(`/threads/by-request/${encodeURIComponent(clientRequestId)}`);
 }
 
 // Works for both CV and cover-letter threads — the endpoint renders based on the thread's

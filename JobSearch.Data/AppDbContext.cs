@@ -243,6 +243,10 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<AgentThread>(e =>
         {
             e.HasIndex(t => t.UserId);
+            // Postgres unique indexes treat every NULL as distinct, so ordinary threads (no
+            // ClientRequestId) never collide with each other here — this only actually
+            // constrains the idempotent /cv and /letter path (see AgentThread.ClientRequestId).
+            e.HasIndex(t => new { t.UserId, t.ClientRequestId }).IsUnique();
             e.HasQueryFilter(t => t.UserId == CurrentUserId);
         });
 

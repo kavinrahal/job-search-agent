@@ -23,6 +23,17 @@ public class AgentThread
     // downloaded CV/cover-letter files ("{Applicant} - {Company} - Resume.pdf"). Null when
     // not identifiable, or for Answer threads (no download exists for those).
     public string? Company { get; set; }
+    // Client-generated idempotency key for the /cv and /letter generation POSTs, set only for
+    // threads created that way (null for /answer and for anything created before this existed).
+    // Lets a request that never got its response back — most commonly a page refresh while
+    // generation was still in flight — be replayed safely: the frontend resubmits the same key
+    // instead of a fresh one, and GenerateArtifactAsync in Program.cs returns the already-
+    // -completed thread instead of spending a second credit and running a second Claude call.
+    // Unique per (UserId, ClientRequestId) — see AppDbContext.OnModelCreating — so two concurrent
+    // requests that somehow race on the same key can't both save a thread for it; Postgres
+    // treats multiple NULLs here as non-conflicting, so ordinary (non-idempotent) threads are
+    // unaffected.
+    public string? ClientRequestId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
