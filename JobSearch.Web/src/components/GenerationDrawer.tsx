@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
-import { useGenerateCv, useGenerateLetter } from "../hooks/useGeneration";
+import { useState } from "react";
+import { useGenerateCv, useGenerateLetter, useGenerationRecovery } from "../hooks/useGeneration";
 import { useMeContext } from "../hooks/useMeContext";
-import { fetchThread } from "../api";
-import { rememberThread, recallThread, forgetThread } from "../lib/lastGeneration";
+import { rememberPending, resolveThread, forgetThread } from "../lib/lastGeneration";
 import type { GenerationResult } from "../types";
 import { GeneratingIndicator } from "./GeneratingIndicator";
 import { CvResult, LetterResult } from "./GenerationResult";
@@ -37,24 +36,28 @@ export function GenerationDrawer({ discoveryId, kind, title, company, onClose }:
 
   // If this posting+kind was generated within the last 24h, restore that result on open and skip
   // the "uses 1 credit" confirm step — the user already spent the credit. RevisionBox (inside the
-  // result) is how they change it; there's no separate regenerate control. A dropped/expired
-  // thread just clears its key and falls back to the normal confirm flow. Open == mount here: the
-  // drawer is only rendered once a card's Generate is clicked.
-  useEffect(() => {
-    const threadId = recallThread(storageKey);
-    if (threadId === null) return;
-    fetchThread(threadId)
-      .then(r => { setResult(r); setConfirmed(true); })
-      .catch(() => forgetThread(storageKey));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore runs once on open, storageKey is fixed for this drawer
-  }, []);
+  // result) is how they change it; there's no separate regenerate control. A dropped/expired/
+  // never-completed thread just clears its key and falls back to the normal confirm flow.
+  // Also covers a refresh that closed the drawer before the original response arrived — see
+  // useGenerationRecovery's own comment — by polling until the still-running generation finishes
+  // rather than giving up on the first miss.
+  const recovering = useGenerationRecovery(storageKey, r => { setResult(r); setConfirmed(true); });
 
+  // rememberPending happens before execute(), not after — see GeneratePage's handleGenerateCv
+  // for why (the same fix, same reasoning, for this flow's confirm-then-generate step instead).
   async function handleConfirm() {
     setConfirmed(true);
-    const r = await action.execute({ discoveryId });
-    setResult(r);
-    rememberThread(storageKey, r.threadId);
-    reloadMe();
+    const clientRequestId = crypto.randomUUID();
+    rememberPending(storageKey, clientRequestId);
+    try {
+      const r = await action.execute({ discoveryId, clientRequestId });
+      setResult(r);
+      resolveThread(storageKey, clientRequestId, r.threadId);
+      reloadMe();
+    } catch (e) {
+      forgetThread(storageKey);
+      throw e;
+    }
   }
 
   return (
@@ -63,20 +66,20 @@ export function GenerationDrawer({ discoveryId, kind, title, company, onClose }:
       onClose={onClose}
       title={title}
       description={company}
-      footer={!confirmed && (
+      footer={!confirmed && !recovering && (
         <div className="flex gap-2">
           <Button onClick={handleConfirm}>Generate {label}</Button>
           <Button variant="subtle" onClick={onClose}>Cancel</Button>
         </div>
       )}
     >
-      {!confirmed && (
+      {!confirmed && !recovering && (
         <p className="m-0 text-body text-muted">
           Generate a tailored {label} for this role? This uses 1 credit.
         </p>
       )}
 
-      {action.loading && <GeneratingIndicator kind={kind} />}
+      {(action.loading || recovering) && <GeneratingIndicator kind={kind} />}
 
       {action.error && <Callout variant="danger" title={action.error} />}
 

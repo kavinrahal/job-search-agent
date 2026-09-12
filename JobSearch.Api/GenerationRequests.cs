@@ -8,7 +8,10 @@ namespace JobSearch.Api;
 // since a bare URL alone carries no title/company to search with. Kept as separate fields
 // rather than one combined hint because Jora/Adzuna's keyword search ranks worse when a
 // company name is blended into the search query — see SearchCandidatesAsync in Program.cs.
-public record GenerateRequest(int? DiscoveryId, string? PostingText, string? PostingUrl, string? PostingTitle, string? PostingCompany);
+// ClientRequestId: optional idempotency key the frontend generates once per generation attempt
+// and resubmits verbatim if it has to replay the request (e.g. recovering from a page refresh
+// that happened before the original response arrived) — see AgentThread.ClientRequestId.
+public record GenerateRequest(int? DiscoveryId, string? PostingText, string? PostingUrl, string? PostingTitle, string? PostingCompany, string? ClientRequestId);
 public record AnswerRequest(string Question, int? DiscoveryId, string? PostingUrl, string? PostingTitle, string? PostingCompany);
 public record EditRequest(string Message);
 

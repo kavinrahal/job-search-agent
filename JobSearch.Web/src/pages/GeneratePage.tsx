@@ -1,8 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { useGenerateCv, useGenerateLetter, useSearchPostingCandidates } from "../hooks/useGeneration";
+import { useState, type ReactNode } from "react";
+import { useGenerateCv, useGenerateLetter, useSearchPostingCandidates, useGenerationRecovery } from "../hooks/useGeneration";
 import { useMeContext } from "../hooks/useMeContext";
-import { fetchThread } from "../api";
-import { rememberThread, recallThread, forgetThread } from "../lib/lastGeneration";
+import { rememberPending, resolveThread, forgetThread } from "../lib/lastGeneration";
 import type { GenerationResult, PostingCandidate } from "../types";
 import { GeneratingIndicator } from "../components/GeneratingIndicator";
 import { CvResult, LetterResult } from "../components/GenerationResult";
@@ -57,15 +56,12 @@ export function GeneratePage() {
   const { reloadMe } = useMeContext();
 
   // Restore the most recent CV/letter (if generated within the last 24h) after an accidental
-  // refresh, so the user lands back on their result rather than an empty form. A dropped/expired
-  // thread just clears its key and leaves the form empty. Mount-only — this reacts to a fresh page
-  // load, not to any changing state.
-  useEffect(() => {
-    const cvId = recallThread(CV_THREAD_KEY);
-    if (cvId !== null) fetchThread(cvId).then(setCvResult).catch(() => forgetThread(CV_THREAD_KEY));
-    const letterId = recallThread(LETTER_THREAD_KEY);
-    if (letterId !== null) fetchThread(letterId).then(setLetterResult).catch(() => forgetThread(LETTER_THREAD_KEY));
-  }, []);
+  // refresh, so the user lands back on their result rather than an empty form — including a
+  // refresh that happened before the original response ever arrived (see useGenerationRecovery's
+  // own comment). A dropped/expired/never-completed thread just clears its key and leaves the
+  // form empty.
+  const cvRecovering = useGenerationRecovery(CV_THREAD_KEY, setCvResult);
+  const letterRecovering = useGenerationRecovery(LETTER_THREAD_KEY, setLetterResult);
 
   const postingInput = mode === "url"
     ? { postingUrl, postingTitle: postingTitle || undefined, postingCompany: postingCompany || undefined }
@@ -91,18 +87,36 @@ export function GeneratePage() {
     setCandidates(null);
   }
 
+  // rememberPending happens before execute(), not after — that's what lets a refresh mid-flight
+  // still be recoverable (see lib/lastGeneration and useGenerationRecovery). A failed attempt
+  // forgets the key immediately rather than leaving a pending marker for a request that's now
+  // been refunded and definitely won't produce anything to recover.
   async function handleGenerateCv() {
-    const result = await generateCv.execute(postingInput);
-    setCvResult(result);
-    rememberThread(CV_THREAD_KEY, result.threadId);
-    reloadMe();
+    const clientRequestId = crypto.randomUUID();
+    rememberPending(CV_THREAD_KEY, clientRequestId);
+    try {
+      const result = await generateCv.execute({ ...postingInput, clientRequestId });
+      setCvResult(result);
+      resolveThread(CV_THREAD_KEY, clientRequestId, result.threadId);
+      reloadMe();
+    } catch (e) {
+      forgetThread(CV_THREAD_KEY);
+      throw e;
+    }
   }
 
   async function handleGenerateLetter() {
-    const result = await generateLetter.execute(postingInput);
-    setLetterResult(result);
-    rememberThread(LETTER_THREAD_KEY, result.threadId);
-    reloadMe();
+    const clientRequestId = crypto.randomUUID();
+    rememberPending(LETTER_THREAD_KEY, clientRequestId);
+    try {
+      const result = await generateLetter.execute({ ...postingInput, clientRequestId });
+      setLetterResult(result);
+      resolveThread(LETTER_THREAD_KEY, clientRequestId, result.threadId);
+      reloadMe();
+    } catch (e) {
+      forgetThread(LETTER_THREAD_KEY);
+      throw e;
+    }
   }
 
   return (
@@ -208,10 +222,10 @@ export function GeneratePage() {
             )}
 
             <div className="mt-4 flex flex-wrap gap-3">
-              <Button cap onClick={handleGenerateCv} disabled={!canSubmitPosting || generateCv.loading} loading={generateCv.loading}>
+              <Button cap onClick={handleGenerateCv} disabled={!canSubmitPosting || generateCv.loading || cvRecovering} loading={generateCv.loading}>
                 {generateCv.loading ? "Generating…" : "Generate CV"}
               </Button>
-              <Button variant="ghost" onClick={handleGenerateLetter} disabled={!canSubmitPosting || generateLetter.loading} loading={generateLetter.loading}>
+              <Button variant="ghost" onClick={handleGenerateLetter} disabled={!canSubmitPosting || generateLetter.loading || letterRecovering} loading={generateLetter.loading}>
                 {generateLetter.loading ? "Generating…" : "Cover letter"}
               </Button>
             </div>
@@ -233,7 +247,7 @@ export function GeneratePage() {
             posting, then the real generated document, kept in sync through regenerates and
             revisions. */}
         <div className="lg:sticky lg:top-4">
-          {generateCv.loading ? (
+          {generateCv.loading || cvRecovering ? (
             <GeneratingIndicator kind="cv" />
           ) : cvResult ? (
             <Surface elevation="raised" className="animate-fade-in-up">
@@ -250,10 +264,10 @@ export function GeneratePage() {
         </div>
       </div>
 
-      {generateLetter.loading && <GeneratingIndicator kind="letter" />}
+      {(generateLetter.loading || letterRecovering) && <GeneratingIndicator kind="letter" />}
       {/* Discarded the moment a regenerate starts, same reasoning as the CV panel above — no
           stale, fully-interactive letter sitting next to the "generating" indicator. */}
-      {letterResult && !generateLetter.loading && (
+      {letterResult && !generateLetter.loading && !letterRecovering && (
         <Surface elevation="raised" className="animate-fade-in-up">
           <p className="m-0 mb-2 text-body font-[650] text-ink-2">Cover letter</p>
           <LetterResult result={letterResult} onRevised={setLetterResult} />
