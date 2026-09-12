@@ -905,6 +905,23 @@ api.MapGet("/discoveries", async (HttpContext ctx, AppDbContext db, string? reco
         ? query.Where(d => d.Recommendation == recommendation)
         : query.Where(d => d.Recommendation != null && d.Recommendation != "error" && d.Recommendation != "discard");
 
+    // Freshness: exclude anything evaluated before the user's CURRENT JobCriteria was saved —
+    // an evaluation run against an earlier/incomplete version of their criteria is stale and
+    // would surface as a confusing "unrelated to my skills" match (see UserProfile.
+    // JobCriteriaUpdatedAt's own comment). The row itself is never deleted, just not served.
+    // jobCriteriaUpdatedAt is null for any account that hasn't re-saved JobCriteria since this
+    // column was introduced — treated as "no known change boundary", so nothing is filtered as
+    // stale for them. Written as a plain inline comparison rather than a shared helper method
+    // call inside Where() — EF Core can't translate an arbitrary static C# method into SQL for
+    // the Npgsql provider, so the actual filtering logic has to live here even though it's a
+    // one-line rule; keep it in sync if this rule ever changes.
+    var jobCriteriaUpdatedAt = await db.UserProfiles
+        .Where(p => p.UserId == userId)
+        .Select(p => p.JobCriteriaUpdatedAt)
+        .FirstOrDefaultAsync();
+    query = query.Where(d => d.EvaluatedAt != null
+        && (jobCriteriaUpdatedAt == null || d.EvaluatedAt >= jobCriteriaUpdatedAt));
+
     int total = await query.CountAsync();
 
     var raw = await query
@@ -1520,7 +1537,15 @@ api.MapPut("/profile", async (HttpContext ctx, ProfileUpdateRequest body, AppDbC
 
     if (body.Background is not null) profile.Background = body.Background;
     if (body.CvBase is not null) profile.CvBase = body.CvBase;
-    if (body.JobCriteria is not null) profile.JobCriteria = body.JobCriteria;
+    // JobCriteriaUpdatedAt only moves when JobCriteria itself changes — not on every profile
+    // save (UpdatedAt above still does that) — so GET /discoveries can tell whether a posting
+    // was evaluated against the user's CURRENT criteria or a since-superseded one. See its
+    // declaration on UserProfile for the full reasoning.
+    if (body.JobCriteria is not null)
+    {
+        profile.JobCriteria = body.JobCriteria;
+        profile.JobCriteriaUpdatedAt = DateTime.UtcNow;
+    }
     profile.UpdatedAt = DateTime.UtcNow;
     await db.SaveChangesAsync();
 

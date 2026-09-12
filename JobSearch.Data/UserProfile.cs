@@ -14,6 +14,16 @@ public class UserProfile
     public string JobCriteria { get; set; } = "";
     public DateTime UpdatedAt { get; set; }
 
+    // Set only when JobCriteria itself changes (see PUT /api/v1/profile — bumped only when
+    // body.JobCriteria is not null), unlike UpdatedAt above which bumps on any profile save
+    // including a Background/CvBase-only edit. GET /discoveries uses this to decide whether a
+    // DiscoveredPosting's evaluation is stale: it was run against whatever JobCriteria existed
+    // at evaluation time, and a criteria change since then makes that evaluation meaningless.
+    // Null for any account that hasn't re-saved JobCriteria since this column was introduced —
+    // treated as "no known change boundary" (nothing filtered as stale), not backfilled, so
+    // existing users with stable criteria keep seeing their existing matches uninterrupted.
+    public DateTime? JobCriteriaUpdatedAt { get; set; }
+
     // The original resume PDF, when the user's most recent intake was a file upload rather
     // than pasted text — CvBase (parsed markdown) stays the source of truth for CV tailoring
     // regardless; this is purely so the dashboard can show the real PDF instead of the

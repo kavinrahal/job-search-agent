@@ -10,6 +10,7 @@ import { GenerationDrawer, type GenerationKind } from "../components/GenerationD
 import { MatchBreakdownModal } from "../components/MatchBreakdownModal";
 import { GmailConnectionBanner } from "../components/GmailConnectionBanner";
 import { DiscoverCriteriaGate } from "../components/DiscoverCriteriaGate";
+import { DiscoverPendingState } from "../components/DiscoverPendingState";
 import { computeMatchScore, matchSummaryLine, tierOf, TIER_LABEL, TIER_BADGE, type Tier } from "../lib/matchScore";
 import {
   Badge,
@@ -278,17 +279,20 @@ export function DiscoveriesPage() {
             <Surface elevation="raised">
               <SkeletonList rows={4} label="Loading discoveries" />
             </Surface>
+          ) : postings.length === 0 ? (
+            // Criteria is complete (the gate above already handles incomplete criteria) but
+            // nothing has been evaluated against it yet — a different, non-error situation
+            // from a specific tier tab being empty below. See DiscoverPendingState's own
+            // comment for why this needs its own copy rather than reusing the completeness
+            // gate's wording.
+            <DiscoverPendingState />
           ) : visible.length === 0 ? (
             <Surface elevation="raised">
               <EmptyState
                 icon={<SearchIcon />}
-                title="Nothing here yet"
-                body={
-                  activeTab === "all"
-                    ? "No postings found yet. The agent will notify you when it finds one."
-                    // eslint-disable-next-line security/detect-object-injection -- activeTab is the Tier union, not arbitrary input
-                    : `No ${TIER_LABEL[activeTab]} matches right now.`
-                }
+                title="Nothing here"
+                // eslint-disable-next-line security/detect-object-injection -- activeTab is the Tier union, not arbitrary input
+                body={`No ${TIER_LABEL[activeTab]} matches right now.`}
               />
             </Surface>
           ) : (

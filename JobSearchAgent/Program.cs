@@ -179,17 +179,18 @@ if (!testMode)
     // a live incident where an incomplete-profile user got emailed about a role from a
     // completely unrelated profession.
     //
-    // Beyond that, target_job_titles specifically must be filled in too — this is what
-    // Adzuna's proactive search actually runs against (see RunDiscoveryForUserAsync /
-    // TargetJobTitles.Parse), and it's a deliberately explicit, user-typed field rather than
-    // something inferred from the rest of criteria: an AI-derived guess at "what should we
-    // search for" was the earlier version of this, and it still risked searching for the
-    // wrong thing when criteria was thin. No titles means no legitimate search to run, so
-    // discovery is skipped for that user entirely rather than guessing.
+    // Full completeness (JobCriteriaCompleteness.IsComplete — target job titles, experience,
+    // skills, employment type, location, work arrangement, salary) is required, not just "some
+    // JobCriteria text with a target job title" — this used to be a much looser gate
+    // (target_job_titles alone), which let discovery run and evaluate real postings against a
+    // user's still-mostly-empty criteria the moment they typed a job title, producing
+    // evaluations that correctly looked "unrelated to skills/industry" since most of their real
+    // criteria didn't exist yet when evaluated. See JobCriteriaCompleteness's own comment for
+    // why this is a presence-only mirror of criteriaCompleteness.ts, not a full port.
     //
     // JobCriteria has to be fetched here (not just checked for existence via Any()) since
-    // TargetJobTitles.Parse needs the actual text — filtered in-memory after, since EF Core
-    // can't translate that parse into SQL.
+    // JobCriteriaCompleteness.IsComplete needs the actual text — filtered in-memory after,
+    // since EF Core can't translate that check into SQL.
     // DeactivatedAt == null matters here specifically: unlike activeUsers/filterModeUsers below,
     // nothing about discovery eligibility depends on a Gmail secret (cancellation always revokes
     // and deletes those, which incidentally drops a cancelled user out of those two queries on
@@ -207,7 +208,7 @@ if (!testMode)
         .ToListAsync();
 
     var discoveryUsers = discoveryCandidates
-        .Where(c => !string.IsNullOrEmpty(c.JobCriteria) && TargetJobTitles.Parse(c.JobCriteria).Length > 0)
+        .Where(c => JobCriteriaCompleteness.IsComplete(c.JobCriteria))
         .Select(c => c.User)
         .ToList();
 
