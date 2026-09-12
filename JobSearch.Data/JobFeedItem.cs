@@ -34,10 +34,17 @@ public static class JobFetcherUtils
         return AuLocationTokens.Any(lower.Contains);
     }
 
+    // Decode entities *before* stripping tags, not after. Some ATS boards (confirmed live on
+    // Greenhouse — see GreenhouseFetcher) return the description double-HTML-encoded: the JSON
+    // string value is itself entity-escaped markup (e.g. literally "&lt;div&gt;...&lt;/div&gt;"),
+    // not raw "<div>...</div>". Stripping tags first finds nothing to strip (there's no literal
+    // "<" yet), then decoding afterwards turns those entities into real tags for the first time —
+    // too late, so they leak into the evaluator's input as visible tag noise. Decoding first
+    // exposes any real tags (single- or double-encoded) so the strip pass actually removes them.
     public static string StripHtml(string html)
     {
+        html = WebUtility.HtmlDecode(html);
         var text = Regex.Replace(html, @"<[^>]+>", " ");
-        text = WebUtility.HtmlDecode(text);
         return Regex.Replace(text, @"\s{2,}", " ").Trim();
     }
 

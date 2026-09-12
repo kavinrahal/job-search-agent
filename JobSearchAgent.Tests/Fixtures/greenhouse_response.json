@@ -20,6 +20,13 @@
       "updated_at": "2026-06-03T00:00:00Z",
       "location": null,
       "content": "<p>Fully remote, location not specified.</p>"
+    },
+    {
+      "title": "Data Scientist",
+      "absolute_url": "https://boards.greenhouse.io/canva/jobs/1004",
+      "updated_at": "2026-06-04T00:00:00Z",
+      "location": { "name": "Melbourne, VIC" },
+      "content": "&lt;div class=&quot;role&quot;&gt;&lt;p&gt;Sponsors 482 visas.&lt;/p&gt;&lt;/div&gt;"
     }
   ]
 }

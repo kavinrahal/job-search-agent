@@ -14,6 +14,8 @@ function posting(overrides: Partial<DiscoveredPosting> = {}): DiscoveredPosting 
     disqualifierHit: null,
     discoveredAt: "2026-08-29T00:00:00Z",
     evaluatedAt: "2026-08-29T00:00:00Z",
+    sponsorshipVerdict: null,
+    sponsorshipEvidence: null,
     locationMatch: null,
     locationDetail: null,
     experienceMatch: null,
@@ -104,6 +106,38 @@ describe("computeMatchScore", () => {
         }),
       ),
     ).toBe(25);
+  });
+});
+
+describe("buildMatchRows sponsorship", () => {
+  // Directly covers the reported bug: the evaluator extracts sponsorship_verdict/
+  // sponsorship_evidence correctly (see PostingEvaluatorParsingTests.cs) and the API now
+  // includes them, but this page never rendered them at all until this row was added.
+  it("renders a Sponsorship row with the evaluator's quoted evidence when present", () => {
+    const rows = buildMatchRows(posting({ sponsorshipVerdict: "pass", sponsorshipEvidence: "we sponsor 482 visas" }));
+    const row = rows.find(r => r.label === "Sponsorship");
+    expect(row?.tier).toBe("pass");
+    expect(row?.detail).toBe("we sponsor 482 visas");
+  });
+
+  it("falls back to a neutral note when the verdict is pass but no evidence was quoted", () => {
+    const rows = buildMatchRows(posting({ sponsorshipVerdict: "pass", sponsorshipEvidence: null }));
+    expect(rows.find(r => r.label === "Sponsorship")?.detail).toBe("No exclusion language found");
+  });
+
+  it("omits the row entirely when the posting has no sponsorship verdict at all", () => {
+    const rows = buildMatchRows(posting());
+    expect(rows.find(r => r.label === "Sponsorship")).toBeUndefined();
+  });
+
+  it("never contributes to the match score — informational only", () => {
+    // Same experience-only baseline as the "counts as low weight" test above (score 100),
+    // adding a sponsorship verdict must not move it.
+    const withoutSponsorship = computeMatchScore(posting({ experienceMatch: "ideal" }));
+    const withSponsorship = computeMatchScore(
+      posting({ experienceMatch: "ideal", sponsorshipVerdict: "pass", sponsorshipEvidence: "we sponsor 482 visas" }),
+    );
+    expect(withSponsorship).toBe(withoutSponsorship);
   });
 });
 

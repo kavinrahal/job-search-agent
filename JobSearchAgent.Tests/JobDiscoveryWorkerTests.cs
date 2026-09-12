@@ -140,6 +140,30 @@ public class JobDiscoveryWorkerTests
         Assert.Contains("x", capturedText);
     }
 
+    // TC06b — Adzuna source with a LONG description (≥400 chars) still gets a full page fetch
+    // attempt — unlike Greenhouse/Lever (TC06), Adzuna's Description is a marketing teaser
+    // Adzuna itself truncates before the redirect, so its length doesn't indicate the posting's
+    // salary/skills/sponsorship detail is actually all there. This is the exact bug reported:
+    // discovery silently evaluating on an incomplete Adzuna teaser instead of the real posting.
+    [Fact]
+    public async Task RunAsync_AdzunaLongDescription_StillFetchesFullPage()
+    {
+        var db = Db.Fresh();
+        int fetchCount = 0;
+        var desc = new string('x', 600); // well over the 400-char threshold
+        var item = FeedItem(description: desc, source: "adzuna");
+        string? capturedText = null;
+        var worker = MakeWorker(db,
+            fetchers: [new FakeFetcher([item])],
+            pageFetcher: new FakePageFetcher(_ => { fetchCount++; return "full page with salary and sponsorship detail"; }),
+            evaluator: new FakeEval(text => { capturedText = text; return StubEval("weak_match"); }));
+
+        await worker.RunAsync();
+
+        Assert.Equal(1, fetchCount);
+        Assert.Equal("full page with salary and sponsorship detail", capturedText);
+    }
+
     // TC07 — Description < 400 chars, page fetch succeeds → uses full page text
     // Silent failure: the threshold branch not working means short-description postings
     // always evaluate on thin content, degrading match accuracy.
@@ -326,7 +350,8 @@ public class JobDiscoveryWorkerTests
         string description = "Standard description for testing purposes.",
         double? salaryMin = null,
         double? salaryMax = null,
-        DateTime? publishedAt = null) => new()
+        DateTime? publishedAt = null,
+        string source = "greenhouse") => new()
     {
         Title       = "Software Engineer",
         Company     = "Test Corp",
@@ -336,7 +361,7 @@ public class JobDiscoveryWorkerTests
         SalaryMin   = salaryMin,
         SalaryMax   = salaryMax,
         PublishedAt = publishedAt ?? DateTime.UtcNow,
-        Source      = "greenhouse",
+        Source      = source,
     };
 
     private static PostingEvaluation StubEval(string rec) => new()

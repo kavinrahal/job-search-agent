@@ -86,6 +86,23 @@ public class HttpFetcherTests
         Assert.Null(ex);
     }
 
+    // TC04b — Double-HTML-encoded `content` (confirmed live on Greenhouse — the field is itself
+    // entity-escaped markup) has its tags actually stripped, not just decoded into visible tag
+    // text. Directly covers the bug where sponsorship/salary/skill language buried in a
+    // double-encoded content blob reached the evaluator as "<div>Sponsors 482 visas.</div>"
+    // instead of clean text.
+    [Fact]
+    public async Task Greenhouse_DoubleEncodedContent_TagsStrippedCleanly()
+    {
+        var fetcher = new GreenhouseFetcher(Stub(Fixture("greenhouse_response.json")));
+
+        var items = await fetcher.FetchAllAsync();
+
+        var dataSci = items.Single(i => i.Title == "Data Scientist");
+        Assert.DoesNotContain("<", dataSci.Description);
+        Assert.Contains("Sponsors 482 visas.", dataSci.Description);
+    }
+
     // =========================================================================
     // LeverFetcher
     // =========================================================================
@@ -126,6 +143,24 @@ public class HttpFetcherTests
         var ex = await Record.ExceptionAsync(() => fetcher.FetchAllAsync());
 
         Assert.Null(ex);
+    }
+
+    // TC07b — `lists` (requirements/qualifications sections) and `additionalPlain` (benefits/EEO
+    // boilerplate — often exactly where visa-sponsorship language lives) are folded into
+    // Description, not silently dropped. Directly covers the bug where Lever's skills
+    // requirements and sponsorship statements never reached the evaluator at all, since only
+    // `description`/`descriptionPlain` (the intro blurb) was ever captured.
+    [Fact]
+    public async Task Lever_ListsAndAdditional_FoldedIntoDescription()
+    {
+        var fetcher = new LeverFetcher(Stub(Fixture("lever_response.json")));
+
+        var items = await fetcher.FetchAllAsync();
+
+        var dataEng = items.Single(i => i.Title == "Data Engineer");
+        Assert.Contains("Build our data platform", dataEng.Description);
+        Assert.Contains("Kafka experience", dataEng.Description);
+        Assert.Contains("sponsor 482 visas", dataEng.Description);
     }
 
     // =========================================================================

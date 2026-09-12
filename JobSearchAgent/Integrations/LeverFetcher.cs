@@ -69,13 +69,41 @@ public class LeverFetcher : IJobFetcher
                 Title       = p.Text,
                 Company     = displayName,
                 Url         = p.HostedUrl,
-                Description = !string.IsNullOrEmpty(p.DescriptionPlain)
-                    ? p.DescriptionPlain
-                    : JobFetcherUtils.StripHtml(p.Description ?? ""),
+                Description = BuildDescription(p),
                 Location    = p.Categories?.Location ?? "",
                 PublishedAt = DateTimeOffset.FromUnixTimeMilliseconds(p.CreatedAt).UtcDateTime,
                 Source      = "lever",
             })];
+    }
+
+    // Lever splits a posting's real content across several fields, not just `description`:
+    // `lists` holds titled sections (confirmed live — "What We Require", "What We Value", etc.)
+    // that carry the actual skills/qualifications requirements, and `additional` carries benefits/
+    // EEO boilerplate, which is exactly where visa-sponsorship language tends to live ("we are
+    // unable to sponsor..."). Only concatenating `description` (the intro blurb) silently dropped
+    // both — the evaluator never saw them at all, regardless of prompt or schema.
+    private static string BuildDescription(LeverPosting p)
+    {
+        var sections = new List<string>();
+
+        var main = !string.IsNullOrEmpty(p.DescriptionPlain)
+            ? p.DescriptionPlain
+            : JobFetcherUtils.StripHtml(p.Description ?? "");
+        if (!string.IsNullOrWhiteSpace(main)) sections.Add(main);
+
+        foreach (var list in p.Lists ?? [])
+        {
+            var body = JobFetcherUtils.StripHtml(list.Content ?? "");
+            if (string.IsNullOrWhiteSpace(body)) continue;
+            sections.Add(string.IsNullOrWhiteSpace(list.Text) ? body : $"{list.Text}:\n{body}");
+        }
+
+        var additional = !string.IsNullOrEmpty(p.AdditionalPlain)
+            ? p.AdditionalPlain
+            : JobFetcherUtils.StripHtml(p.Additional ?? "");
+        if (!string.IsNullOrWhiteSpace(additional)) sections.Add(additional);
+
+        return string.Join("\n\n", sections);
     }
 
     private static bool IsAuLocation(string? location) => JobFetcherUtils.IsAuLocation(location);
@@ -86,8 +114,16 @@ public class LeverFetcher : IJobFetcher
         [property: JsonPropertyName("hostedUrl")]        string HostedUrl,
         [property: JsonPropertyName("description")]      string? Description,
         [property: JsonPropertyName("descriptionPlain")] string? DescriptionPlain,
+        [property: JsonPropertyName("lists")]             List<LeverList>? Lists,
+        [property: JsonPropertyName("additional")]        string? Additional,
+        [property: JsonPropertyName("additionalPlain")]  string? AdditionalPlain,
         [property: JsonPropertyName("createdAt")]        long CreatedAt,
         [property: JsonPropertyName("categories")]       LeverCategories? Categories
+    );
+
+    private sealed record LeverList(
+        [property: JsonPropertyName("text")]    string? Text,
+        [property: JsonPropertyName("content")] string? Content
     );
 
     private sealed record LeverCategories(

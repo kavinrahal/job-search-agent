@@ -78,6 +78,8 @@ export interface DiscoveredPosting {
   disqualifierHit: string | null;
   discoveredAt: string;
   evaluatedAt: string | null;
+  sponsorshipVerdict: string | null;
+  sponsorshipEvidence: string | null;
   locationMatch: string | null;
   locationDetail: string | null;
   experienceMatch: string | null;
