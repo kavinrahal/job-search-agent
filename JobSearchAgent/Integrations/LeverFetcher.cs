@@ -13,15 +13,31 @@ public class LeverFetcher : IJobFetcher
     internal LeverFetcher(HttpClient http) { _http = http; }
 
     // Slug -> display name. Add entries here as you find more AU companies on Lever.
-    // Verify a slug: https://api.lever.co/v0/postings/{slug}?mode=json
+    // Verify a slug before adding it: GET https://api.lever.co/v0/postings/{slug}?mode=json must
+    // return 200 (a 404 means the slug is wrong or the company isn't on Lever) - a plausible-
+    // looking slug is not enough, actually curl it and check the response.
+    //
+    // Last fully re-verified against the live API: 2026-09-12. At that point the then-current
+    // list (atlassian, afterpay, buildkite, bugcrowd, redbubble, squarespace) 404'd entirely on
+    // Lever - atlassian is on SmartRecruiters, afterpay's current employer entity Block posts AU
+    // roles on Greenhouse instead (see GreenhouseFetcher's "block" entry), buildkite/bugcrowd/
+    // squarespace turned out to be real slugs but on Greenhouse not Lever (moved there), and
+    // redbubble's current ATS could not be confirmed as Greenhouse or Lever (removed rather than
+    // guessed).
     private static readonly Dictionary<string, string> Companies = new()
     {
-        { "atlassian",    "Atlassian"    },
-        { "afterpay",     "Afterpay"     },
-        { "buildkite",    "Buildkite"    },
-        { "bugcrowd",     "Bugcrowd"     },
-        { "redbubble",    "Redbubble"    },
-        { "squarespace",  "Squarespace"  },
+        { "safetyculture-2", "SafetyCulture" },
+        { "airtasker",       "Airtasker"     },
+        { "envato-2",        "Envato"        },
+        { "deputy",          "Deputy"        },
+        { "immutable",       "Immutable"     },
+        { "upguard",         "UpGuard"       },
+        { "mable",           "Mable"         },
+        { "brighte",         "Brighte"       },
+        { "plenti",          "Plenti"        },
+        { "splend",          "Splend"        },
+        { "kogan",           "Kogan"         },
+        { "wisr",            "Wisr"          },
     };
 
     public async Task<List<JobFeedItem>> FetchAllAsync()
