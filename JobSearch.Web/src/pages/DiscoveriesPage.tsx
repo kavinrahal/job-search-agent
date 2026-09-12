@@ -2,10 +2,14 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useDiscoveries } from "../hooks/useDashboardData";
 import { useMeContext } from "../hooks/useMeContext";
+import { useProfile } from "../hooks/useProfile";
+import { parseJobCriteriaYaml } from "../lib/jobCriteriaYaml";
+import { getMissingCriteriaFields } from "../lib/criteriaCompleteness";
 import type { DiscoveredPosting } from "../types";
 import { GenerationDrawer, type GenerationKind } from "../components/GenerationDrawer";
 import { MatchBreakdownModal } from "../components/MatchBreakdownModal";
 import { GmailConnectionBanner } from "../components/GmailConnectionBanner";
+import { DiscoverCriteriaGate } from "../components/DiscoverCriteriaGate";
 import { computeMatchScore, matchSummaryLine, tierOf, TIER_LABEL, TIER_BADGE, type Tier } from "../lib/matchScore";
 import {
   Badge,
@@ -174,6 +178,7 @@ function DiscoveryCard({ posting, highlighted }: { posting: DiscoveredPosting; h
 // ---------------------------------------------------------------------------
 export function DiscoveriesPage() {
   const { me } = useMeContext();
+  const { data: profile, loading: loadingProfile } = useProfile();
   const [activeTab, setActiveTab] = useState<Tier>("all");
   const [searchParams] = useSearchParams();
   // Set once on mount, from the ?posting= a Today "Worth a look" row links in with. Not
@@ -206,6 +211,12 @@ export function DiscoveriesPage() {
 
   const visible = activeTab === "all" ? postings : postings.filter(p => tierOf(p) === activeTab);
   const freshness = freshnessLabel(postings);
+
+  // Gates the whole page below the Gmail banner once the profile has loaded — see
+  // DiscoverCriteriaGate's own comment for why. `missingCriteria` stays [] while profile is still
+  // loading so the gate never flashes on briefly for a user whose criteria is actually complete.
+  const missingCriteria = profile ? getMissingCriteriaFields(parseJobCriteriaYaml(profile.jobCriteria), me.tier) : [];
+  const criteriaIncomplete = !loadingProfile && missingCriteria.length > 0;
 
   // Deep-link from Today's "Worth a look": once discoveries have loaded, pick the tab that
   // actually shows the linked posting (a null/discard tier isn't shown by any single-tier tab,
@@ -241,48 +252,55 @@ export function DiscoveriesPage() {
   return (
     <div className="space-y-3">
       <GmailConnectionBanner broken={me.gmailConnectionBroken} />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SegmentedControl
-          label="Filter discoveries"
-          segments={[
-            { value: "all", label: "All", count: counts.all },
-            { value: "strong", label: "Strong", count: counts.strong },
-            { value: "good", label: "Good", count: counts.good },
-            { value: "weak", label: "Weak", count: counts.weak },
-          ]}
-          value={activeTab}
-          onChange={setActiveTab}
-        />
-        {freshness && <span className="text-meta whitespace-nowrap text-faint">{freshness}</span>}
-      </div>
 
-      {error && <Callout variant="danger" title={error} />}
-
-      {loading ? (
-        <Surface elevation="raised">
-          <SkeletonList rows={4} label="Loading discoveries" />
-        </Surface>
-      ) : visible.length === 0 ? (
-        <Surface elevation="raised">
-          <EmptyState
-            icon={<SearchIcon />}
-            title="Nothing here yet"
-            body={
-              activeTab === "all"
-                ? "No postings found yet. The agent will notify you when it finds one."
-                // eslint-disable-next-line security/detect-object-injection -- activeTab is the Tier union, not arbitrary input
-                : `No ${TIER_LABEL[activeTab]} matches right now.`
-            }
-          />
-        </Surface>
+      {criteriaIncomplete ? (
+        <DiscoverCriteriaGate missing={missingCriteria} />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map(p => (
-            <div key={p.id} id={discoveryDomId(p.id)}>
-              <DiscoveryCard posting={p} highlighted={p.id === highlightedId} />
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <SegmentedControl
+              label="Filter discoveries"
+              segments={[
+                { value: "all", label: "All", count: counts.all },
+                { value: "strong", label: "Strong", count: counts.strong },
+                { value: "good", label: "Good", count: counts.good },
+                { value: "weak", label: "Weak", count: counts.weak },
+              ]}
+              value={activeTab}
+              onChange={setActiveTab}
+            />
+            {freshness && <span className="text-meta whitespace-nowrap text-faint">{freshness}</span>}
+          </div>
+
+          {error && <Callout variant="danger" title={error} />}
+
+          {loading || loadingProfile ? (
+            <Surface elevation="raised">
+              <SkeletonList rows={4} label="Loading discoveries" />
+            </Surface>
+          ) : visible.length === 0 ? (
+            <Surface elevation="raised">
+              <EmptyState
+                icon={<SearchIcon />}
+                title="Nothing here yet"
+                body={
+                  activeTab === "all"
+                    ? "No postings found yet. The agent will notify you when it finds one."
+                    // eslint-disable-next-line security/detect-object-injection -- activeTab is the Tier union, not arbitrary input
+                    : `No ${TIER_LABEL[activeTab]} matches right now.`
+                }
+              />
+            </Surface>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {visible.map(p => (
+                <div key={p.id} id={discoveryDomId(p.id)}>
+                  <DiscoveryCard posting={p} highlighted={p.id === highlightedId} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );
