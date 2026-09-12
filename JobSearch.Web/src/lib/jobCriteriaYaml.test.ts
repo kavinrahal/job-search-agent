@@ -113,3 +113,66 @@ ai_tooling:
     expect(parsed.targetJobTitles).toBe("Software Engineer");
   });
 });
+
+// Sponsorship replaced five free-text fields (sponsorshipModel/sponsorshipDiscardDescription/
+// sponsorshipDiscardExamples/sponsorshipInScope/sponsorshipNotes) with two structured yes/no
+// facts about the candidate: citizenOrPermanentResident and hasCurrentWorkVisa. "" means
+// unanswered, distinct from "no" — see evaluate_posting.md for how the two gate the two
+// independent sponsorship disqualifier checks.
+describe("sponsorship", () => {
+  it("round-trips both fields answered through serialize -> parse", () => {
+    const data: JobCriteriaData = { ...parseJobCriteriaYaml(""), citizenOrPermanentResident: "no", hasCurrentWorkVisa: "yes" };
+    const roundTripped = parseJobCriteriaYaml(serializeJobCriteriaYaml(data));
+    expect(roundTripped.citizenOrPermanentResident).toBe("no");
+    expect(roundTripped.hasCurrentWorkVisa).toBe("yes");
+    expect(roundTripped.extra).not.toHaveProperty("sponsorship");
+  });
+
+  it("round-trips citizenOrPermanentResident=yes with hasCurrentWorkVisa left unanswered", () => {
+    const data: JobCriteriaData = { ...parseJobCriteriaYaml(""), citizenOrPermanentResident: "yes" };
+    const roundTripped = parseJobCriteriaYaml(serializeJobCriteriaYaml(data));
+    expect(roundTripped.citizenOrPermanentResident).toBe("yes");
+    expect(roundTripped.hasCurrentWorkVisa).toBe("");
+  });
+
+  it("omits the sponsorship key entirely when both fields are unanswered", () => {
+    const data: JobCriteriaData = { ...parseJobCriteriaYaml(""), targetJobTitles: "Software Engineer" };
+    const yaml = serializeJobCriteriaYaml(data);
+    expect(yaml).not.toContain("sponsorship");
+  });
+
+  it("defaults both fields to unanswered on a blank document", () => {
+    const parsed = parseJobCriteriaYaml("");
+    expect(parsed.citizenOrPermanentResident).toBe("");
+    expect(parsed.hasCurrentWorkVisa).toBe("");
+  });
+
+  it("loads an existing user's old free-text sponsorship data without crashing, leaving both new fields unanswered rather than guessing", () => {
+    const oldYaml = `
+sponsorship:
+  model: binary
+  discard:
+    description: Explicitly excludes candidates requiring visa sponsorship
+    examples:
+      - "No visa sponsorship offered"
+      - "Must be Australian citizen or permanent resident"
+  in_scope:
+    - No mention of work rights or sponsorship
+  principle: Silence is not a negative signal.
+`;
+    const parsed = parseJobCriteriaYaml(oldYaml);
+    expect(parsed.citizenOrPermanentResident).toBe("");
+    expect(parsed.hasCurrentWorkVisa).toBe("");
+    // Old data isn't lost — it's preserved verbatim in extra (surfaced via the Advanced/raw-YAML
+    // section) rather than silently discarded.
+    expect(parsed.extra).toHaveProperty("sponsorship");
+    expect((parsed.extra.sponsorship as { model: string }).model).toBe("binary");
+  });
+
+  it("accepts a partial answer (only citizenOrPermanentResident set) as a clean match, not a fallback to extra", () => {
+    const parsed = parseJobCriteriaYaml("sponsorship:\n  citizen_or_permanent_resident: false\n");
+    expect(parsed.citizenOrPermanentResident).toBe("no");
+    expect(parsed.hasCurrentWorkVisa).toBe("");
+    expect(parsed.extra).not.toHaveProperty("sponsorship");
+  });
+});

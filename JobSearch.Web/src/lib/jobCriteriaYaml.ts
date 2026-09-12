@@ -25,11 +25,15 @@ export interface JobCriteriaData {
   onsiteAccepted: boolean;
   onsiteNotes: string;
 
-  sponsorshipModel: string;
-  sponsorshipDiscardDescription: string;
-  sponsorshipDiscardExamples: string;
-  sponsorshipInScope: string;
-  sponsorshipNotes: string;
+  // Two independent yes/no facts about the candidate, gating the two independent sponsorship
+  // disqualifier checks evaluate_posting.md applies (see that file's Sponsorship & citizenship/
+  // PR status section for the logic). "" means unanswered — distinct from "no" — so a candidate
+  // who hasn't gotten to this section yet is never silently treated as having answered "no".
+  // Old free-text sponsorship prose (sponsorshipModel/sponsorshipDiscardDescription/
+  // sponsorshipDiscardExamples/sponsorshipInScope/sponsorshipNotes) doesn't losslessly convert to
+  // these two booleans — see the parse migration below, which leaves both "" rather than guessing.
+  citizenOrPermanentResident: "" | "yes" | "no";
+  hasCurrentWorkVisa: "" | "yes" | "no";
 
   seniorityLevel: string;
   candidateCurrentExperience: string;
@@ -103,11 +107,8 @@ const DEFAULTS: Omit<JobCriteriaData, "extra"> = {
   onsiteAccepted: true,
   onsiteNotes: "",
 
-  sponsorshipModel: "",
-  sponsorshipDiscardDescription: "",
-  sponsorshipDiscardExamples: "",
-  sponsorshipInScope: "",
-  sponsorshipNotes: "",
+  citizenOrPermanentResident: "",
+  hasCurrentWorkVisa: "",
 
   seniorityLevel: "mid",
   candidateCurrentExperience: "",
@@ -283,16 +284,21 @@ export function parseJobCriteriaYaml(text: string): JobCriteriaData {
     }
   }
 
-  const sponsorshipKeys = ["model", "discard", "in_scope", "principle"];
+  // New clean shape only — a candidate's already-saved old free-text shape (model/discard/
+  // in_scope/principle) doesn't isCleanMatch this key list, so it falls through to `extra`
+  // untouched (visible via the Advanced/raw-YAML section) rather than being lost, and both new
+  // fields stay "" (unanswered) rather than being guessed from the old prose. Either key may be
+  // absent on its own — e.g. has_current_work_visa is only ever asked/written once
+  // citizen_or_permanent_resident is false — so a partial answer is still a clean match.
+  const sponsorshipKeys = ["citizen_or_permanent_resident", "has_current_work_visa"];
   if (isCleanMatch(raw.sponsorship, sponsorshipKeys)) {
     const s = raw.sponsorship;
-    if (typeof s.model === "string") data.sponsorshipModel = s.model;
-    if (isCleanMatch(s.discard, ["description", "examples"])) {
-      if (typeof s.discard.description === "string") data.sponsorshipDiscardDescription = s.discard.description;
-      data.sponsorshipDiscardExamples = linesOrCsv(s.discard.examples, "\n");
+    if (typeof s.citizen_or_permanent_resident === "boolean") {
+      data.citizenOrPermanentResident = s.citizen_or_permanent_resident ? "yes" : "no";
     }
-    data.sponsorshipInScope = linesOrCsv(s.in_scope, "\n");
-    if (typeof s.principle === "string") data.sponsorshipNotes = s.principle;
+    if (typeof s.has_current_work_visa === "boolean") {
+      data.hasCurrentWorkVisa = s.has_current_work_visa ? "yes" : "no";
+    }
     delete extra.sponsorship;
   }
 
@@ -523,15 +529,16 @@ export function serializeJobCriteriaYaml(data: JobCriteriaData): string {
       hybrid: { accepted: data.hybridAccepted, notes: data.hybridNotes },
       on_site: { accepted: data.onsiteAccepted, notes: data.onsiteNotes },
     },
-    sponsorship: {
-      model: data.sponsorshipModel,
-      discard: {
-        description: data.sponsorshipDiscardDescription,
-        examples: split(data.sponsorshipDiscardExamples, "\n"),
+    // Omitted entirely when both are unanswered — a candidate who hasn't touched this section
+    // yet (or is a citizen/PR with nothing further to answer) gets no `sponsorship:` key at all,
+    // rather than an empty object. Each field is only written once actually answered — booleans
+    // round-trip through the "yes"/"no" <-> true/false mapping the parser above expects.
+    ...(data.citizenOrPermanentResident || data.hasCurrentWorkVisa ? {
+      sponsorship: {
+        ...(data.citizenOrPermanentResident ? { citizen_or_permanent_resident: data.citizenOrPermanentResident === "yes" } : {}),
+        ...(data.hasCurrentWorkVisa ? { has_current_work_visa: data.hasCurrentWorkVisa === "yes" } : {}),
       },
-      in_scope: split(data.sponsorshipInScope, "\n"),
-      principle: data.sponsorshipNotes,
-    },
+    } : {}),
     experience: {
       seniority_level: data.seniorityLevel,
       candidate_current: data.candidateCurrentExperience,

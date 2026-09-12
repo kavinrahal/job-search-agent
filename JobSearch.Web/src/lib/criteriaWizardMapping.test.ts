@@ -3,7 +3,6 @@ import {
   EXPERIENCE_BUCKETS, experienceBucketPatch, nearestExperienceBucket,
   SALARY_SLIDER_MIN, SALARY_SLIDER_MAX, salaryRangePatch, nearestSalaryRange, formatSalaryAmount,
   applySkillAnswer,
-  SPONSORSHIP_YES_PATCH,
   isSimpleDisqualifier, disqualifierInputsToObjects, simpleDisqualifierDescriptions, applyDisqualifierAnswer,
   sanitizeCriteriaInput,
 } from "./criteriaWizardMapping";
@@ -114,21 +113,6 @@ describe("applySkillAnswer", () => {
   });
 });
 
-describe("SPONSORSHIP_YES_PATCH", () => {
-  it("does not include Australia-specific phrasing, since the wizard spans any country", () => {
-    expect(SPONSORSHIP_YES_PATCH.sponsorshipDiscardExamples).not.toContain("Australian");
-  });
-
-  it("includes the core country-agnostic exclusion phrases", () => {
-    const examples = SPONSORSHIP_YES_PATCH.sponsorshipDiscardExamples!;
-    expect(examples).toContain("no visa sponsorship");
-    expect(examples).toContain("unrestricted work rights required");
-  });
-
-  it("states the silence-is-not-a-negative-signal principle", () => {
-    expect(SPONSORSHIP_YES_PATCH.sponsorshipNotes).toMatch(/silence is not a negative signal/i);
-  });
-});
 
 describe("disqualifier helpers", () => {
   it("converts a list of inputs into one description-only disqualifier per non-blank entry", () => {

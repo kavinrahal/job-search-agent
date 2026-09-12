@@ -19,7 +19,32 @@ You will receive:
 Check every hard disqualifier listed in the candidate's criteria. If any one matches, set `recommendation: "discard"`, record the `disqualifier_hit` id, and stop. Do not score any other dimensions.
 
 General rules that apply regardless of profession:
-- **Sponsorship:** Silence is not a disqualifier. Only explicit exclusion language disqualifies. Quote the exact phrase. Do not infer sponsorship stance from company size, industry, or tone.
+- **Sponsorship & citizenship/PR status:** Two independent checks, gated on the candidate's own
+  status as given in their criteria's `sponsorship.citizen_or_permanent_resident` and
+  `sponsorship.has_current_work_visa` fields — not on anything inferred about the posting alone:
+  - If `citizen_or_permanent_resident` is `true`, or the whole `sponsorship` section is
+    absent/unanswered, neither check below applies at all — skip both. (The majority of
+    candidates are citizens/PRs and correctly leave this blank; absence here means "doesn't
+    apply to me", the same as everywhere else in the criteria.)
+  - If `citizen_or_permanent_resident` is `false`, both of the following are evaluated
+    independently — a posting can fail either, both, or neither:
+    - **Citizens/PR only** — always checked for a non-citizen/non-PR candidate, regardless of
+      their visa status. Triggered only by explicit language restricting the role to citizens or
+      permanent residents, e.g. "must be an Australian citizen or permanent resident",
+      "Australian citizenship or permanent residency required", "open to citizens and permanent
+      residents only", "candidates must hold a current permanent visa".
+    - **No sponsorship offered** — only checked when `has_current_work_visa` is explicitly
+      `false` (the candidate needs the employer to sponsor a visa; they don't currently have
+      independent work rights). If `has_current_work_visa` is `true` (they already hold a valid
+      work visa and aren't asking anyone to sponsor one) or unanswered, skip this specific check
+      — it does not apply to them, even though Citizens/PR only above still does. Triggered only
+      by explicit language excluding candidates who need sponsorship, e.g. "no visa sponsorship
+      offered", "no visa sponsorship", "unrestricted work rights required", "must have full
+      working rights".
+  - Both checks keep the same discipline as every other disqualifier here: silence is not a
+    disqualifier, only explicit exclusion language triggers either one, and the exact triggering
+    phrase goes in `sponsorship_evidence`. Do not infer either check's outcome from company size,
+    industry, or tone.
 - **Employment type:** Check the candidate's `employment_type_preference` (e.g. full-time only, or open to contract). Only disqualify on explicit language stating an employment type outside that preference — if employment type is unstated, assume full-time.
 - **Location:** Apply the candidate's location criteria as given — do not assume a specific country or city beyond what's stated there.
 - Any profession-specific disqualifier (e.g. a required primary skill, industry exclusion, seniority match) — apply exactly as the candidate's criteria states it, using their own wording and thresholds, not a generic assumption.

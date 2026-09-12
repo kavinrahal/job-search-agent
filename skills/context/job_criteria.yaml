@@ -18,16 +18,31 @@ employment_type_preference: [full_time]
 # ---------------------------------------------------------------------------
 hard_disqualifiers:
 
-  - id: sponsorship_excluded
-    description: Explicitly excludes candidates requiring visa sponsorship
+  # Two independent checks, both gated on sponsorship.candidate_status below — see that section
+  # for the full gating logic. Neither applies at all when candidate_status.citizen_or_permanent_
+  # resident is true (or the whole sponsorship section is unanswered).
+  - id: citizens_pr_only
+    description: >
+      Explicitly restricts the role to citizens or permanent residents. Always checked for a
+      non-citizen/non-PR candidate, regardless of their visa status.
     signals:
-      - "no visa sponsorship"
       - "must be an Australian citizen or permanent resident"
       - "Australian citizenship or permanent residency required"
-      - "unrestricted work rights required"
-      - "must have full working rights"
       - "open to citizens and permanent residents only"
       - "candidates must hold a current permanent visa"
+    notes: >
+      Read carefully — phrasing varies. When in doubt, flag rather than auto-discard.
+
+  - id: sponsorship_not_offered
+    description: >
+      Explicitly excludes candidates who need the employer to sponsor a visa. Only checked when
+      candidate_status.has_current_work_visa is explicitly false — irrelevant to a candidate who
+      already holds a valid work visa and isn't asking for sponsorship.
+    signals:
+      - "no visa sponsorship"
+      - "no visa sponsorship offered"
+      - "unrestricted work rights required"
+      - "must have full working rights"
     notes: >
       Read carefully — phrasing varies. "Full working rights" typically means
       no sponsorship. When in doubt, flag rather than auto-discard.
@@ -110,26 +125,41 @@ location:
     anywhere_in_australia: acceptable
 
 # ---------------------------------------------------------------------------
-# VISA SPONSORSHIP
+# VISA SPONSORSHIP & CITIZENSHIP/PR STATUS
+# Two independent facts about the candidate gate the two hard_disqualifiers above
+# (citizens_pr_only, sponsorship_not_offered) — see evaluate_posting.md's Step 1 for the full
+# gating logic this mirrors. This maps to jobCriteriaYaml.ts's citizenOrPermanentResident/
+# hasCurrentWorkVisa fields (JobSearch.Web), serialized as sponsorship.citizen_or_permanent_
+# resident/has_current_work_visa booleans — omitted entirely when unanswered, never a guessed
+# true/false.
 # ---------------------------------------------------------------------------
 sponsorship:
-  model: binary
+  candidate_status:
+    # true skips both checks entirely, regardless of has_current_work_visa. Omitted (as here,
+    # commented out) means unanswered, which behaves the same as true — silence isn't a
+    # disqualifier at the meta level either.
+    citizen_or_permanent_resident: false
+    # Only read when citizen_or_permanent_resident is false. true = already has a valid work
+    # visa, isn't asking for sponsorship (sponsorship_not_offered doesn't apply, citizens_pr_only
+    # still does). false = needs the employer to sponsor a visa (both checks apply).
+    has_current_work_visa: false
 
-  discard:
-    description: Any explicit language excluding non-PR/citizen candidates
+  citizens_pr_only:
+    description: Always disqualifies a non-citizen/non-PR candidate, regardless of visa status
+    examples:
+      - "Must be Australian citizen or permanent resident"
+      - "Open to citizens and permanent residents only"
+
+  sponsorship_not_offered:
+    description: Only disqualifies a candidate who needs sponsorship (has_current_work_visa is false)
     examples:
       - "No visa sponsorship offered"
-      - "Must be Australian citizen or permanent resident"
       - "Full working rights required"
 
-  in_scope:
-    - No mention of work rights or sponsorship (majority of postings — treat as in scope)
-    - Explicit positive mention of sponsorship availability (strong positive signal)
-
   principle: >
-    Silence is not a negative signal. Apply to anything not explicitly excluding
-    non-PR holders. Do not attempt to infer sponsorship stance from company size,
-    industry, or other proxy signals.
+    Silence is not a negative signal. Apply either check only to language explicitly excluding
+    the candidate as described above. Do not attempt to infer sponsorship stance from company
+    size, industry, or other proxy signals.
 
 # ---------------------------------------------------------------------------
 # EXPERIENCE LEVEL

@@ -6,12 +6,14 @@ import type { JobCriteriaData } from "./jobCriteriaYaml";
 // about what's missing.
 //
 // Sponsorship is deliberately NOT part of this list. It's the one legitimately optional/
-// conditional section: a candidate who doesn't need sponsorship correctly leaves every
-// sponsorship field blank ("Leave blank if this doesn't apply to you" — JobCriteriaEditor's
-// own copy), so "blank" there is a valid complete answer, not a missing one. The wizard still
-// requires *choosing* Yes/No (a UX concern — don't let someone fall through without ever
-// considering it), but that choice has no equivalent field to check for in the full editor,
-// which has no yes/no toggle at all, only free text.
+// conditional section: a candidate who's a citizen/permanent resident (the majority case)
+// correctly leaves both sponsorship questions unanswered ("Leave blank if this doesn't apply to
+// you" — JobCriteriaEditor's own copy), so "blank" there is a valid complete answer, not a
+// missing one. The wizard still requires *choosing* Yes/No on its Sponsorship step (a UX
+// concern — don't let someone fall through without ever considering it); the full editor doesn't
+// enforce that same requirement, but as of the citizenOrPermanentResident/hasCurrentWorkVisa
+// fields, both surfaces now ask the identical two structured yes/no questions rather than the
+// wizard asking a toggle with no full-editor equivalent.
 //
 // Disqualifiers are excluded for the same reason the wizard is the only place that still
 // offers a Skip: a candidate with no dealbreakers worth naming is a completely normal,

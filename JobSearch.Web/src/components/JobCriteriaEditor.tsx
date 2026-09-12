@@ -2,13 +2,22 @@ import { useState } from "react";
 import type { JobCriteriaData, Disqualifier } from "../lib/jobCriteriaYaml";
 import { LABEL, INPUT, Field, TopicCard, EntryCard, AddButton, AdvancedSection } from "./CardEditor";
 import { COUNTRIES, CURRENCIES, STATES_BY_COUNTRY } from "../lib/regionData";
-import { Tooltip, ChipGroup, Select, Callout, CloseIcon, ChevronDownIcon } from "../ui";
+import { Tooltip, ChipGroup, Select, Callout, CloseIcon, ChevronDownIcon, type ChipOption } from "../ui";
 import { getMissingCriteriaFields } from "../lib/criteriaCompleteness";
 
 // Exported so CriteriaWizard.tsx's Employment type question reuses the exact same list rather
 // than maintaining a second copy that could drift.
 export const EMPLOYMENT_TYPES = ["full_time", "part_time", "contract", "casual"];
 const SENIORITY_LEVELS = ["junior", "mid", "senior", "lead"];
+
+// Exported so CriteriaWizard.tsx's Sponsorship step reuses the exact same options — the full
+// editor and the wizard ask the identical two yes/no questions now, not a wizard-only toggle
+// with no full-editor equivalent (see criteriaCompleteness.ts's comment on the mismatch this
+// replaced).
+export const YES_NO_OPTIONS: ChipOption<"yes" | "no">[] = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+];
 
 function splitCsv(text: string): string[] {
   return text.split(",").map(s => s.trim()).filter(Boolean);
@@ -282,15 +291,32 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
 
       <TopicCard title="Sponsorship" defaultOpen={false}>
         <p className="text-note text-faint">
-          If you need visa/work-authorization sponsorship, use this to describe when a
-          posting should be disqualified for excluding sponsorship-needing candidates.
-          Leave blank if this doesn't apply to you.
+          Whether a posting's stance on visa sponsorship or citizenship/PR requirements should
+          rule it out for you. Leave blank if this doesn't apply to you.
         </p>
-        <Field label={'Model (e.g. "binary")'} value={value.sponsorshipModel} onChange={v => set("sponsorshipModel", v)} />
-        <Field label="Discard when" value={value.sponsorshipDiscardDescription} onChange={v => set("sponsorshipDiscardDescription", v)} />
-        <Field label="Example excluding phrases (one per line)" value={value.sponsorshipDiscardExamples} onChange={v => set("sponsorshipDiscardExamples", v)} multiline />
-        <Field label="Treat as in-scope when (one per line)" value={value.sponsorshipInScope} onChange={v => set("sponsorshipInScope", v)} multiline />
-        <Field label="Notes" value={value.sponsorshipNotes} onChange={v => set("sponsorshipNotes", v)} multiline />
+        <div>
+          <label className={LABEL}>Are you an Australian citizen or permanent resident?</label>
+          <ChipGroup
+            label="Citizen or permanent resident"
+            options={YES_NO_OPTIONS}
+            value={value.citizenOrPermanentResident || null}
+            // The work-visa question no longer applies at all once the candidate is a citizen/PR
+            // — clear any earlier answer to it rather than leaving a stale, now-hidden value
+            // behind (mirrors CriteriaWizard.tsx's SponsorshipStep).
+            onChange={v => onChange({ ...value, citizenOrPermanentResident: v, hasCurrentWorkVisa: v === "yes" ? "" : value.hasCurrentWorkVisa })}
+          />
+        </div>
+        {value.citizenOrPermanentResident === "no" && (
+          <div>
+            <label className={LABEL}>Do you currently hold a valid work visa?</label>
+            <ChipGroup
+              label="Current work visa"
+              options={YES_NO_OPTIONS}
+              value={value.hasCurrentWorkVisa || null}
+              onChange={v => set("hasCurrentWorkVisa", v)}
+            />
+          </div>
+        )}
       </TopicCard>
 
       <TopicCard title="Experience">

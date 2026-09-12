@@ -3,16 +3,15 @@ import { useProfile, useUpdateProfile } from "../hooks/useProfile";
 import { useSyncedState } from "../hooks/useSyncedState";
 import { parseJobCriteriaYaml, serializeJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
 import { COUNTRIES, COUNTRY_TO_CURRENCY } from "../lib/regionData";
-import { Field, INPUT } from "./CardEditor";
+import { Field, INPUT, LABEL } from "./CardEditor";
 import { Surface, Button, ChipGroup, PageHeader, Select } from "../ui";
-import { EMPLOYMENT_TYPES } from "./JobCriteriaEditor";
+import { EMPLOYMENT_TYPES, YES_NO_OPTIONS } from "./JobCriteriaEditor";
 import {
   type CriteriaPatch,
   EXPERIENCE_BUCKETS, experienceBucketPatch, nearestExperienceBucket,
   SALARY_SLIDER_MIN, SALARY_SLIDER_MAX, SALARY_SLIDER_STEP,
   salaryRangePatch, nearestSalaryRange, formatSalaryAmount,
   applySkillAnswer,
-  SPONSORSHIP_YES_PATCH,
   simpleDisqualifierDescriptions, applyDisqualifierAnswer,
   sanitizeCriteriaInput,
 } from "../lib/criteriaWizardMapping";
@@ -247,19 +246,36 @@ function SalaryStep({ data, onNext, ...nav }: StepProps) {
   );
 }
 
-const SPONSORSHIP_OPTIONS = [
-  { value: "yes", label: "Yes, I need sponsorship" },
-  { value: "no", label: "No, I don't need sponsorship" },
-];
-
+// Same two questions, same gating, as JobCriteriaEditor.tsx's Sponsorship section — the wizard
+// used to ask a single "do you need sponsorship?" question and translate "yes" into a block of
+// free-text disqualifier prose (SPONSORSHIP_YES_PATCH, now removed). That collapsed two distinct
+// candidate situations (needs sponsorship vs. already has a visa but isn't a citizen/PR) into
+// one, and had no equivalent field in the full editor at all — see criteriaCompleteness.ts's
+// comment on the mismatch this replaced. Both editors now write the same two structured fields.
 function SponsorshipStep({ data, onNext, ...nav }: StepProps) {
-  const initial = data.sponsorshipModel || data.sponsorshipDiscardDescription ? "yes" : null;
-  const [selected, setSelected] = useState<string | null>(initial);
+  const [citizenOrPr, setCitizenOrPr] = useState<"yes" | "no" | null>(data.citizenOrPermanentResident || null);
+  const [hasVisa, setHasVisa] = useState<"yes" | "no" | null>(data.hasCurrentWorkVisa || null);
+
+  const needsVisaAnswer = citizenOrPr === "no";
+  const canProceed = citizenOrPr !== null && (!needsVisaAnswer || hasVisa !== null);
+
   return (
     <div>
-      <StepHeading>Do you need visa or work sponsorship?</StepHeading>
-      <ChipGroup label="Sponsorship" options={SPONSORSHIP_OPTIONS} value={selected} onChange={setSelected} />
-      <StepFooter {...nav} nextDisabled={!selected} onNext={() => onNext(selected === "yes" ? SPONSORSHIP_YES_PATCH : {})} />
+      <StepHeading>Are you an Australian citizen or permanent resident?</StepHeading>
+      <ChipGroup label="Citizen or permanent resident" options={YES_NO_OPTIONS} value={citizenOrPr} onChange={setCitizenOrPr} />
+      {needsVisaAnswer && (
+        <div className="mt-5">
+          <label className={LABEL}>Do you currently hold a valid work visa?</label>
+          <ChipGroup label="Current work visa" options={YES_NO_OPTIONS} value={hasVisa} onChange={setHasVisa} />
+        </div>
+      )}
+      <StepFooter {...nav} nextDisabled={!canProceed} onNext={() => onNext({
+        citizenOrPermanentResident: citizenOrPr ?? "",
+        // Cleared rather than carried over when citizenOrPr flips back to "yes" — that question
+        // no longer applies at all once the candidate is a citizen/PR, so a stale "no" from an
+        // earlier visit through this step shouldn't linger unseen in the saved criteria.
+        hasCurrentWorkVisa: needsVisaAnswer ? (hasVisa ?? "") : "",
+      })} />
     </div>
   );
 }
