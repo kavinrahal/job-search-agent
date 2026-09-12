@@ -23,9 +23,11 @@ var builder = WebApplication.CreateBuilder(args);
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
 builder.WebHost.UseUrls($"http://+:{port}");
 // Applies to every request (webhooks included) — a native Kestrel guard against oversized
-// payloads. 8MB, not 1MB, to leave headroom for resume PDF uploads (scanned/image-heavy
-// resumes can run a few MB); everything else in the app sends only small JSON bodies.
-builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 8_000_000);
+// payloads, enforced as bytes arrive rather than after the request is fully buffered. Reuses
+// PdfTextExtractor.MaxPdfBytes (not a separately-maintained number) since this limit's whole
+// reason to be 8MB instead of 1MB is to leave headroom for resume PDF uploads (scanned/image-
+// heavy resumes can run a few MB); everything else in the app sends only small JSON bodies.
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = PdfTextExtractor.MaxPdfBytes);
 
 var isDev = builder.Environment.IsDevelopment();
 
@@ -1375,6 +1377,12 @@ api.MapGet("/admin/diagnose-fetch", async (HttpContext ctx, JobPostingFetcher fe
 api.MapPost("/onboarding/parse-resume", async (
     HttpRequest request, ResumeIntakeAgent intakeAgent, HttpContext ctx) =>
 {
+    // Checked against the declared Content-Length before touching ReadFormAsync (which
+    // buffers the whole multipart body) — rejects an oversized upload without buffering it,
+    // on top of the Kestrel-level MaxRequestBodySize guard that already bounds the connection
+    // to the same limit as bytes stream in.
+    if (RejectIfUploadTooLarge(request) is { } tooLarge) return tooLarge;
+
     int userId = CurrentUserId(ctx, UserIdClaimType);
     var form = await request.ReadFormAsync();
     var file = form.Files["file"];
@@ -1383,6 +1391,8 @@ api.MapPost("/onboarding/parse-resume", async (
     ParsedResume parsed;
     if (file is { Length: > 0 })
     {
+        if (file.Length > PdfTextExtractor.MaxPdfBytes) return TooLargeError();
+
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
         try
@@ -1431,19 +1441,42 @@ api.MapGet("/profile/resume-pdf", async (HttpContext ctx, AppDbContext db) =>
 
 // POST /api/v1/profile/resume-pdf — multipart form, "file" field. Called alongside PUT
 // /profile at save time (not at parse time — see the comment on /onboarding/parse-resume).
+// This is a separate upload from /onboarding/parse-resume (a from-scratch save with no file
+// never reaches this endpoint at all, and a resume replace on an already-onboarded account
+// comes straight here without going through parse-resume again) — so it gets its own full
+// validation rather than trusting that whatever called parse-resume already checked the same
+// bytes.
 api.MapPost("/profile/resume-pdf", async (HttpRequest request, HttpContext ctx, AppDbContext db) =>
 {
+    if (RejectIfUploadTooLarge(request) is { } tooLarge) return tooLarge;
+
     int userId = CurrentUserId(ctx, UserIdClaimType);
     var form = await request.ReadFormAsync();
     var file = form.Files["file"];
     if (file is not { Length: > 0 }) return Results.BadRequest(new { error = "Provide a \"file\" (PDF) field." });
+    if (file.Length > PdfTextExtractor.MaxPdfBytes) return TooLargeError();
 
     var profile = await db.UserProfiles.FindAsync(userId);
     if (profile is null) return Results.NotFound();
 
     using var ms = new MemoryStream();
     await file.CopyToAsync(ms);
-    profile.ResumePdf = ms.ToArray();
+    var bytes = ms.ToArray();
+
+    // Server-side content-sniffing, not extension/Content-Type trust (both are attacker-
+    // controlled) — verifies the actual bytes are a well-formed, resume-sized PDF (magic
+    // bytes, parses cleanly, plausible page count, bounded parse time) before it's persisted.
+    // The extracted text itself is discarded here; this endpoint only stores the raw PDF.
+    try
+    {
+        await PdfTextExtractor.ExtractTextAsync(bytes);
+    }
+    catch (PdfTextExtractionException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+
+    profile.ResumePdf = bytes;
     await db.SaveChangesAsync();
 
     return Results.Ok();
@@ -2155,6 +2188,19 @@ static async Task<(string? PostingText, string EvalJson, string? Company, string
         return (null, evalJson, null, "Could not fetch the posting and no cached copy is available. Retry with postingText.");
     }
 }
+
+// Used by the two resume upload endpoints. Checked against the request's declared
+// Content-Length before ReadFormAsync is ever called — that call buffers the entire multipart
+// body, so this rejects an oversized upload without buffering it, ahead of (not instead of)
+// the Kestrel-level MaxRequestBodySize guard that already bounds the connection to the same
+// limit as bytes stream in. Content-Length is attacker-suppliable, so this is a fast, friendly
+// early exit, not the only enforcement — Kestrel's transport-level limit is what actually
+// can't be bypassed by lying about the header.
+static IResult? RejectIfUploadTooLarge(HttpRequest request) =>
+    request.ContentLength > PdfTextExtractor.MaxPdfBytes ? TooLargeError() : null;
+
+static IResult TooLargeError() =>
+    Results.BadRequest(new { error = $"This PDF is too large — the max is {PdfTextExtractor.MaxPdfBytes / 1_000_000}MB." });
 
 static int CurrentUserId(HttpContext ctx, string claimType)
 {
