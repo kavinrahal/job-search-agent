@@ -47,13 +47,16 @@ public class EmergencyModel : PageModel
         await LoadDisplayDataAsync();
     }
 
-    public async Task<IActionResult> OnPostAdjustCreditAsync(int targetUserId, int amount, string? confirmText)
+    public async Task<IActionResult> OnPostAdjustCreditAsync(string targetUserEmail, int amount, string? confirmText)
     {
         if (!ConfirmTextValidator.IsValid(confirmText))
             return await Invalid();
 
-        var user = await _writeDb.Users.FindAsync(targetUserId);
-        if (user is null) return await Invalid($"No user with id {targetUserId}.");
+        // Same normalization convention as UserProvisioningService.GetOrCreateAsync, so a
+        // pasted email matches regardless of case/whitespace the way sign-in itself would.
+        var email = targetUserEmail.Trim().ToLowerInvariant();
+        var user = await _writeDb.Users.SingleOrDefaultAsync(u => u.Email == email);
+        if (user is null) return await Invalid($"No user with email {email}.");
 
         var before = user.CreditBalance;
         // Floored at zero — a negative balance has no meaning anywhere else in the app
@@ -61,10 +64,10 @@ public class EmergencyModel : PageModel
         user.CreditBalance = Math.Max(0, user.CreditBalance + amount);
         user.CreditVersion += 1; // same convention as CreditService's own writes to this field
 
-        await AdminAuditService.LogAsync(_writeDb, AdminAuditActions.CreditAdjust, targetUserId,
+        await AdminAuditService.LogAsync(_writeDb, AdminAuditActions.CreditAdjust, user.Id,
             $"creditBalance: {before} -> {user.CreditBalance} (delta {amount:+0;-0;0})");
 
-        return Success($"Adjusted credit balance for user {targetUserId}: {before} -> {user.CreditBalance}.");
+        return Success($"Adjusted credit balance for {email} (id {user.Id}): {before} -> {user.CreditBalance}.");
     }
 
     public async Task<IActionResult> OnPostChangeTierAsync(int targetUserId, string newTier, string? confirmText)
