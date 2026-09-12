@@ -157,18 +157,81 @@ public class CvTailorAgentTests
         Assert.Contains("Acme", prompt);
     }
 
-    // Documents the intentional asymmetry: ReviseAsync (the other BuildSystemPrompt caller) passes
-    // true, because its free-text revision output is persisted as the final resume verbatim — see
-    // BuildSystemPrompt's own comment for why contact info can't be redacted there too.
+    // BuildRevisionSystemPrompt backs ReviseAsync — the fix for the CV-revision-flow finding
+    // ("ReviseAsync still lets contact info flow through to Claude"). Unlike GenerateAsync's
+    // BuildSystemPrompt(includeContactInfo: false), the name must survive (needed to keep
+    // personalizing the header the model reproduces), but email/phone/location/linkedin/github
+    // must not reach Claude any more than they do for first-generation tailoring.
     [Fact]
-    public void BuildSystemPrompt_IncludeContactInfoTrue_ContainsContactFields()
+    public void BuildRevisionSystemPrompt_NeverContainsContactFieldsButKeepsName()
     {
         var agent = new CvTailorAgent("test-key");
 
-        var prompt = agent.BuildSystemPrompt(ContactBackground, ContactBackgroundYaml, BaseResume(), includeContactInfo: true);
+        var prompt = agent.BuildRevisionSystemPrompt(ContactBackground, ContactBackgroundYaml, BaseResume());
 
+        Assert.DoesNotContain("jordan.rivers@example.com", prompt);
+        Assert.DoesNotContain("555-0199", prompt);
+        Assert.DoesNotContain("Springfield, IL", prompt);
+        Assert.DoesNotContain("linkedin.com/in/jordanrivers", prompt);
+        Assert.DoesNotContain("github.com/jordanrivers", prompt);
+        // Name still appears (needed for the header/personalization) and content still flows.
         Assert.Contains("Jordan Rivers", prompt);
-        Assert.Contains("jordan.rivers@example.com", prompt);
+        Assert.Contains("Acme", prompt);
+    }
+
+    [Fact]
+    public void WithRedactedContact_KeepsNameAndContentBlanksOtherContactFields()
+    {
+        var redacted = CvTailorAgent.WithRedactedContact(ContactBackground);
+
+        Assert.Equal("Jordan Rivers", redacted.Personal.Name);
+        Assert.Equal("", redacted.Personal.Email);
+        Assert.Equal("", redacted.Personal.Phone);
+        Assert.Equal("", redacted.Personal.Location);
+        Assert.Equal("", redacted.Personal.Linkedin);
+        Assert.Equal("", redacted.Personal.Github);
+        Assert.Same(ContactBackground.Experience, redacted.Experience);
+    }
+
+    // RestoreContactLine backs ReviseAsync's post-processing step: since the model never sees the
+    // candidate's real contact fields (BuildRevisionSystemPrompt), whatever it reproduces in that
+    // region of its raw output is replaced wholesale with the real, deterministically-rendered
+    // contact line before the text is persisted as the final resume.
+    [Fact]
+    public void RestoreContactLine_BlankContactRegion_InsertsRealContactLine()
+    {
+        var revised = "# Jordan Rivers\n\n\n\n## Summary\n\nA tailored summary.\n";
+
+        var restored = CvTailorAgent.RestoreContactLine(revised, ContactBackground.Personal);
+
+        Assert.Contains("jordan.rivers@example.com | 555-0199 | Springfield, IL | linkedin.com/in/jordanrivers | github.com/jordanrivers", restored);
+        Assert.Contains("## Summary", restored);
+        Assert.Contains("A tailored summary.", restored);
+        Assert.StartsWith("# Jordan Rivers", restored);
+    }
+
+    [Fact]
+    public void RestoreContactLine_ModelEchoedSomethingInContactRegion_StillReplacedWithRealLine()
+    {
+        // Even if the model reproduces something other than blank in the contact region (it was
+        // never shown the real value, so anything there is not the candidate's real contact info),
+        // the real line still wins.
+        var revised = "# Jordan Rivers\n\ncontact info unavailable\n\n## Summary\n\nSummary text.\n";
+
+        var restored = CvTailorAgent.RestoreContactLine(revised, ContactBackground.Personal);
+
+        Assert.DoesNotContain("contact info unavailable", restored);
+        Assert.Contains("jordan.rivers@example.com", restored);
+    }
+
+    [Fact]
+    public void RestoreContactLine_NotWellFormed_ReturnsUnchanged()
+    {
+        var malformed = "Sorry, I can't help with that.";
+
+        var restored = CvTailorAgent.RestoreContactLine(malformed, ContactBackground.Personal);
+
+        Assert.Equal(malformed, restored);
     }
 
     // Regression test for the CV-tailoring hardening finding: extra_achievements/extra_highlights

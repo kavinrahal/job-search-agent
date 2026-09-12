@@ -54,3 +54,61 @@ public class AccuracyVerifierAgentTests
         Assert.Equal(["Real claim"], AccuracyVerifierAgent.ExtractFlaggedClaims(input));
     }
 }
+
+// Tests AccuracyVerifierSourceMaterial — the fix for the "AccuracyVerifierAgent's source material
+// still includes full unredacted contact info" finding. Every Program.cs call site used to
+// interpolate profile.Background (raw yaml, contact fields included) straight into the string
+// sent to Claude for verification; these assert the redaction actually happens, same pattern as
+// BackgroundYamlParserTests' StripPersonalSection coverage.
+public class AccuracyVerifierSourceMaterialTests
+{
+    private const string BackgroundYaml = """
+        personal:
+          name: Jordan Rivers
+          email: jordan.rivers@example.com
+          phone: "555-0199"
+          location: Springfield, IL
+          linkedin: linkedin.com/in/jordanrivers
+          github: github.com/jordanrivers
+        experience:
+          - company: Acme
+            role: Engineer
+        """;
+
+    private static UserResume BaseResume() => new()
+    {
+        Summary = "A summary.",
+        SectionConfigJson = "[]",
+        ExperienceOverridesJson = "[]",
+        SkillsSectionJson = "[]",
+        ProjectOverridesJson = "[]",
+    };
+
+    [Fact]
+    public void ForCv_RedactsContactFieldsFromBothBackgroundAndRenderedBaseCv()
+    {
+        var sourceMaterial = AccuracyVerifierSourceMaterial.ForCv(BackgroundYaml, BaseResume());
+
+        Assert.DoesNotContain("jordan.rivers@example.com", sourceMaterial);
+        Assert.DoesNotContain("555-0199", sourceMaterial);
+        Assert.DoesNotContain("Springfield, IL", sourceMaterial);
+        Assert.DoesNotContain("linkedin.com/in/jordanrivers", sourceMaterial);
+        Assert.DoesNotContain("github.com/jordanrivers", sourceMaterial);
+        // The content verification actually needs still made it through.
+        Assert.Contains("Acme", sourceMaterial);
+        Assert.Contains("--- BASE CV ---", sourceMaterial);
+    }
+
+    [Fact]
+    public void ForBackgroundOnly_RedactsContactFields()
+    {
+        var sourceMaterial = AccuracyVerifierSourceMaterial.ForBackgroundOnly(BackgroundYaml);
+
+        Assert.DoesNotContain("jordan.rivers@example.com", sourceMaterial);
+        Assert.DoesNotContain("555-0199", sourceMaterial);
+        Assert.DoesNotContain("Springfield, IL", sourceMaterial);
+        Assert.DoesNotContain("linkedin.com/in/jordanrivers", sourceMaterial);
+        Assert.DoesNotContain("github.com/jordanrivers", sourceMaterial);
+        Assert.Contains("Acme", sourceMaterial);
+    }
+}

@@ -132,6 +132,74 @@ public class CvTailorAgent
         {ResumeRenderer.Render(background, resume, isPromptContext: true, includeContactInfo: includeContactInfo)}
         """;
 
+    // ReviseAsync's own prompt builder, not a third includeContactInfo value on BuildSystemPrompt
+    // above: revision needs a header shown (so the model has a "CURRENT RESUME" shape to
+    // reproduce — see tailor_cv.md's revision contract), but must never see the candidate's real
+    // email/phone/location/linkedin/github. WithRedactedContact keeps Name (needed for
+    // personalization and so the header the model reproduces isn't itself misleading) but blanks
+    // every other PersonalInfo field before rendering CURRENT RESUME; the BACKGROUND yaml's
+    // personal block is stripped entirely, same as GenerateAsync, since revision never needs to
+    // read contact fields to act on feedback. ReviseAsync splices the real contact line back into
+    // whatever the model returns afterward — see RestoreContactLine.
+    internal string BuildRevisionSystemPrompt(BackgroundData background, string backgroundYaml, UserResume resume) => $"""
+        {_skillText}
+
+        --- BACKGROUND ---
+        {BackgroundYamlParser.StripPersonalSection(backgroundYaml)}
+
+        --- CURRENT RESUME ---
+        {ResumeRenderer.Render(WithRedactedContact(background), resume, isPromptContext: true, includeContactInfo: true)}
+        """;
+
+    // internal, not private: CvTailorAgentTests asserts on this directly, same rationale as
+    // BuildSystemPrompt/BuildRevisionSystemPrompt above. Shares every list reference with the
+    // original background — only Personal is replaced — since none of the section renderers
+    // (Experience/Education/Projects/etc.) read contact fields, so nothing else needs copying.
+    internal static BackgroundData WithRedactedContact(BackgroundData background) => new()
+    {
+        Version = background.Version,
+        Personal = new PersonalInfo { Name = background.Personal.Name },
+        Experience = background.Experience,
+        Education = background.Education,
+        Projects = background.Projects,
+        Credentials = background.Credentials,
+        Publications = background.Publications,
+        Volunteering = background.Volunteering,
+    };
+
+    // Splices the candidate's real, deterministically-rendered contact line back into
+    // ReviseAsync's raw model output. The prompt never shows Claude real contact fields (see
+    // BuildRevisionSystemPrompt), only the candidate's name, so whatever the model reproduces
+    // between the "# {Name}" header and the first "## " section heading is either blank or
+    // otherwise not the real contact line — replace that whole region rather than trying to
+    // pattern-match a specific placeholder string, since that doesn't depend on the model
+    // preserving exact blank-line whitespace. Anchored on the first "## " because
+    // ResumeRenderer.Render's prompt-context output always opens its first section with one (see
+    // Render: isPromptContext forces a "## Summary" heading even for a blank summary), so this
+    // holds regardless of which sections a given resume actually includes.
+    //
+    // If revisedText isn't well-formed (doesn't start with "# "), it's returned unchanged —
+    // CvRevisionOutputValidator.LooksLikeRevisedResume rejects that shape anyway, so there's
+    // nothing useful to restore into.
+    internal static string RestoreContactLine(string revisedText, PersonalInfo personal)
+    {
+        if (string.IsNullOrEmpty(revisedText) || !revisedText.StartsWith("# ", StringComparison.Ordinal))
+            return revisedText;
+
+        var headerEnd = revisedText.IndexOf('\n');
+        if (headerEnd < 0) return revisedText;
+
+        var header = revisedText[..headerEnd];
+        var rest = revisedText[(headerEnd + 1)..];
+
+        var sectionIndex = rest.IndexOf("## ", StringComparison.Ordinal);
+        var body = sectionIndex >= 0 ? rest[sectionIndex..] : rest.TrimStart('\n');
+
+        var contactLine = ResumeRenderer.ContactLine(personal);
+        var contactBlock = string.IsNullOrEmpty(contactLine) ? "" : contactLine + "\n\n";
+        return $"{header}\n\n{contactBlock}{body}";
+    }
+
     public static string BuildInitialUserContent(string postingText, string evaluationJson) => $"""
         Job posting:
         {postingText}
@@ -187,7 +255,7 @@ public class CvTailorAgent
             MaxTokens = 4000,
             System = new List<TextBlockParam>
             {
-                new() { Text = BuildSystemPrompt(background, profile.Background, resume, includeContactInfo: true), CacheControl = new CacheControlEphemeral() },
+                new() { Text = BuildRevisionSystemPrompt(background, profile.Background, resume), CacheControl = new CacheControlEphemeral() },
             },
             Messages = history.ToMessages(),
         });
@@ -195,7 +263,7 @@ public class CvTailorAgent
         if (_usageLogger is not null)
             await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CvTailorAgent, OpusModel, response.Usage, _skillVersion);
 
-        return ExtractText(response.Content);
+        return RestoreContactLine(ExtractText(response.Content), background.Personal);
     }
 
     private Task<IReadOnlyDictionary<string, JsonElement>> CallAsync(int userId, string systemPrompt, string userContent, Tool tool, int maxTokens) =>
