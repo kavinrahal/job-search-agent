@@ -1,0 +1,418 @@
+[
+  {
+    "id": "app_confirm_01",
+    "from": "noreply@myworkday.com",
+    "subject": "Your application to Acme Software has been received",
+    "body": "Thank you for applying for the Backend Software Engineer position at Acme Software. Our recruiting team will review your application and reach out if there is a match. You can check your application status at any time in your candidate portal.",
+    "expected_category": "application_confirmation",
+    "notes": "Standard ATS auto-confirmation."
+  },
+  {
+    "id": "app_confirm_02",
+    "from": "hello@nimbusdata.io",
+    "subject": "We've got your application!",
+    "body": "Hi there, just a quick note to say we've received your application for the Platform Engineer role. We review every application personally, which takes about two weeks. We'll be in touch either way.",
+    "expected_category": "application_confirmation",
+    "notes": "Mentions a timeline but no action is required from the candidate -- should not be read as follow_up_needed."
+  },
+  {
+    "id": "app_confirm_03",
+    "from": "careers@brightpathrobotics.com",
+    "subject": "Application received - Senior QA Engineer",
+    "body": "This confirms we have received your application materials for the Senior QA Engineer opening. Due to volume we are unable to respond to every applicant individually, but rest assured your application is in our system.",
+    "expected_category": "application_confirmation",
+    "notes": "Soft disclaimer about not responding to everyone; still just a confirmation, not a rejection."
+  },
+  {
+    "id": "app_confirm_04",
+    "from": "talent@harboranalytics.com",
+    "subject": "Thanks for applying, Jordan",
+    "body": "Thanks for your interest in the Data Analyst role at Harbor Analytics. We're currently reviewing applications and will follow up within 10 business days if we'd like to move forward.",
+    "expected_category": "application_confirmation",
+    "notes": "Personalized, informal confirmation from a small company."
+  },
+  {
+    "id": "app_confirm_05",
+    "from": "no-reply@greenhouse.io",
+    "subject": "Application Submitted: Site Reliability Engineer at Cascade Cloud",
+    "body": "Your application for Site Reliability Engineer at Cascade Cloud was submitted successfully. A member of the Cascade Cloud team will review your profile.",
+    "expected_category": "application_confirmation",
+    "notes": "Greenhouse-style automated submission receipt."
+  },
+  {
+    "id": "rejection_01",
+    "from": "recruiting@lumenfintech.com",
+    "subject": "Update on your application - Software Engineer",
+    "body": "Thank you for taking the time to interview with Lumen Fintech. After careful consideration, we've decided to move forward with other candidates whose experience more closely matches our current needs. We wish you the best in your search.",
+    "expected_category": "rejection",
+    "notes": "Classic post-interview rejection."
+  },
+  {
+    "id": "rejection_02",
+    "from": "no-reply@ashbyhq.com",
+    "subject": "Your application status has changed",
+    "body": "Unfortunately, we will not be moving forward with your application for the Frontend Engineer role at Pinecrest Labs at this time. Thank you for your interest.",
+    "expected_category": "rejection",
+    "notes": "Automated ATS rejection after initial screen."
+  },
+  {
+    "id": "rejection_03",
+    "from": "hiring@stellarworks.co",
+    "subject": "Following up on your interview",
+    "body": "It was a pleasure speaking with you last week. While we won't be proceeding with your candidacy for this particular role, we were genuinely impressed by your background and would encourage you to apply again for future openings that fit your skill set.",
+    "expected_category": "rejection",
+    "notes": "Ambiguous trap: warm tone and 'encourage you to apply' could read like follow_up_needed or recruiter_outreach, but it's still a rejection for the current role."
+  },
+  {
+    "id": "rejection_04",
+    "from": "jobs-noreply@linkedin.com",
+    "subject": "Update on your application to Delta Robotics",
+    "body": "Your application status has changed: Not selected. Delta Robotics has decided to move forward with other candidates for the Mechanical Engineer role. View more jobs like this on LinkedIn.",
+    "expected_category": "rejection",
+    "notes": "Ambiguous trap: comes from a platform (LinkedIn) the way job_alert emails do, but it is a status update on a specific application, not a digest of new postings."
+  },
+  {
+    "id": "rejection_05",
+    "from": "talent.acquisition@vertexhealth.com",
+    "subject": "Regarding your final-round interview",
+    "body": "Thank you for meeting with our leadership team last Thursday. We were impressed by your technical depth and communication skills, and this was a difficult decision. However, we have chosen to offer the role to another candidate whose experience aligns slightly more closely with our immediate needs.",
+    "expected_category": "rejection",
+    "notes": "Long, personalized final-round rejection; the word 'offer' appears but refers to the other candidate's offer, not the reader's."
+  },
+  {
+    "id": "rejection_06",
+    "from": "people@fernwoodstudio.com",
+    "subject": "Your application to Fernwood Studio",
+    "body": "We've decided not to move forward with your application for the Product Designer role. That said, we're growing quickly and would love for you to keep an eye on our careers page for roles that might be a better fit down the line.",
+    "expected_category": "rejection",
+    "notes": "Trap: invitation to watch future openings could read as recruiter_outreach or job_alert, but the email's core content is a decline for the current application."
+  },
+  {
+    "id": "interview_invite_01",
+    "from": "recruiting@orbitpayments.com",
+    "subject": "Next steps: phone screen with Orbit Payments",
+    "body": "We'd like to invite you to a 30-minute phone screen for the Backend Engineer role. Please let us know your availability over the next week and we'll get something on the calendar.",
+    "expected_category": "interview_invitation",
+    "notes": "Formal invite to a first-stage interview."
+  },
+  {
+    "id": "interview_invite_02",
+    "from": "sam.rivera@driftwoodgames.com",
+    "subject": "quick chat this week?",
+    "body": "Hey! Really enjoyed reading through your application for the Gameplay Engineer role. Got 20 minutes this week for a quick call so I can tell you more about the team and hear about your background?",
+    "expected_category": "interview_invitation",
+    "notes": "Ambiguous trap: informal tone and 'quick call' phrasing could look like recruiter_outreach, but this is a hiring manager following up on an application already submitted, i.e. the first interview stage."
+  },
+  {
+    "id": "interview_invite_03",
+    "from": "careers@ironclad-systems.com",
+    "subject": "Invitation: Technical Interview - Ironclad Systems",
+    "body": "Congratulations on making it to the technical interview stage for the Platform Engineer role! This will be a 60-minute live coding session with two of our senior engineers. Please reply with your availability for next week.",
+    "expected_category": "interview_invitation",
+    "notes": "Live technical interview, distinct from a take-home assessment (which is follow_up_needed)."
+  },
+  {
+    "id": "interview_invite_04",
+    "from": "hr@summitventures.com",
+    "subject": "Final round - Summit Ventures",
+    "body": "You've been selected to move to our final round panel interview, meeting with three members of the engineering leadership team. This will be held on-site at our Melbourne office.",
+    "expected_category": "interview_invitation",
+    "notes": "Final-stage panel interview invite."
+  },
+  {
+    "id": "interview_invite_05",
+    "from": "notifications@greenhouse.io",
+    "subject": "Schedule your interview with Cobalt Analytics",
+    "body": "Cobalt Analytics has invited you to a first-round interview for the Data Engineer position. Use the link below to pick a time that works for you over the next two weeks.",
+    "expected_category": "interview_invitation",
+    "notes": "Ambiguous trap: bundles a new interview-stage invitation with a self-service scheduling link, overlapping with scheduling_request. Classified as interview_invitation because it introduces a new interview stage, not just logistics for an already-agreed call."
+  },
+  {
+    "id": "interview_invite_06",
+    "from": "agency@talentbridge.com.au",
+    "subject": "Interview lined up for you at Redshift Media",
+    "body": "Good news, Redshift Media would like to bring you in for an interview for the Software Engineer role I put you forward for. Let me know a couple of times that suit you this week and I'll confirm with them.",
+    "expected_category": "interview_invitation",
+    "notes": "Recruiter forwarding an interview invite on behalf of the hiring company, informal tone."
+  },
+  {
+    "id": "recruiter_outreach_01",
+    "from": "j.chen@talentscoutpartners.com",
+    "subject": "Your profile caught my eye",
+    "body": "Hi, I came across your profile and think you'd be a great fit for a Senior Backend Engineer opening with one of our clients, a growing fintech in Melbourne. Would you be open to a quick chat about it?",
+    "expected_category": "recruiter_outreach",
+    "notes": "Classic unsolicited recruiter cold email."
+  },
+  {
+    "id": "recruiter_outreach_02",
+    "from": "info@apex-executive-search.com",
+    "subject": "Opportunity matching your background",
+    "body": "We're an executive search firm working with a mid-size logistics company looking for a Staff Engineer. Your background in distributed systems stood out to us. Interested in hearing more?",
+    "expected_category": "recruiter_outreach",
+    "notes": "Boutique headhunter, specific role match."
+  },
+  {
+    "id": "recruiter_outreach_03",
+    "from": "noreply@inmail-hit-reply.linkedin.com",
+    "subject": "Priya Sharma sent you an InMail: Exciting Engineer role",
+    "body": "Hi, I'm hiring for a Software Engineer role at a Series B startup and think your experience is a strong match. Happy to share more details if you're open to exploring.",
+    "expected_category": "recruiter_outreach",
+    "notes": "LinkedIn InMail forwarded as email."
+  },
+  {
+    "id": "recruiter_outreach_04",
+    "from": "connect@brightfuturestaffing.com",
+    "subject": "Dear Candidate, exciting roles available",
+    "body": "Dear Candidate, We have multiple exciting Software Engineer opportunities with top companies in your area. If you are actively looking, please reply with your updated resume and we will match you with a role. Regards, Talent Team.",
+    "expected_category": "recruiter_outreach",
+    "notes": "Ambiguous trap: generic, bulk-sounding 'Dear Candidate' phrasing could look like spam, but the content is genuine recruitment outreach, not marketing."
+  },
+  {
+    "id": "recruiter_outreach_05",
+    "from": "recruiter@northstartech.com",
+    "subject": "Opportunity at Northstar Tech",
+    "body": "Hello, we have an opening for a Software Engineer that could be a good match for your skill set. Let me know if you'd like to learn more about the role and the team.",
+    "expected_category": "recruiter_outreach",
+    "notes": "Short, templated recruiter pitch with light detail; still genuine job-related outreach, not not_relevant."
+  },
+  {
+    "id": "recruiter_outreach_06",
+    "from": "team@velocitystaffinggroup.com",
+    "subject": "We have an opportunity that matches your background",
+    "body": "We work with several engineering teams that are actively hiring Backend and Platform Engineers right now. If you're open to exploring new roles, reply and we'll set up a short intro call to understand what you're looking for.",
+    "expected_category": "recruiter_outreach",
+    "notes": "Staffing agency outreach without naming a specific client company yet."
+  },
+  {
+    "id": "scheduling_01",
+    "from": "scheduling@orbitpayments.com",
+    "subject": "Book your phone screen with Orbit Payments",
+    "body": "Please use the link below to book a 30-minute phone screen at a time that works for you: [scheduling link]. Looking forward to speaking with you.",
+    "expected_category": "scheduling_request",
+    "notes": "Pure logistics for an already-agreed interview stage."
+  },
+  {
+    "id": "scheduling_02",
+    "from": "amelia@fernwoodstudio.com",
+    "subject": "Finding a time to talk",
+    "body": "What times are you available this week or next for a 20-minute call? Happy to work around your schedule.",
+    "expected_category": "scheduling_request",
+    "notes": "Plain-text scheduling request from a hiring manager, no new role information."
+  },
+  {
+    "id": "scheduling_03",
+    "from": "notifications@calendly.com",
+    "subject": "Cascade Cloud wants to schedule time with you",
+    "body": "Cascade Cloud has requested a meeting. Please select an available time slot using the link below to confirm your interview.",
+    "expected_category": "scheduling_request",
+    "notes": "Automated scheduling-tool notification."
+  },
+  {
+    "id": "scheduling_04",
+    "from": "hr@vertexhealth.com",
+    "subject": "Need to reschedule our call",
+    "body": "Something has come up on our end and we need to move your interview scheduled for Thursday. Could you let us know a couple of alternate times that work for you this week?",
+    "expected_category": "scheduling_request",
+    "notes": "Rescheduling an already-arranged interview, still pure logistics."
+  },
+  {
+    "id": "scheduling_05",
+    "from": "talent@summitventures.com",
+    "subject": "Confirming your interview time",
+    "body": "Just confirming we've booked your panel interview for Tuesday at 10am AEST. You'll receive a calendar invite shortly with the video call link.",
+    "expected_category": "scheduling_request",
+    "notes": "Confirmation of a specific already-agreed time, not a request for new logistics but still purely scheduling-related, no new stage introduced."
+  },
+  {
+    "id": "offer_01",
+    "from": "hr@orbitpayments.com",
+    "subject": "Your offer from Orbit Payments",
+    "body": "We're pleased to offer you the position of Backend Engineer at Orbit Payments. Please find the attached offer letter with details on compensation, start date, and benefits. Let us know if you have any questions.",
+    "expected_category": "offer",
+    "notes": "Formal written offer letter."
+  },
+  {
+    "id": "offer_02",
+    "from": "sam.rivera@driftwoodgames.com",
+    "subject": "We'd love to have you join us!",
+    "body": "It's official, we'd like to extend an offer of employment for the Gameplay Engineer role! I'll send the formal paperwork shortly, but wanted to share the good news first.",
+    "expected_category": "offer",
+    "notes": "Informal notification of an employment offer ahead of the formal letter."
+  },
+  {
+    "id": "offer_03",
+    "from": "talent@northstartech.com",
+    "subject": "Verbal offer - Northstar Tech",
+    "body": "Following today's call, we'd like to make you a verbal offer for the Software Engineer position. HR will follow up with the formal written offer within the next few days.",
+    "expected_category": "offer",
+    "notes": "Verbal offer notification, formal letter still pending."
+  },
+  {
+    "id": "offer_04",
+    "from": "hr@cascadecloud.com",
+    "subject": "Offer details and next steps",
+    "body": "As discussed, we're moving forward with an offer for the Site Reliability Engineer role. Attached is the compensation breakdown. Let's set up a time to discuss and answer any questions before you sign.",
+    "expected_category": "offer",
+    "notes": "Offer plus negotiation next steps, still fundamentally an offer email."
+  },
+  {
+    "id": "offer_05",
+    "from": "j.chen@talentscoutpartners.com",
+    "subject": "Great news from Redshift Media",
+    "body": "Redshift Media loved your interviews and would like to move forward with an offer. Let's jump on a call to talk through compensation before we send the formal paperwork.",
+    "expected_category": "offer",
+    "notes": "Ambiguous trap: comes via a third-party recruiter and is conversational rather than a formal letter, but it is unambiguously an employment offer, not recruiter_outreach for a new role."
+  },
+  {
+    "id": "followup_01",
+    "from": "no-reply@hackerrank.com",
+    "subject": "Complete your coding challenge for Ironclad Systems",
+    "body": "Ironclad Systems has invited you to complete a take-home coding assessment. You have 5 days to complete the challenge from when you start it. Click below to begin.",
+    "expected_category": "follow_up_needed",
+    "notes": "Take-home assessment requiring candidate action; distinct from a live interview_invitation."
+  },
+  {
+    "id": "followup_02",
+    "from": "hr@lumenfintech.com",
+    "subject": "Reference check - Lumen Fintech",
+    "body": "As we move forward in the process, could you please send over the contact details for two professional references? We'd like to reach out to them this week.",
+    "expected_category": "follow_up_needed",
+    "notes": "Request for references, action required from candidate."
+  },
+  {
+    "id": "followup_03",
+    "from": "onboarding@vertexhealth.com",
+    "subject": "A few more documents needed",
+    "body": "To proceed with your background check, we'll need a copy of your photo ID and proof of your right to work. Please upload these to the portal at your earliest convenience.",
+    "expected_category": "follow_up_needed",
+    "notes": "Document request tied to hiring process."
+  },
+  {
+    "id": "followup_04",
+    "from": "amelia@fernwoodstudio.com",
+    "subject": "Checking in",
+    "body": "Just following up, have you had a chance to look at the design exercise we sent over last week? No rush, just want to make sure it didn't get lost in your inbox.",
+    "expected_category": "follow_up_needed",
+    "notes": "Gentle nudge about a pending action item, not a new invitation or rejection."
+  },
+  {
+    "id": "followup_05",
+    "from": "talent@brightpathrobotics.com",
+    "subject": "Portfolio samples needed",
+    "body": "Before we schedule the next round, could you send over a couple of recent code samples or a link to your GitHub? This will help the panel prepare for your interview.",
+    "expected_category": "follow_up_needed",
+    "notes": "Request for work samples ahead of next stage."
+  },
+  {
+    "id": "job_alert_01",
+    "from": "jobalerts-noreply@seek.com.au",
+    "subject": "5 new jobs for your saved search: Software Engineer Melbourne",
+    "body": "Here are the latest jobs matching your saved search 'Software Engineer, Melbourne'. Backend Engineer at Acme Software. Full Stack Developer at Nimbus Data. View all 5 new matches on Seek.",
+    "expected_category": "job_alert",
+    "notes": "Standard automated digest from a job board."
+  },
+  {
+    "id": "job_alert_02",
+    "from": "jobalerts-noreply@linkedin.com",
+    "subject": "New jobs matching your search: Backend Engineer",
+    "body": "3 new jobs match your search. Platform Engineer at Cascade Cloud. Backend Engineer at Orbit Payments. Senior Software Engineer at Delta Robotics. See all jobs on LinkedIn.",
+    "expected_category": "job_alert",
+    "notes": "LinkedIn saved-search digest."
+  },
+  {
+    "id": "job_alert_03",
+    "from": "alerts@indeed.com",
+    "subject": "New: Software Engineer jobs in Melbourne VIC",
+    "body": "New jobs posted this week that match your search. See the latest Software Engineer listings in Melbourne, VIC on Indeed.",
+    "expected_category": "job_alert",
+    "notes": "Indeed weekly digest."
+  },
+  {
+    "id": "job_alert_04",
+    "from": "jobalerts-noreply@seek.com.au",
+    "subject": "No new jobs this week for your saved search",
+    "body": "There were no new job postings matching your saved search 'Backend Engineer, Melbourne' this week. We'll keep looking and notify you as soon as something new comes up.",
+    "expected_category": "job_alert",
+    "notes": "Ambiguous trap: 'no new jobs' could read like a rejection or not_relevant, but this is still an automated saved-search digest from a job board, just an empty one."
+  },
+  {
+    "id": "job_alert_05",
+    "from": "jobalerts-noreply@linkedin.com",
+    "subject": "Jobs similar to ones you've viewed",
+    "body": "Software Engineer at Fernwood Studio - closed. QA Engineer at Ironclad Systems - actively hiring. See more recommended jobs based on your activity.",
+    "expected_category": "job_alert",
+    "notes": "Ambiguous trap: one listing is marked 'closed', which could look like a rejection notice, but the whole email is still a platform-generated recommendation digest, not a status update on the reader's own application."
+  },
+  {
+    "id": "job_alert_06",
+    "from": "alerts@jora.com",
+    "subject": "New jobs for your search: Software Engineer",
+    "body": "6 new jobs match your saved search on Jora, including roles at Harbor Analytics and Stellar Works. Click to view full listings.",
+    "expected_category": "job_alert",
+    "notes": "Jora job alert digest."
+  },
+  {
+    "id": "not_relevant_01",
+    "from": "deals@outdoorgearco.com",
+    "subject": "Special Offer: 20% off all hiking boots this weekend",
+    "body": "Don't miss our exclusive members offer, 20% off all hiking boots and outdoor gear this weekend only. Shop now before it's gone!",
+    "expected_category": "not_relevant",
+    "notes": "Trap: retail marketing email using the word 'offer', not an employment offer."
+  },
+  {
+    "id": "not_relevant_02",
+    "from": "statements@commonwealthbank.com.au",
+    "subject": "Your monthly account statement is ready",
+    "body": "Your account statement for the period ending this month is now available to view in the app. Log in to review your recent transactions.",
+    "expected_category": "not_relevant",
+    "notes": "Bank statement notification."
+  },
+  {
+    "id": "not_relevant_03",
+    "from": "digest@devweekly.io",
+    "subject": "This week in software engineering",
+    "body": "This week: a deep dive on distributed tracing, a new release of a popular ORM, and five links worth your time. Read on for the full roundup.",
+    "expected_category": "not_relevant",
+    "notes": "Tech newsletter, not job-search related despite engineering subject matter."
+  },
+  {
+    "id": "not_relevant_04",
+    "from": "priya.k@personalmail.com",
+    "subject": "Dinner Saturday?",
+    "body": "Hey, are you still free for dinner on Saturday? Let me know what time works and I'll book somewhere.",
+    "expected_category": "not_relevant",
+    "notes": "Personal correspondence."
+  },
+  {
+    "id": "not_relevant_05",
+    "from": "billing@cloudtoolsuite.com",
+    "subject": "Your subscription renews soon",
+    "body": "Your annual subscription to Cloud Tool Suite Pro will renew automatically in 7 days. No action is needed if you'd like to continue your subscription.",
+    "expected_category": "not_relevant",
+    "notes": "Subscription/billing notice."
+  },
+  {
+    "id": "not_relevant_06",
+    "from": "notifications@linkedin.com",
+    "subject": "Someone commented on your post",
+    "body": "A connection commented on your recent post. Log in to LinkedIn to see what they said and reply.",
+    "expected_category": "not_relevant",
+    "notes": "Social notification, not an application-related digest or outreach."
+  },
+  {
+    "id": "not_relevant_07",
+    "from": "admissions@codeacceleratebootcamp.com",
+    "subject": "An opportunity to accelerate your engineering career",
+    "body": "We have an exciting opportunity for engineers looking to level up: our 12-week advanced backend bootcamp. Enrollment is limited, apply today to secure your spot and unlock new career opportunities.",
+    "expected_category": "not_relevant",
+    "notes": "Trap: uses recruiter-outreach-style language ('opportunity', 'apply today') but is actually paid course marketing, not a real employment lead."
+  },
+  {
+    "id": "not_relevant_08",
+    "from": "loyalty@shopbrandco.com",
+    "subject": "Sorry to see you go",
+    "body": "We're sorry to let you know our loyalty rewards program is closing at the end of the month. Any unused points will expire on that date, so be sure to redeem them soon.",
+    "expected_category": "not_relevant",
+    "notes": "Trap: apologetic 'sorry' tone could pattern-match to a rejection, but it's an unrelated retail loyalty-program notice."
+  }
+]
