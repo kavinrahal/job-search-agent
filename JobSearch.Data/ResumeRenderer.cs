@@ -54,10 +54,13 @@ public static class ResumeRenderer
     // model never needs contact info to phrase a bullet, and the final render always splices real
     // contact info in afterward from this same BackgroundData, not from anything the model
     // returns — see CvTailorAgent.ApplyDeltaAndRender). CvTailorAgent's free-text revision calls
-    // are prompt context that DOES need it — tailor_cv.md's revision contract asks the model to
-    // reproduce "CURRENT RESUME" verbatim (same headers, same format) as its own output, which is
-    // then persisted as-is, so redacting the header there would just make the model omit the
-    // candidate's real contact info from the final document. Every other caller wants it: true.
+    // (BuildRevisionSystemPrompt) also pass includeContactInfo: true but with a redacted
+    // PersonalInfo (name kept, email/phone/location/linkedin/github blanked) — tailor_cv.md's
+    // revision contract asks the model to reproduce "CURRENT RESUME" verbatim (same headers, same
+    // format) as its own output, which is then persisted as-is, so the header can't be omitted
+    // outright, but the real contact fields never need to reach Claude either: ReviseAsync splices
+    // the real values back in afterward (see CvTailorAgent.RestoreContactLine), same principle as
+    // ApplyDeltaAndRender. Every other caller wants the real, unredacted contact info: true.
     public static string Render(BackgroundData background, UserResume resume, bool isPromptContext = false, bool includeContactInfo = true)
     {
         var sb = new StringBuilder();
@@ -105,7 +108,11 @@ public static class ResumeRenderer
         return parsed is { Count: > 0 } ? parsed : DefaultSectionConfig;
     }
 
-    private static string ContactLine(PersonalInfo p)
+    // internal (not private): CvTailorAgent.RestoreContactLine reuses this exact rendering so
+    // ReviseAsync's redacted-then-restored revision flow renders the candidate's contact line
+    // identically to every other consumer, rather than duplicating the "join non-blank parts
+    // with ' | '" logic a second time.
+    internal static string ContactLine(PersonalInfo p)
     {
         var parts = new List<string> { p.Email, p.Phone, p.Location, p.Linkedin, p.Github };
         if (!string.IsNullOrWhiteSpace(p.PortfolioUrl)) parts.Add(p.PortfolioUrl);

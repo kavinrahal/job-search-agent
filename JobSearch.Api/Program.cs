@@ -2442,9 +2442,9 @@ api.MapPost("/cv", async (HttpContext ctx, GenerateRequest body, AppDbContext db
         return Results.Json(new { error = "Resume setup isn't finished yet — try again shortly, or contact support if this persists." }, statusCode: StatusCodes.Status409Conflict);
 
     var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
-    // Matches CvTailorAgent.BuildSystemPrompt's own context exactly — verifying against
-    // anything less (or more) would misrepresent what the generator actually had to work with.
-    var sourceMaterial = $"{profile.Background}\n\n--- BASE CV ---\n{ResumeRenderer.Render(BackgroundYamlParser.Parse(profile.Background), resume, isPromptContext: true)}";
+    // AccuracyVerifierSourceMaterial.ForCv strips contact info the same way
+    // CvTailorAgent.BuildSystemPrompt already does before sending this to Claude.
+    var sourceMaterial = AccuracyVerifierSourceMaterial.ForCv(profile.Background, resume);
     return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, verifier, sourceMaterial, userId,
         body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingTitle, body.PostingCompany,
         AgentThreadType.Cv,
@@ -2467,7 +2467,8 @@ api.MapPost("/letter", async (HttpContext ctx, GenerateRequest body, AppDbContex
 
     var crossCheck = new CrossCheckDeps(joraFetcher, ctx.RequestServices.GetService<AdzunaFetcher>(), matcher);
     // CoverLetterAgent.BuildSystemPrompt only includes Background, not CvBase — same here.
-    return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, verifier, profile.Background, userId,
+    // AccuracyVerifierSourceMaterial.ForBackgroundOnly strips contact info before this reaches Claude.
+    return await GenerateArtifactAsync(db, fetcher, crossCheck, companyExtractor, verifier, AccuracyVerifierSourceMaterial.ForBackgroundOnly(profile.Background), userId,
         body.DiscoveryId, body.PostingText, body.PostingUrl, body.PostingTitle, body.PostingCompany,
         AgentThreadType.CoverLetter,
         (text, evalJson) => letterAgent.GenerateAsync(profile, text, evalJson),
@@ -2530,7 +2531,7 @@ api.MapPost("/answer", async (HttpContext ctx, AnswerRequest body, AppDbContext 
         // A follow-up question isn't a factual claim about the candidate — nothing to verify
         // until there's an actual final_answer.
         var warnings = mode == "final_answer"
-            ? await verifier.VerifyAsync(userId, profile.Background, content)
+            ? await verifier.VerifyAsync(userId, AccuracyVerifierSourceMaterial.ForBackgroundOnly(profile.Background), content)
             : [];
 
         var thread = new AgentThread
@@ -2585,7 +2586,7 @@ api.MapPost("/threads/{id:int}/edit", async (
             history.Add(new AgentThreadTurn("assistant", content));
 
             var warnings = mode == "final_answer"
-                ? await verifier.VerifyAsync(userId, profile.Background, content)
+                ? await verifier.VerifyAsync(userId, AccuracyVerifierSourceMaterial.ForBackgroundOnly(profile.Background), content)
                 : [];
 
             thread.HistoryJson = JsonSerializer.Serialize(history);
@@ -2653,8 +2654,8 @@ api.MapPost("/threads/{id:int}/edit", async (
         else
         {
             var sourceMaterial = thread.ArtifactType == AgentThreadType.Cv
-                ? $"{profile.Background}\n\n--- BASE CV ---\n{ResumeRenderer.Render(BackgroundYamlParser.Parse(profile.Background), resume!, isPromptContext: true)}"
-                : profile.Background;
+                ? AccuracyVerifierSourceMaterial.ForCv(profile.Background, resume!)
+                : AccuracyVerifierSourceMaterial.ForBackgroundOnly(profile.Background);
             warnings = await verifier.VerifyAsync(userId, sourceMaterial, finalText);
         }
 
