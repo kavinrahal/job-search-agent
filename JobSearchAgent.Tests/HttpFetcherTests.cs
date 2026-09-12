@@ -38,6 +38,10 @@ public class HttpFetcherTests
     // =========================================================================
 
     // TC01 — AU job in response → mapped to JobFeedItem with correct fields
+    // Stub() ignores the request URL and returns the same fixture for every company in
+    // GreenhouseFetcher's roster, so URL-based dedup means only the *first* company in that
+    // roster ends up attached to the fixture's jobs — assert against whichever slug is first in
+    // GreenhouseFetcher.Companies (currently "cultureamp" / "Culture Amp"), not a specific company.
     [Fact]
     public async Task Greenhouse_AuJob_MappedToFeedItem()
     {
@@ -45,7 +49,7 @@ public class HttpFetcherTests
 
         var items = await fetcher.FetchAllAsync();
 
-        Assert.Contains(items, i => i.Title == "Software Engineer" && i.Company == "Canva");
+        Assert.Contains(items, i => i.Title == "Software Engineer" && i.Company == "Culture Amp");
     }
 
     // TC02 — London job filtered out; null-location job (remote) included

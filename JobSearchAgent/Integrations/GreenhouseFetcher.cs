@@ -13,20 +13,35 @@ public class GreenhouseFetcher : IJobFetcher
     internal GreenhouseFetcher(HttpClient http) { _http = http; }
 
     // Slug -> display name. Add entries here as you find more AU companies on Greenhouse.
-    // Verify a slug: https://boards-api.greenhouse.io/v1/boards/{slug}/jobs
+    // Verify a slug before adding it: GET https://boards-api.greenhouse.io/v1/boards/{slug}/jobs
+    // must return 200 (a 404 body of {"status":404,"error":"Job not found"} means the slug is
+    // wrong, or the company isn't on Greenhouse at all) - a plausible-looking slug is not enough,
+    // actually curl it and check the response.
+    //
+    // Last fully re-verified against the live API: 2026-09-12. At that point most of the
+    // then-current list (canva, xero, safetyculture, seek, airtasker, envato, finder, myob,
+    // realestate) 404'd - those companies had either migrated ATS (canva/atlassian -> SmartRecruiters,
+    // realestate/REA Group -> Workday) or never used the guessed slug (xero, finder, myob run
+    // custom/other career sites). safetyculture/airtasker/envato turned out to be real, just on
+    // Lever instead of Greenhouse - see LeverFetcher. Dead entries were removed rather than kept,
+    // since a bigger broken list isn't better than a smaller working one.
     private static readonly Dictionary<string, string> Companies = new()
     {
-        { "canva",         "Canva"          },
-        { "xero",          "Xero"           },
-        { "cultureamp",    "Culture Amp"    },
-        { "safetyculture", "SafetyCulture"  },
-        { "seek",          "Seek"           },
-        { "airtasker",     "Airtasker"      },
-        { "envato",        "Envato"         },
-        { "finder",        "Finder"         },
-        { "myob",          "MYOB"           },
-        { "octopusdeploy", "Octopus Deploy" },
-        { "realestate",    "REA Group"      },
+        { "cultureamp",     "Culture Amp"     },
+        { "octopusdeploy",  "Octopus Deploy"  },
+        { "buildkite",      "Buildkite"       },
+        { "bugcrowd",       "Bugcrowd"        },
+        { "squarespace",    "Squarespace"     },
+        { "block",          "Block"           }, // parent co. of Afterpay/Square/Cash App AU
+        { "prospa",         "Prospa"          },
+        { "eucalyptus",     "Eucalyptus"      },
+        { "sendle",         "Sendle"          },
+        { "spaceship",      "Spaceship"       },
+        { "karbon",         "Karbon"          },
+        { "mx51",           "mx51"            },
+        { "airlockdigital", "Airlock Digital" },
+        { "go1au",          "Go1"             },
+        { "zipcolimited",   "Zip Co"          },
     };
 
     public async Task<List<JobFeedItem>> FetchAllAsync()
