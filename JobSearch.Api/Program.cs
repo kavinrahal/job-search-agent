@@ -96,6 +96,27 @@ var frontendUrl = isDev
     ? null
     : builder.Configuration["FRONTEND_URL"] ?? throw new InvalidOperationException("FRONTEND_URL not set");
 
+// Unset by default (staging, and prod until the api.<domain> custom domain + DNS are live) —
+// falls back to the old __Host- cookies below, scoped to whatever Railway host is currently
+// serving the API. Set once the API is reachable at a subdomain of the frontend's own
+// registrable domain (e.g. api.worksanta.com alongside worksanta.com): browsers treat a
+// cookie set by a *different registrable domain* than the top-level page (any *.up.railway.app
+// vs. worksanta.com) as third-party, and third-party cookies are blocked by default in Chrome
+// Incognito today (and everywhere else eventually, per Chrome's phase-out) regardless of
+// SameSite=None+Secure — that attribute only makes a cookie *eligible* to be sent cross-site,
+// it doesn't exempt it from separate third-party-cookie blocking. Scoping the cookie's Domain
+// to the shared parent (".worksanta.com") makes it genuinely first-party for both origins,
+// which sidesteps that blocking entirely rather than fighting it per-browser.
+var cookieDomain = builder.Configuration["COOKIE_DOMAIN"];
+
+// __Host- requires no Domain attribute at all; __Secure- is the next-strongest prefix that
+// still allows one. Dev drops prefixes entirely (plain HTTP, no Secure requirement).
+string CookieName(string baseName)
+{
+    if (isDev) return baseName;
+    return cookieDomain is null ? $"__Host-{baseName}" : $"__Secure-{baseName}";
+}
+
 builder.Services.AddAuthentication(o =>
 {
     o.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -108,9 +129,8 @@ builder.Services.AddAuthentication(o =>
 })
 .AddCookie(o =>
 {
-    // __Host- prefix requires Secure + Path=/ + no Domain — strongest browser guarantee.
-    // In dev we're on plain HTTP so we drop the prefix and the Secure requirement.
-    o.Cookie.Name = isDev ? "session" : "__Host-session";
+    o.Cookie.Name = CookieName("session");
+    o.Cookie.Domain = cookieDomain;
     o.Cookie.HttpOnly = true;
     o.Cookie.SecurePolicy = isDev ? CookieSecurePolicy.None : CookieSecurePolicy.Always;
     // The frontend and API are separate deployments (separate origins) in production, so the
@@ -278,18 +298,25 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(policy =>
 //
 // This is the officially documented ASP.NET Core "Antiforgery with JavaScript/SPAs" pattern,
 // not the Razor Pages auto-validated-handler behavior (which doesn't apply to a minimal API
-// with no page handlers at all). Two cookies exist: the framework's own token-pair cookie below
-// (HttpOnly by default, never read by the frontend — validated internally by
-// IAntiforgery.ValidateRequestAsync) and a second, explicitly non-HttpOnly "XSRF-TOKEN" cookie
-// this app sets itself (see GET /auth/me below) carrying the actual value the frontend must
-// read and echo back — see JobSearch.Web/src/api.ts's request().
+// with no page handlers at all). The framework's own token-pair cookie below (HttpOnly by
+// default, never read by the frontend — validated internally by IAntiforgery.ValidateRequestAsync)
+// used to be paired with a second, readable "XSRF-TOKEN" cookie this app set itself for the
+// frontend to read and echo back. That readable cookie never actually worked in prod — its
+// Domain (unset, scoped to the API's own host) made it invisible to document.cookie on the
+// frontend's different origin — so GET /auth/me now returns the token directly in its JSON
+// body instead; see JobSearch.Web/src/api.ts's request() for where it's cached and echoed back.
 builder.Services.AddAntiforgery(o =>
 {
     o.HeaderName = "X-CSRF-Token";
     // Same cross-origin reasoning as the session cookie's AddCookie call above — frontend and
     // API are separate origins in prod, so this has to be sendable cross-site too, or the
-    // framework's own half of the token pair would never arrive on a mutating request.
-    o.Cookie.Name = isDev ? "csrf" : "__Host-csrf";
+    // framework's own half of the token pair would never arrive on a mutating request. Same
+    // cookieDomain reasoning too: this is a third-party cookie from the browser's point of
+    // view whenever the API's registrable domain differs from the frontend's, so it's subject
+    // to the exact same third-party-cookie blocking as the session cookie above, just
+    // surfacing as a CSRF 400 instead of an auth 401 when it's silently dropped.
+    o.Cookie.Name = CookieName("csrf");
+    o.Cookie.Domain = cookieDomain;
     o.Cookie.SecurePolicy = isDev ? CookieSecurePolicy.None : CookieSecurePolicy.Always;
     o.Cookie.SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.None;
 });
