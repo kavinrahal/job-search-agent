@@ -163,10 +163,11 @@ sponsorship:
     const parsed = parseJobCriteriaYaml(oldYaml);
     expect(parsed.citizenOrPermanentResident).toBe("");
     expect(parsed.hasCurrentWorkVisa).toBe("");
-    // Old data isn't lost — it's preserved verbatim in extra (surfaced via the Advanced/raw-YAML
-    // section) rather than silently discarded.
-    expect(parsed.extra).toHaveProperty("sponsorship");
-    expect((parsed.extra.sponsorship as { model: string }).model).toBe("binary");
+    // The old shape is dropped, not preserved in extra — see the regression test below for why:
+    // serializeJobCriteriaYaml writes `{ ...fromForm, ...extra }`, so a preserved non-matching
+    // sponsorship block would silently overwrite every subsequently-answered yes/no on the next
+    // save. Nothing in the current UI reads this old shape back, so there's nothing to preserve it for.
+    expect(parsed.extra).not.toHaveProperty("sponsorship");
   });
 
   it("accepts a partial answer (only citizenOrPermanentResident set) as a clean match, not a fallback to extra", () => {
@@ -174,5 +175,22 @@ sponsorship:
     expect(parsed.citizenOrPermanentResident).toBe("no");
     expect(parsed.hasCurrentWorkVisa).toBe("");
     expect(parsed.extra).not.toHaveProperty("sponsorship");
+  });
+
+  // Regression test for a real bug: a user with pre-migration free-text sponsorship data would
+  // answer the new yes/no questions, save, and find the section blank again next time they
+  // loaded the page — the save appeared to succeed but silently persisted the stale old data
+  // underneath it, because extra was spread after (and so won over) the freshly-built
+  // sponsorship object during serialization.
+  it("does not let stale pre-migration sponsorship data in extra clobber a freshly-answered yes/no on save", () => {
+    const oldYaml = "sponsorship:\n  model: binary\n  principle: Silence is not a negative signal.\n";
+    const loaded = parseJobCriteriaYaml(oldYaml);
+    const answered: JobCriteriaData = { ...loaded, citizenOrPermanentResident: "no", hasCurrentWorkVisa: "yes" };
+
+    const saved = serializeJobCriteriaYaml(answered);
+    const reloaded = parseJobCriteriaYaml(saved);
+
+    expect(reloaded.citizenOrPermanentResident).toBe("no");
+    expect(reloaded.hasCurrentWorkVisa).toBe("yes");
   });
 });

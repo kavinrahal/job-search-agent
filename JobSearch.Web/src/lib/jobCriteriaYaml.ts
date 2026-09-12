@@ -284,12 +284,20 @@ export function parseJobCriteriaYaml(text: string): JobCriteriaData {
     }
   }
 
-  // New clean shape only — a candidate's already-saved old free-text shape (model/discard/
-  // in_scope/principle) doesn't isCleanMatch this key list, so it falls through to `extra`
-  // untouched (visible via the Advanced/raw-YAML section) rather than being lost, and both new
-  // fields stay "" (unanswered) rather than being guessed from the old prose. Either key may be
-  // absent on its own — e.g. has_current_work_visa is only ever asked/written once
-  // citizen_or_permanent_resident is false — so a partial answer is still a clean match.
+  // Both new fields stay "" (unanswered) rather than being guessed from an old free-text shape
+  // (model/discard/in_scope/principle) — that prose can't be losslessly converted to a yes/no.
+  // Either key may be absent on its own — e.g. has_current_work_visa is only ever asked/written
+  // once citizen_or_permanent_resident is false — so a partial answer is still a clean match.
+  //
+  // extra.sponsorship is always deleted below, matching shape or not. An earlier version of
+  // this left a non-matching (old-shape) sponsorship block in `extra` so it would round-trip
+  // untouched instead of being lost — but serializeJobCriteriaYaml writes `{ ...fromForm,
+  // ...data.extra }`, so that preserved block silently overwrote every subsequently-answered
+  // yes/no on the very next save: a user would answer the new questions, save, and see the
+  // sponsorship section still blank next time they loaded the page — save "succeeding" while
+  // actually persisting the stale pre-migration data underneath it. The old shape isn't
+  // surfaced anywhere in the new UI (there's nothing left to read it back), so there's nothing
+  // gained by keeping it and a real bug from doing so.
   const sponsorshipKeys = ["citizen_or_permanent_resident", "has_current_work_visa"];
   if (isCleanMatch(raw.sponsorship, sponsorshipKeys)) {
     const s = raw.sponsorship;
@@ -299,8 +307,8 @@ export function parseJobCriteriaYaml(text: string): JobCriteriaData {
     if (typeof s.has_current_work_visa === "boolean") {
       data.hasCurrentWorkVisa = s.has_current_work_visa ? "yes" : "no";
     }
-    delete extra.sponsorship;
   }
+  delete extra.sponsorship;
 
   const experienceKeys = ["seniority_level", "candidate_current", "ranges", "when_range_stated", "scope_over_title"];
   if (isCleanMatch(raw.experience, experienceKeys)) {
