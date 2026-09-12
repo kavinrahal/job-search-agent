@@ -72,9 +72,11 @@ public class ResumeIntakeAgent
     // renders every page as an image in addition to extracting its text, and ParseAsync below
     // fires two parallel calls (background + cv_base), so the raw-PDF version paid that image
     // cost twice per upload. Text extraction is free and local; see PdfTextExtractor for what
-    // it can't handle (scanned/image-only PDFs — no OCR).
-    public Task<ParsedResume> ParseFromPdfAsync(int userId, byte[] pdfBytes) =>
-        ParseFromTextAsync(userId, PdfTextExtractor.ExtractText(pdfBytes));
+    // it can't handle (scanned/image-only PDFs — no OCR) and for the size/magic-bytes/page-
+    // count/timeout checks that reject a malicious or malformed upload before it ever reaches
+    // Claude.
+    public async Task<ParsedResume> ParseFromPdfAsync(int userId, byte[] pdfBytes) =>
+        await ParseFromTextAsync(userId, await PdfTextExtractor.ExtractTextAsync(pdfBytes));
 
     private async Task<ParsedResume> ParseAsync(int userId, List<ContentBlockParam> content)
     {
