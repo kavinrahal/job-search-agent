@@ -24,14 +24,30 @@ public interface IJobFetcher
 public static class JobFetcherUtils
 {
     public static readonly string[] AuLocationTokens =
-        ["melbourne", "vic", "victoria", "australia", "remote", "hybrid"];
+    [
+        "melbourne", "vic", "victoria",
+        "sydney", "nsw", "new south wales",
+        "brisbane", "qld", "queensland",
+        "perth", "wa", "western australia",
+        "adelaide", "sa", "south australia",
+        "hobart", "tas", "tasmania",
+        "canberra", "act", "australian capital territory",
+        "darwin", "nt", "northern territory",
+        "australia", "au", "remote", "hybrid",
+    ];
+
+    // Each token is matched as a whole word/phrase (\b-bounded), not a raw substring — otherwise
+    // short abbreviations like "vic" false-positive inside unrelated words (e.g. "service"
+    // contains "vic" as a bare substring but is not an AU location). RegexOptions.Compiled since
+    // these patterns are built once and reused across every fetched posting.
+    private static readonly Regex[] AuLocationPatterns =
+        [.. AuLocationTokens.Select(t => new Regex($@"\b{Regex.Escape(t)}\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))];
 
     // Null or empty location = globally remote/unspecified; include it.
     public static bool IsAuLocation(string? location)
     {
         if (string.IsNullOrWhiteSpace(location)) return true;
-        var lower = location.ToLowerInvariant();
-        return AuLocationTokens.Any(lower.Contains);
+        return AuLocationPatterns.Any(p => p.IsMatch(location));
     }
 
     // Decode entities *before* stripping tags, not after. Some ATS boards (confirmed live on
