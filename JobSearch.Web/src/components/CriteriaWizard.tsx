@@ -11,7 +11,7 @@ import {
   EXPERIENCE_BUCKETS, experienceBucketPatch, nearestExperienceBucket,
   SALARY_SLIDER_MIN, SALARY_SLIDER_MAX, SALARY_SLIDER_STEP,
   salaryRangePatch, nearestSalaryRange, formatSalaryAmount,
-  applySkillDimensionAnswer,
+  applySkillAnswer,
   SPONSORSHIP_YES_PATCH,
   simpleDisqualifierDescriptions, applyDisqualifierAnswer,
   sanitizeCriteriaInput,
@@ -101,26 +101,15 @@ function ExperienceStep({ data, onNext, ...nav }: StepProps) {
 }
 
 function SkillsStep({ data, onNext, ...nav }: StepProps) {
-  const existing = data.skillDimensions[0];
-  const [name, setName] = useState(existing?.name ?? "");
-  const [strongMatch, setStrongMatch] = useState(existing?.strongMatch ?? "");
-  const [goodMatch, setGoodMatch] = useState(existing?.goodMatch ?? "");
+  const [name, setName] = useState(data.skills[0] ?? "");
   return (
     <div>
-      <StepHeading hint='e.g. "Backend stack", "EHR system experience", "Knife skills" — whatever matters most in your field.'>
+      <StepHeading hint='e.g. "Backend stack", "EHR system experience", "Knife skills" — whatever matters most in your field. Add more, and reorder by importance, in the full criteria editor.'>
         What's the most important skill or specialization for you?
       </StepHeading>
-      <div className="space-y-3">
-        <Field label="Skill or specialization *" value={name} onChange={setName} />
-        <Field label="Must-haves (comma-separated) *" value={strongMatch} onChange={setStrongMatch} />
-        <Field label="Nice-to-haves, optional (comma-separated)" value={goodMatch} onChange={setGoodMatch} />
-      </div>
-      <StepFooter {...nav} nextDisabled={!name.trim() || !strongMatch.trim()} onNext={() => onNext({
-        skillDimensions: applySkillDimensionAnswer(data.skillDimensions, {
-          name: sanitizeCriteriaInput(name),
-          strongMatch: sanitizeCriteriaInput(strongMatch),
-          goodMatch: sanitizeCriteriaInput(goodMatch),
-        }),
+      <Field label="Skill or specialization *" value={name} onChange={setName} />
+      <StepFooter {...nav} nextDisabled={!name.trim()} onNext={() => onNext({
+        skills: applySkillAnswer(data.skills, sanitizeCriteriaInput(name)),
       })} />
     </div>
   );

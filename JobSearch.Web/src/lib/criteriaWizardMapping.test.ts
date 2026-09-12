@@ -2,12 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   EXPERIENCE_BUCKETS, experienceBucketPatch, nearestExperienceBucket,
   SALARY_SLIDER_MIN, SALARY_SLIDER_MAX, salaryRangePatch, nearestSalaryRange, formatSalaryAmount,
-  applySkillDimensionAnswer,
+  applySkillAnswer,
   SPONSORSHIP_YES_PATCH,
   isSimpleDisqualifier, disqualifierInputsToObjects, simpleDisqualifierDescriptions, applyDisqualifierAnswer,
   sanitizeCriteriaInput,
 } from "./criteriaWizardMapping";
-import type { Disqualifier, SkillDimension } from "./jobCriteriaYaml";
+import type { Disqualifier } from "./jobCriteriaYaml";
 
 describe("experienceBucketPatch", () => {
   it("returns the exact patch for every bucket, keyed by id", () => {
@@ -97,28 +97,20 @@ describe("formatSalaryAmount", () => {
   });
 });
 
-describe("applySkillDimensionAnswer", () => {
+describe("applySkillAnswer", () => {
   it("is a no-op when the name is blank", () => {
-    const existing: SkillDimension[] = [];
-    expect(applySkillDimensionAnswer(existing, { name: "  ", strongMatch: "C#", goodMatch: "" })).toBe(existing);
+    const existing: string[] = [];
+    expect(applySkillAnswer(existing, "  ")).toBe(existing);
   });
 
   it("creates index 0 on an empty list", () => {
-    const result = applySkillDimensionAnswer([], { name: "Backend stack", strongMatch: "C#, .NET", goodMatch: "Java" });
-    expect(result).toEqual([
-      { name: "Backend stack", priority: "1", strongMatch: "C#, .NET", goodMatch: "Java", acceptable: "", excluded: "", notes: "" },
-    ]);
+    expect(applySkillAnswer([], "Backend stack")).toEqual(["Backend stack"]);
   });
 
-  it("replaces index 0 without touching index 1+ (dimensions added via the full editor)", () => {
-    const existing: SkillDimension[] = [
-      { name: "Old", priority: "1", strongMatch: "X", goodMatch: "", acceptable: "", excluded: "", notes: "" },
-      { name: "Frontend stack", priority: "2", strongMatch: "React", goodMatch: "", acceptable: "", excluded: "", notes: "custom notes" },
-    ];
-    const result = applySkillDimensionAnswer(existing, { name: "Backend stack", strongMatch: "C#", goodMatch: "" });
-    expect(result).toHaveLength(2);
-    expect(result[0].name).toBe("Backend stack");
-    expect(result[1]).toBe(existing[1]);
+  it("replaces index 0 without touching index 1+ (skills added via the full editor)", () => {
+    const existing: string[] = ["Old", "Frontend stack"];
+    const result = applySkillAnswer(existing, "Backend stack");
+    expect(result).toEqual(["Backend stack", "Frontend stack"]);
   });
 });
 

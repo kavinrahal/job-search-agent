@@ -1,7 +1,8 @@
-import type { JobCriteriaData, SkillDimension, Disqualifier } from "../lib/jobCriteriaYaml";
+import { useState } from "react";
+import type { JobCriteriaData, Disqualifier } from "../lib/jobCriteriaYaml";
 import { LABEL, INPUT, Field, TopicCard, EntryCard, AddButton, AdvancedSection } from "./CardEditor";
 import { COUNTRIES, CURRENCIES, STATES_BY_COUNTRY } from "../lib/regionData";
-import { Tooltip, ChipGroup, Select, Callout } from "../ui";
+import { Tooltip, ChipGroup, Select, Callout, CloseIcon, ChevronDownIcon } from "../ui";
 import { getMissingCriteriaFields } from "../lib/criteriaCompleteness";
 
 // Exported so CriteriaWizard.tsx's Employment type question reuses the exact same list rather
@@ -17,64 +18,109 @@ function selectedValues(e: React.ChangeEvent<HTMLSelectElement>): string {
   return Array.from(e.target.selectedOptions, o => o.value).join(", ");
 }
 
-// The four match tiers recur for every skill dimension the candidate defines — one
-// generic mechanism for any profession's tools/skills/certifications, not a fixed list of
-// software-specific categories. See the plan's scope decision on why there's no dedicated
-// "Cloud platform"/"AI tooling" section.
-function TieredMatchFields({ value, onChange }: { value: SkillDimension; onChange: (v: SkillDimension) => void }) {
-  const set = <K extends keyof SkillDimension>(key: K, v: SkillDimension[K]) => onChange({ ...value, [key]: v });
-  return (
-    <div>
-      <div className="mb-2 flex items-center text-note text-faint">
-        List the specific skills/tools that fall in each tier below.
-        <Tooltip text="These four tiers control how closely a posting's requirements need to match. Strong/good match boost a posting's ranking; acceptable is neutral; excluded rules it out. Leave any tier blank if it doesn't apply." />
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Strong match (comma-separated)" value={value.strongMatch} onChange={v => set("strongMatch", v)} />
-        <Field label="Good match (comma-separated)" value={value.goodMatch} onChange={v => set("goodMatch", v)} />
-        <Field label="Acceptable (comma-separated)" value={value.acceptable} onChange={v => set("acceptable", v)} />
-        <Field label="Excluded (comma-separated)" value={value.excluded} onChange={v => set("excluded", v)} />
-      </div>
-    </div>
-  );
-}
+// Ordered list of skill names — list position IS priority, no separate number and no tiered
+// match criteria per skill (that was the complexity this replaced; see jobCriteriaYaml.ts's
+// migration comment for how an existing user's old tiered data maps forward). Reordering uses
+// native HTML5 drag-and-drop (no drag library in this repo, and a single-list reorder doesn't
+// need one) plus up/down buttons, since drag alone is neither keyboard- nor touch-accessible —
+// the buttons are the primary path on mobile, drag is a shortcut for desktop mouse users.
+function SkillsSection({ value, onChange, missing }: { value: string[]; onChange: (v: string[]) => void; missing?: boolean }) {
+  const [draft, setDraft] = useState("");
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
-function SkillDimensionsSection({ value, onChange, missing }: { value: SkillDimension[]; onChange: (v: SkillDimension[]) => void; missing?: boolean }) {
-  const update = (i: number, patch: Partial<SkillDimension>) =>
-    onChange(value.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
-  const remove = (i: number) => onChange(value.filter((_, idx) => idx !== i));
-  const add = () => onChange([...value, {
-    name: "", priority: "", strongMatch: "", goodMatch: "", acceptable: "", excluded: "", notes: "",
-  }]);
+  function add() {
+    const name = draft.trim();
+    if (!name) return;
+    onChange([...value, name]);
+    setDraft("");
+  }
+
+  function remove(i: number) {
+    onChange(value.filter((_, idx) => idx !== i));
+  }
+
+  function move(from: number, to: number) {
+    if (from === to || to < 0 || to >= value.length) return;
+    const next = [...value];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
+  }
 
   return (
-    <TopicCard title="Skill dimensions" defaultOpen={false}>
+    <TopicCard title="Skills" defaultOpen={false}>
       <p className="text-note text-faint">
-        Any skill, tool, certification, or knowledge area worth ranking candidates on. One
-        entry per dimension, in priority order. Works for any profession: "Cloud platform"
-        for an engineer, "EHR system experience" for a nurse, "Knife skills" for a chef.
+        List your skills, tools, certifications, or specializations — one per entry, in
+        priority order. Drag to reorder, or use the arrows. Earlier entries are weighted more
+        heavily when a posting is evaluated. Works for any profession: "Cloud platform" for
+        an engineer, "EHR system experience" for a nurse, "Knife skills" for a chef.
       </p>
-      <div className="space-y-3">
-        {value.map((dim, i) => (
-          <EntryCard key={i} summary={dim.name} onRemove={() => remove(i)}>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Name" value={dim.name} onChange={v => update(i, { name: v })} />
-              <Field
-                label="Priority (1 = most important)"
-                type="number"
-                min={1}
-                value={dim.priority}
-                onChange={v => update(i, { priority: v })}
-                tooltip="Lower numbers matter more when ranking a posting. If two dimensions matter equally, give them the same number."
-              />
-            </div>
-            <TieredMatchFields value={dim} onChange={v => update(i, v)} />
-            <Field label="Notes" value={dim.notes} onChange={v => update(i, { notes: v })} multiline />
-          </EntryCard>
-        ))}
-        <AddButton onClick={add}>+ Add skill dimension</AddButton>
+      <div className="flex gap-2">
+        <input
+          className={INPUT}
+          placeholder="Add a skill…"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <AddButton onClick={add}>+ Add</AddButton>
       </div>
-      {missing && <RequiredWarning>Required — add at least one skill dimension with a name and a strong match.</RequiredWarning>}
+      {value.length > 0 && (
+        <ul className="space-y-2">
+          {value.map((name, i) => (
+            <li
+              key={i}
+              draggable
+              onDragStart={() => setDragIndex(i)}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => {
+                e.preventDefault();
+                if (dragIndex !== null) move(dragIndex, i);
+                setDragIndex(null);
+              }}
+              onDragEnd={() => setDragIndex(null)}
+              className="surface-sunk flex items-center gap-2 rounded-ctl p-2.5"
+            >
+              <span aria-hidden="true" className="w-5 flex-none text-center text-caption text-faint">{i + 1}</span>
+              <span className="flex-1 truncate text-body text-ink-2">{name}</span>
+              <div className="flex flex-none items-center gap-0.5">
+                <button
+                  type="button"
+                  aria-label={`Move ${name} up`}
+                  disabled={i === 0}
+                  onClick={() => move(i, i - 1)}
+                  className="inline-grid h-7 w-7 place-items-center rounded-ctl text-faint transition-colors hover:bg-ember-wash hover:text-ember focus-ring tappable disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <ChevronDownIcon className="h-3.5 w-3.5 rotate-180" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Move ${name} down`}
+                  disabled={i === value.length - 1}
+                  onClick={() => move(i, i + 1)}
+                  className="inline-grid h-7 w-7 place-items-center rounded-ctl text-faint transition-colors hover:bg-ember-wash hover:text-ember focus-ring tappable disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <ChevronDownIcon className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Remove ${name}`}
+                  onClick={() => remove(i)}
+                  className="inline-grid h-7 w-7 place-items-center rounded-ctl text-faint transition-[background-color,color,transform] duration-300 hover:bg-ember-wash hover:text-ember focus-ring tappable active:scale-[.94]"
+                >
+                  <CloseIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {missing && <RequiredWarning>Required — add at least one skill.</RequiredWarning>}
     </TopicCard>
   );
 }
@@ -288,7 +334,7 @@ export function JobCriteriaEditor({ value, onChange, tier }: { value: JobCriteri
         <Field label="When salary isn't stated" value={value.salaryMissingNote} onChange={v => set("salaryMissingNote", v)} multiline />
       </TopicCard>
 
-      <SkillDimensionsSection value={value.skillDimensions} onChange={v => set("skillDimensions", v)} missing={isMissing("skillDimensions")} />
+      <SkillsSection value={value.skills} onChange={v => set("skills", v)} missing={isMissing("skills")} />
 
       <DisqualifiersSection value={value.disqualifiers} onChange={v => set("disqualifiers", v)} />
 

@@ -1,19 +1,5 @@
 import { load as loadYaml, dump as dumpYaml } from "js-yaml";
 
-// Repeatable object lists get real array state (mirrors backgroundYaml.ts's
-// ExperienceEntry/EducationEntry) — everything else stays a delimited string edited via a
-// single Field, matching this file's existing convention (skills, disqualifiers notes,
-// etc. were already strings before this expansion).
-export interface SkillDimension {
-  name: string;
-  priority: string;
-  strongMatch: string;
-  goodMatch: string;
-  acceptable: string;
-  excluded: string;
-  notes: string;
-}
-
 export interface Disqualifier {
   id: string;
   description: string;
@@ -64,7 +50,10 @@ export interface JobCriteriaData {
   salaryAboveMaxNote: string;
   salaryMissingNote: string;
 
-  skillDimensions: SkillDimension[];
+  // Ordered list of skill names — position IS priority (index 0 = most important). No
+  // separate priority number, no tiered match criteria: see the type's former shape in git
+  // history if you need the pre-simplification version.
+  skills: string[];
 
   companyContext: string;
   companyPreferred: string;
@@ -139,7 +128,7 @@ const DEFAULTS: Omit<JobCriteriaData, "extra"> = {
   salaryAboveMaxNote: "",
   salaryMissingNote: "",
 
-  skillDimensions: [],
+  skills: [],
 
   companyContext: "",
   companyPreferred: "",
@@ -201,28 +190,14 @@ function linesOrCsv(v: unknown, sep: string): string {
   return isStringArray(v) ? v.join(sep) : "";
 }
 
-// The two software-specific keys (cloud_platform, ai_tooling) fold into the generic
-// skill-dimensions list rather than getting bespoke sections — see the plan's scope
-// decision. Tolerates either the tiered-match shape or a plain {weight, notes} shape.
-function parseTieredOrWeighted(section: unknown, label: string): SkillDimension | null {
-  if (isCleanMatch(section, ["strong_match", "good_match", "acceptable", "excluded", "notes"])) {
-    return {
-      name: label, priority: "",
-      strongMatch: linesOrCsv(section.strong_match, ", "),
-      goodMatch: linesOrCsv(section.good_match, ", "),
-      acceptable: linesOrCsv(section.acceptable, ", "),
-      excluded: linesOrCsv(section.excluded, ", "),
-      notes: typeof section.notes === "string" ? section.notes : "",
-    };
-  }
-  if (isCleanMatch(section, ["weight", "notes"])) {
-    const weight = section.weight != null ? `Weight: ${str(section.weight)}. ` : "";
-    return {
-      name: label, priority: "", strongMatch: "", goodMatch: "", acceptable: "", excluded: "",
-      notes: weight + (typeof section.notes === "string" ? section.notes : ""),
-    };
-  }
-  return null;
+// The two software-specific keys (cloud_platform, ai_tooling) used to fold into the rich
+// skill-dimensions shape — now they just contribute a bare name to the flat skills list (see
+// the skills-migration block below), same as everything else that shape carried. Tolerates
+// either the old tiered-match shape or the old plain {weight, notes} shape; both just become a
+// label, the surrounding tier/weight detail is dropped along with the rest of the old shape.
+function isTieredOrWeightedShape(section: unknown): boolean {
+  return isCleanMatch(section, ["strong_match", "good_match", "acceptable", "excluded", "notes"])
+    || isCleanMatch(section, ["weight", "notes"]);
 }
 
 export function parseJobCriteriaYaml(text: string): JobCriteriaData {
@@ -240,7 +215,13 @@ export function parseJobCriteriaYaml(text: string): JobCriteriaData {
   }
 
   const extra: Record<string, unknown> = { ...raw };
-  const data = { ...DEFAULTS };
+  // `skills` starts as a fresh array, not DEFAULTS.skills itself — the cloud_platform/
+  // ai_tooling migration below can push onto it even when no skill_dimensions/skills key
+  // matched above, and pushing onto the shared DEFAULTS.skills reference would leak entries
+  // across unrelated parseJobCriteriaYaml calls (DEFAULTS is a module-level singleton, and
+  // `{ ...DEFAULTS }` only shallow-copies — the array reference itself would otherwise be
+  // shared, not copied).
+  const data = { ...DEFAULTS, skills: [] as string[] };
 
   if (typeof raw.target_job_titles === "string") {
     data.targetJobTitles = raw.target_job_titles;
@@ -375,38 +356,44 @@ export function parseJobCriteriaYaml(text: string): JobCriteriaData {
     delete extra.salary;
   }
 
-  // Skill dimensions: the rich per-dimension shape, the old single flat {name, keywords}
-  // shape, and the owner file's two software-specific top-level keys (cloud_platform,
-  // ai_tooling) all fold into the same repeatable list — see the plan's scope decision on
-  // why there's no dedicated "Cloud platform"/"AI tooling" section.
-  const dimensionKeys = ["name", "priority", "strong_match", "good_match", "acceptable", "excluded", "notes"];
-  const dims = raw.skill_dimensions;
-  if (Array.isArray(dims) && dims.length > 0 && dims.every(d => isCleanMatch(d, dimensionKeys))) {
-    data.skillDimensions = (dims as Record<string, unknown>[]).map(d => ({
-      name: str(d.name),
-      priority: d.priority != null ? numStr(d.priority) : "",
-      strongMatch: linesOrCsv(d.strong_match, ", "),
-      goodMatch: linesOrCsv(d.good_match, ", "),
-      acceptable: linesOrCsv(d.acceptable, ", "),
-      excluded: linesOrCsv(d.excluded, ", "),
-      notes: typeof d.notes === "string" ? d.notes : "",
-    }));
-    delete extra.skill_dimensions;
-  } else if (Array.isArray(dims) && dims.length === 1 && isCleanMatch(dims[0], ["name", "keywords"]) && isStringArray(dims[0].keywords)) {
-    data.skillDimensions = [{
-      name: str(dims[0].name), priority: "", strongMatch: dims[0].keywords.join(", "),
-      goodMatch: "", acceptable: "", excluded: "", notes: "",
-    }];
-    delete extra.skill_dimensions;
+  // Skills: the new flat ordered-name-list shape ("skills") this editor writes going
+  // forward, migrated from whichever legacy shape an already-saved criteria file still has —
+  // the rich per-dimension tiered-match shape, the old single flat {name, keywords} shape, or
+  // the owner file's two software-specific top-level keys (cloud_platform, ai_tooling). Legacy
+  // tier/weight/priority-number detail is intentionally dropped in the migration — that's
+  // exactly the complexity being eliminated (see the plan's scope decision) — but every skill
+  // *name* survives, in the same relative priority order the old data implied, so an existing
+  // user's already-entered skills are never silently lost.
+  if (isStringArray(raw.skills)) {
+    data.skills = raw.skills.map(s => s.trim()).filter(Boolean);
+    delete extra.skills;
+  } else {
+    const dimensionKeys = ["name", "priority", "strong_match", "good_match", "acceptable", "excluded", "notes"];
+    const dims = raw.skill_dimensions;
+    if (Array.isArray(dims) && dims.length > 0 && dims.every(d => isCleanMatch(d, dimensionKeys))) {
+      data.skills = (dims as Record<string, unknown>[])
+        .map((d, index) => ({ name: str(d.name).trim(), priority: d.priority != null ? Number(d.priority) : NaN, index }))
+        .filter(d => d.name.length > 0)
+        // Sort by the old explicit priority number when every entry has one; otherwise fall
+        // back to the order the entries already appeared in (still a meaningful priority
+        // signal — this editor has always rendered/written skill dimensions in priority
+        // order even before the priority field existed as a separate concept).
+        .sort((a, b) => (Number.isNaN(a.priority) || Number.isNaN(b.priority) ? a.index - b.index : a.priority - b.priority))
+        .map(d => d.name);
+      delete extra.skill_dimensions;
+    } else if (Array.isArray(dims) && dims.length === 1 && isCleanMatch(dims[0], ["name", "keywords"]) && isStringArray(dims[0].keywords)) {
+      const name = str(dims[0].name).trim();
+      if (name) data.skills = [name];
+      delete extra.skill_dimensions;
+    }
   }
 
   // key only ever comes from the literal tuple list above (two fixed, hardcoded keys) — not
   // from raw's own keys, so there's no user/YAML-controlled key reaching either access below.
   for (const [key, label] of [["cloud_platform", "Cloud platform"], ["ai_tooling", "AI tooling"]] as const) {
     // eslint-disable-next-line security/detect-object-injection
-    const dim = parseTieredOrWeighted(raw[key], label);
-    if (dim) {
-      data.skillDimensions.push(dim);
+    if (isTieredOrWeightedShape(raw[key])) {
+      data.skills.push(label);
       // eslint-disable-next-line security/detect-object-injection
       delete extra[key];
     }
@@ -573,15 +560,7 @@ export function serializeJobCriteriaYaml(data: JobCriteriaData): string {
         missing: data.salaryMissingNote,
       },
     },
-    skill_dimensions: data.skillDimensions.map(d => ({
-      name: d.name,
-      ...(d.priority.trim() ? { priority: Number(d.priority) } : {}),
-      strong_match: split(d.strongMatch, ","),
-      good_match: split(d.goodMatch, ","),
-      acceptable: split(d.acceptable, ","),
-      excluded: split(d.excluded, ","),
-      notes: d.notes,
-    })),
+    skills: data.skills,
     company: {
       context: data.companyContext,
       preferred: split(data.companyPreferred, "\n"),
