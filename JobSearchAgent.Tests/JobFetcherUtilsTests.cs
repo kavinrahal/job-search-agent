@@ -19,14 +19,30 @@ public class JobFetcherUtilsTests
         Assert.DoesNotContain("<", result);
     }
 
-    // TC02 — HTML entities decoded (&amp; → &, &lt; → <)
+    // TC02 — HTML entities decoded (&amp; → &, &quot; → ")
     // Silent failure: undecoded entities like "&amp;" reach Claude as literal text, polluting the job description.
     [Fact]
     public void StripHtml_HtmlEntities_Decoded()
     {
-        var result = JobFetcherUtils.StripHtml("Salary &amp; benefits &lt;negotiable&gt;");
+        var result = JobFetcherUtils.StripHtml("Salary &amp; benefits: &quot;negotiable&quot;");
 
         Assert.Contains("Salary & benefits", result);
+        Assert.Contains("\"negotiable\"", result);
+    }
+
+    // TC02b — Double-HTML-encoded content (confirmed live on Greenhouse: the API's `content`
+    // field is itself entity-escaped markup, e.g. a literal "&lt;div&gt;" string rather than a
+    // real "<div>" tag) has its tags actually removed, not merely decoded into visible tag text.
+    // Silent failure: decoding after stripping (the old order) finds no literal "<"/">" to strip,
+    // then reveals the tags too late — they leak into the evaluator's input as "<div>Some text</div>".
+    [Fact]
+    public void StripHtml_DoubleEncodedHtml_TagsRemovedNotJustRevealed()
+    {
+        var result = JobFetcherUtils.StripHtml("&lt;div class=&quot;role&quot;&gt;&lt;p&gt;Sponsors 482 visas.&lt;/p&gt;&lt;/div&gt;");
+
+        Assert.DoesNotContain("<", result);
+        Assert.DoesNotContain("&lt;", result);
+        Assert.Contains("Sponsors 482 visas.", result);
     }
 
     // TC03 — Multiple consecutive spaces collapsed to single space

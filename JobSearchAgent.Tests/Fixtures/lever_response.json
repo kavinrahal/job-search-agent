@@ -25,5 +25,18 @@
     "descriptionPlain": "Fully remote.",
     "createdAt": 1748736000000,
     "categories": { "location": null, "team": "Infrastructure" }
+  },
+  {
+    "id": "abc-004",
+    "text": "Data Engineer",
+    "hostedUrl": "https://jobs.lever.co/atlassian/abc-004",
+    "description": "<p>Build our data platform.</p>",
+    "descriptionPlain": "Build our data platform.",
+    "lists": [
+      { "text": "What We Require", "content": "<ul><li>5+ years Python</li><li>Kafka experience</li></ul>" }
+    ],
+    "additionalPlain": "We are able to sponsor 482 visas for this role.",
+    "createdAt": 1748736000000,
+    "categories": { "location": "Melbourne, VIC, Australia", "team": "Data" }
   }
 ]

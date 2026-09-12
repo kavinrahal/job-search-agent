@@ -9,7 +9,16 @@ public class JobDiscoveryWorker
     private const int MaxPerRun = 20;
     private const int MaxAgeDays = 14;
 
-    private const int FullFetchThreshold = 400; // chars — below this, attempt a full page fetch
+    // chars — below this, attempt a full page fetch. Only meaningful for Greenhouse/Lever, whose
+    // feed Description already *is* the full posting text (see GreenhouseFetcher/LeverFetcher) —
+    // for those, a long description really does mean "nothing more to fetch". Adzuna's
+    // Description is a marketing teaser Adzuna itself truncates before the redirect (confirmed:
+    // it's frequently well over 400 chars while still cutting off before salary/skills/
+    // sponsorship detail that only appears further down the real posting) — length is not a
+    // reliable signal of completeness for that source, so it's excluded from this heuristic
+    // below and always gets a full-page fetch attempt instead. See "Trust real data over
+    // assumption" in architecture-conventions.md — this is exactly that mistake, now fixed.
+    private const int FullFetchThreshold = 400;
 
     // Once a posting has failed evaluation this many times (fetch error, Claude error, etc.),
     // treat it as permanently dead rather than retrying forever — a job board that 403s all
@@ -101,7 +110,8 @@ public class JobDiscoveryWorker
                 Console.WriteLine($"  [{evaluated + 1}/{newItems.Count}] {item.Title}");
 
                 string postingText;
-                if (item.Description.Length < FullFetchThreshold)
+                bool isTeaserSource = item.Source.Equals("adzuna", StringComparison.OrdinalIgnoreCase);
+                if (isTeaserSource || item.Description.Length < FullFetchThreshold)
                 {
                     try
                     {

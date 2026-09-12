@@ -88,6 +88,23 @@ function tierWeight(table: Record<string, number>, tier: string): number | null 
 export function buildMatchRows(posting: DiscoveredPosting): MatchRow[] {
   const rows: MatchRow[] = [];
 
+  // Sponsorship is a pass/discard gate the evaluator already checked (see PostingEvaluator's
+  // skill file — "silence is not a disqualifier"), not a graded fit dimension like the rows
+  // below, so it's informational only: no WEIGHT entry for it, so tierWeight always returns
+  // null here and it never moves the score. A posting the evaluator actually discarded over
+  // sponsorship never reaches this list at all (recommendation="discard" is filtered server-
+  // side), so any row shown here is the "confirmed available" / "no exclusion found" case, not
+  // a rejection — extracted correctly by the evaluator (see sponsorship_evidence in the tool
+  // schema) but previously dropped between the API response and this page, so it never rendered.
+  if (posting.sponsorshipVerdict)
+    rows.push({
+      label: "Sponsorship",
+      detail: cleanDetail(posting.sponsorshipEvidence, "No exclusion language found"),
+      tier: posting.sponsorshipVerdict,
+      weight: null,
+      priority: 0,
+    });
+
   if (posting.locationMatch)
     rows.push({
       label: "Location",

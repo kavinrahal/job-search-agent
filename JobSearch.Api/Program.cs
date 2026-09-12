@@ -903,6 +903,8 @@ api.MapGet("/discoveries", async (HttpContext ctx, AppDbContext db, string? reco
             disqualifierHit      = d.DisqualifierHit,
             discoveredAt         = d.DiscoveredAt,
             evaluatedAt          = d.EvaluatedAt,
+            sponsorshipVerdict   = ev?.SponsorshipVerdict,
+            sponsorshipEvidence  = ev?.SponsorshipEvidence,
             locationMatch        = ev?.LocationMatch,
             locationDetail       = ev?.LocationDetail,
             experienceMatch      = ev?.ExperienceMatch,

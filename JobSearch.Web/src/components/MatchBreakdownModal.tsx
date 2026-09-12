@@ -12,7 +12,7 @@ import { Modal, Badge, IconButton, MatchReason, Well, ExternalLinkIcon, cx, type
 
 // Fit tier → badge colour. Top tier reads pos/green, middle brass, anything below faint.
 function tierVariant(tier: string): BadgeVariant {
-  if (["preferred", "ideal", "strong", "target"].includes(tier)) return "strong";
+  if (["preferred", "ideal", "strong", "target", "pass"].includes(tier)) return "strong";
   if (["acceptable", "good"].includes(tier)) return "good";
   if (tier === "missing") return "neutral";
   return "weak";
