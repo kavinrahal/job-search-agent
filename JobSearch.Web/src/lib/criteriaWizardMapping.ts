@@ -144,27 +144,12 @@ export function applySkillAnswer(existing: string[], name: string): string[] {
 // ---------------------------------------------------------------------------
 // Sponsorship
 // ---------------------------------------------------------------------------
-
-// Reuses the "silence is not a negative signal" principle and a country-agnostic subset of the
-// canonical exclusion phrases verbatim from skills/context/job_criteria.yaml's
-// hard_disqualifiers.sponsorship_excluded.signals — deliberately excluding the
-// Australia-specific phrasing ("must be an Australian citizen...") from that list, since the
-// wizard's Location step means this criteria file could belong to a candidate in any country.
-export const SPONSORSHIP_YES_PATCH: CriteriaPatch = {
-  sponsorshipModel: "binary",
-  sponsorshipDiscardDescription: "Explicitly excludes candidates requiring visa sponsorship",
-  sponsorshipDiscardExamples: [
-    "no visa sponsorship",
-    "unrestricted work rights required",
-    "must have full working rights",
-    "open to citizens and permanent residents only",
-  ].join("\n"),
-  sponsorshipInScope: [
-    "No mention of work rights or sponsorship (majority of postings — treat as in scope)",
-    "Explicit positive mention of sponsorship availability (strong positive signal)",
-  ].join("\n"),
-  sponsorshipNotes: "Silence is not a negative signal. Apply to anything not explicitly excluding candidates who need sponsorship.",
-};
+//
+// No mapping helper needed here — CriteriaWizard.tsx's SponsorshipStep writes
+// citizenOrPermanentResident/hasCurrentWorkVisa directly, the same two structured fields
+// JobCriteriaEditor.tsx's Sponsorship section writes. There's no longer a free-text patch to
+// build (see jobCriteriaYaml.ts for the fields, and evaluate_posting.md for how they gate the
+// two independent sponsorship disqualifier checks).
 
 // ---------------------------------------------------------------------------
 // Custom disqualifiers

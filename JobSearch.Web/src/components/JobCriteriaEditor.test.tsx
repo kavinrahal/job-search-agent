@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { JobCriteriaEditor } from "./JobCriteriaEditor";
 import { parseJobCriteriaYaml, type JobCriteriaData } from "../lib/jobCriteriaYaml";
@@ -93,5 +93,52 @@ describe("JobCriteriaEditor skills list", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(screen.queryByText(/Required — add at least one skill\./)).toBeNull();
+  });
+});
+
+// Sponsorship: two structured yes/no questions (replacing five free-text fields) — the second
+// only appears once the first is answered "no", matching CriteriaWizard.tsx's SponsorshipStep.
+function openSponsorshipCard() {
+  fireEvent.click(screen.getByRole("button", { name: /^Sponsorship/ }));
+}
+
+describe("JobCriteriaEditor sponsorship", () => {
+  it("does not show the work-visa question until citizen/PR is answered", () => {
+    render(<Harness />);
+    openSponsorshipCard();
+    expect(screen.queryByText("Do you currently hold a valid work visa?")).toBeNull();
+  });
+
+  it("reveals the work-visa question only after answering 'No' to citizen/PR", () => {
+    render(<Harness />);
+    openSponsorshipCard();
+
+    const citizenGroup = screen.getByRole("radiogroup", { name: "Citizen or permanent resident" });
+    fireEvent.click(within(citizenGroup).getByRole("radio", { name: "Yes" }));
+    expect(screen.queryByText("Do you currently hold a valid work visa?")).toBeNull();
+
+    fireEvent.click(within(citizenGroup).getByRole("radio", { name: "No" }));
+    expect(screen.getByText("Do you currently hold a valid work visa?")).toBeTruthy();
+  });
+
+  it("clears a previously-given work-visa answer once citizen/PR flips back to 'Yes'", () => {
+    render(<Harness />);
+    openSponsorshipCard();
+
+    const citizenGroup = screen.getByRole("radiogroup", { name: "Citizen or permanent resident" });
+    fireEvent.click(within(citizenGroup).getByRole("radio", { name: "No" }));
+
+    let visaGroup = screen.getByRole("radiogroup", { name: "Current work visa" });
+    fireEvent.click(within(visaGroup).getByRole("radio", { name: "Yes" }));
+    expect(within(visaGroup).getByRole("radio", { name: "Yes" }).getAttribute("aria-checked")).toBe("true");
+
+    // Flip citizen/PR back to Yes, then back to No — the work-visa question reappears with no
+    // stale answer selected, rather than silently keeping the earlier "Yes".
+    fireEvent.click(within(citizenGroup).getByRole("radio", { name: "Yes" }));
+    fireEvent.click(within(citizenGroup).getByRole("radio", { name: "No" }));
+
+    visaGroup = screen.getByRole("radiogroup", { name: "Current work visa" });
+    expect(within(visaGroup).getByRole("radio", { name: "Yes" }).getAttribute("aria-checked")).toBe("false");
+    expect(within(visaGroup).getByRole("radio", { name: "No" }).getAttribute("aria-checked")).toBe("false");
   });
 });
