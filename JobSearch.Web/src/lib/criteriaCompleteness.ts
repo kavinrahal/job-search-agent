@@ -32,9 +32,9 @@ export function getMissingCriteriaFields(data: JobCriteriaData, tier: string): M
   if (!data.candidateCurrentExperience.trim())
     missing.push({ key: "experience", label: "Experience" });
 
-  const primarySkill = data.skillDimensions[0];
-  if (!primarySkill || !primarySkill.name.trim() || !primarySkill.strongMatch.trim())
-    missing.push({ key: "skillDimensions", label: "Skill dimensions" });
+  const primarySkill = data.skills[0];
+  if (!primarySkill || !primarySkill.trim())
+    missing.push({ key: "skills", label: "Skills" });
 
   if (data.employmentTypes.length === 0)
     missing.push({ key: "employmentTypes", label: "Employment type" });

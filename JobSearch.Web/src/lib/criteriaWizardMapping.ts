@@ -1,4 +1,4 @@
-import type { JobCriteriaData, SkillDimension, Disqualifier } from "./jobCriteriaYaml";
+import type { JobCriteriaData, Disqualifier } from "./jobCriteriaYaml";
 
 // Pure, framework-free logic behind the onboarding criteria wizard: bucket -> field patches,
 // and the reverse (existing field values -> closest bucket, for pre-filling a returning user).
@@ -128,27 +128,17 @@ export function formatSalaryAmount(value: number, currency: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Skill dimensions
+// Skills
 // ---------------------------------------------------------------------------
 
-export interface SkillDimensionAnswer {
-  name: string;
-  strongMatch: string;
-  goodMatch: string;
-}
-
-// Writes/replaces index 0 of skillDimensions[] only — the wizard asks one question, not the full
-// editor's multi-entry 4-tier table, so it only ever owns the first slot. Any dimensions already
-// added via the full editor (index 1+) survive untouched across repeated wizard visits.
-export function applySkillDimensionAnswer(existing: SkillDimension[], answer: SkillDimensionAnswer): SkillDimension[] {
-  if (!answer.name.trim()) return existing;
-  const entry: SkillDimension = {
-    name: answer.name, priority: "1",
-    strongMatch: answer.strongMatch, goodMatch: answer.goodMatch,
-    acceptable: "", excluded: "", notes: "",
-  };
-  if (existing.length === 0) return [entry];
-  return [entry, ...existing.slice(1)];
+// Writes/replaces index 0 of skills[] only — the wizard asks one question (the single most
+// important skill), not the full editor's whole reorderable list, so it only ever owns the
+// first slot. Any skills already added via the full editor (index 1+) survive untouched across
+// repeated wizard visits.
+export function applySkillAnswer(existing: string[], name: string): string[] {
+  if (!name.trim()) return existing;
+  if (existing.length === 0) return [name];
+  return [name, ...existing.slice(1)];
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ const COMPLETE: JobCriteriaData = {
   ...parseJobCriteriaYaml(""),
   targetJobTitles: "Software Engineer",
   candidateCurrentExperience: "2-4 years",
-  skillDimensions: [{ name: "Backend stack", priority: "1", strongMatch: "C#, .NET", goodMatch: "", acceptable: "", excluded: "", notes: "" }],
+  skills: ["Backend stack"],
   employmentTypes: ["full_time"],
   countries: "Australia",
   remoteAccepted: true,
@@ -35,12 +35,10 @@ describe("getMissingCriteriaFields", () => {
     expect(getMissingCriteriaFields(data, "Tier1").map(m => m.key)).toContain("experience");
   });
 
-  it("flags skill dimensions missing when there are none, or the first has no name/strongMatch", () => {
-    expect(getMissingCriteriaFields({ ...COMPLETE, skillDimensions: [] }, "Tier1").map(m => m.key)).toContain("skillDimensions");
-    const blankName = { ...COMPLETE, skillDimensions: [{ name: "", priority: "", strongMatch: "C#", goodMatch: "", acceptable: "", excluded: "", notes: "" }] };
-    expect(getMissingCriteriaFields(blankName, "Tier1").map(m => m.key)).toContain("skillDimensions");
-    const blankStrongMatch = { ...COMPLETE, skillDimensions: [{ name: "Backend", priority: "", strongMatch: "", goodMatch: "", acceptable: "", excluded: "", notes: "" }] };
-    expect(getMissingCriteriaFields(blankStrongMatch, "Tier1").map(m => m.key)).toContain("skillDimensions");
+  it("flags skills missing when there are none, or the first is blank", () => {
+    expect(getMissingCriteriaFields({ ...COMPLETE, skills: [] }, "Tier1").map(m => m.key)).toContain("skills");
+    const blankName = { ...COMPLETE, skills: [""] };
+    expect(getMissingCriteriaFields(blankName, "Tier1").map(m => m.key)).toContain("skills");
   });
 
   it("flags employment type missing when nothing is selected", () => {
