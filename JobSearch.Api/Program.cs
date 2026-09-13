@@ -1306,6 +1306,22 @@ api.MapGet("/health", (AppDbContext db) =>
         status = ageMinutes <= 20 ? "ok" : "stale";
     }
 
+    // AllowAnonymous means the CurrentUserId-stamping middleware above never runs for this
+    // request (there's no auth claim to read), so this request's scoped AppDbContext has
+    // CurrentUserId == null and CrossTenantAccess == false — accessing the guarded
+    // Applications DbSet property would throw (see AppDbContext.GuardedSet) instead of
+    // returning a clean response, which is exactly what turned this into a 500 for anonymous
+    // callers like UptimeRobot. A genuine system-wide total across every tenant is also the
+    // right number for a health check anyway, so this reuses the same deliberate cross-tenant
+    // escape hatch AdminDashboard.Api uses: CrossTenantAccess opts out of the guard, and
+    // IgnoreQueryFilters() is still required on top of it to actually see every tenant's rows
+    // (CrossTenantAccess alone just stops the throw — the HasQueryFilter would still match
+    // nothing with CurrentUserId null). Setting CrossTenantAccess here only affects this
+    // request's own scoped instance (AppDbContext is registered Scoped), so it can't leak
+    // into any other request.
+    db.CrossTenantAccess = true;
+    var totalApplications = db.Applications.IgnoreQueryFilters().Count();
+
     var result = new
     {
         status,
@@ -1316,7 +1332,7 @@ api.MapGet("/health", (AppDbContext db) =>
         newApplications = last?.NewApplications,
         durationMs = last?.DurationMs,
         lastError = last?.Error,
-        totalApplications = db.Applications.Count(),
+        totalApplications,
     };
 
     return status == "stale"
