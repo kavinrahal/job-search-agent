@@ -1,5 +1,6 @@
 import { Accordion, Eyebrow } from "../../ui";
 import { Band } from "./Band";
+import { Reveal } from "./Reveal";
 
 const ITEMS = [
   {
@@ -30,12 +31,14 @@ const ITEMS = [
 export function Faq() {
   return (
     <Band tone="shell" hairline="t">
-      <Eyebrow>Questions</Eyebrow>
-      <h2 className="mt-2.5 mb-5 max-w-[32ch] text-[20px] leading-[1.15] font-bold tracking-[-.03em] text-balance sm:text-[25px]">
-        Before you sign up.
-      </h2>
+      <Reveal>
+        <Eyebrow>Questions</Eyebrow>
+        <h2 className="mt-2.5 mb-5 max-w-[32ch] text-[20px] leading-[1.15] font-bold tracking-[-.03em] text-balance sm:text-[25px]">
+          Before you sign up.
+        </h2>
 
-      <Accordion items={ITEMS} className="max-w-[62ch]" />
+        <Accordion items={ITEMS} className="max-w-[62ch]" />
+      </Reveal>
     </Band>
   );
 }

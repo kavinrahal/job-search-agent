@@ -52,13 +52,32 @@
   }
 }
 
-/* Hero copy/panel entrance. `forwards` holds the end state in the animation cascade layer, which
- * is why the tilt handler (Hero.tsx) has to explicitly pin opacity/transform and clear `animation`
- * on `animationend` before it can drive its own inline transform — clearing `animation` alone
- * would drop back to this rule's `opacity: 0` at rest. */
-.landing-hero-in {
+/* Hero copy entrance: each direct child of the copy column fades/floats up in sequence, staggered
+ * by nth-child rather than a per-element inline delay — Kicker/etc. don't accept a `style` prop,
+ * and this reads as one unit anyway, same technique as the reviewed mockup's `.hero-copy > *`.
+ *
+ * The panel's entrance (`forwards`) holds the end state in the animation cascade layer, which is
+ * why the tilt handler (Hero.tsx) has to explicitly pin opacity/transform and clear `animation` on
+ * `animationend` before it can drive its own inline transform — clearing `animation` alone would
+ * drop back to this rule's `opacity: 0` at rest. */
+.landing-hero-copy > * {
   opacity: 0;
   animation: landing-float-up 0.8s var(--ease-spring) forwards;
+}
+.landing-hero-copy > *:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.landing-hero-copy > *:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.landing-hero-copy > *:nth-child(3) {
+  animation-delay: 0.27s;
+}
+.landing-hero-copy > *:nth-child(4) {
+  animation-delay: 0.38s;
+}
+.landing-hero-copy > *:nth-child(5) {
+  animation-delay: 0.48s;
 }
 .landing-hero-panel {
   opacity: 0;
@@ -144,7 +163,7 @@
   .landing-glow-2 {
     animation: none;
   }
-  .landing-hero-in,
+  .landing-hero-copy > *,
   .landing-hero-panel {
     opacity: 1 !important;
     transform: none !important;

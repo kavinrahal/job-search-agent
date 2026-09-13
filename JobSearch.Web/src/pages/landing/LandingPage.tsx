@@ -1,11 +1,18 @@
-import { useLoginUrl } from "../../hooks/useAuth";
-import { Brand, Button, Kicker, ThemeToggle } from "../../ui";
+import { useEffect, useRef } from "react";
+import { Brand, Button, ThemeToggle } from "../../ui";
+import "./landing.css";
+import { Hero } from "./Hero";
 import { SocialProof } from "./SocialProof";
 import { Problem } from "./Problem";
 import { Solution } from "./Solution";
 import { HowItWorks } from "./HowItWorks";
 import { Faq } from "./Faq";
 import { Cta } from "./Cta";
+import { ScrollProgressBar } from "./ScrollProgressBar";
+
+function prefersReducedMotion(): boolean {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 // The logged-out marketing page (prototype section 1), rewritten from a single hero-only screen
 // into a full narrative: hero, social proof, problem, solution, how it works, FAQ, closing CTA.
@@ -27,13 +34,31 @@ import { Cta } from "./Cta";
 // behind Cta, the last section, giving CTA its own bookend glow for free.
 
 export function LandingPage() {
-  const loginUrl = useLoginUrl();
+  const glow1Ref = useRef<HTMLDivElement>(null);
+  const glow2Ref = useRef<HTMLDivElement>(null);
+
+  // Scroll-linked parallax on top of the two glows' own continuous CSS drift (landing.css). Capped
+  // so it never noticeably outruns the drift keyframes at the top of the page.
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    function update() {
+      const y = window.scrollY;
+      if (glow1Ref.current) glow1Ref.current.style.marginTop = `${Math.min(y * 0.25, 140)}px`;
+      if (glow2Ref.current) glow2Ref.current.style.marginBottom = `${Math.min(y * 0.15, 100)}px`;
+    }
+    update();
+    document.addEventListener("scroll", update, { passive: true });
+    return () => document.removeEventListener("scroll", update);
+  }, []);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-bg text-ink">
-      {/* Ambient corner glows, same treatment as the auth screen. */}
-      <div className="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-pill bg-ember/20 blur-3xl" />
-      <div className="pointer-events-none absolute -right-32 -bottom-32 h-96 w-96 rounded-pill bg-brass/20 blur-3xl" />
+      <ScrollProgressBar />
+
+      {/* Ambient corner glows, same treatment as the auth screen, plus continuous drift + scroll
+          parallax layered on top (see landing.css and the effect above). */}
+      <div ref={glow1Ref} className="landing-glow-1 pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-pill bg-ember/20 blur-3xl" />
+      <div ref={glow2Ref} className="landing-glow-2 pointer-events-none absolute -right-32 -bottom-32 h-96 w-96 rounded-pill bg-brass/20 blur-3xl" />
 
       <section className="relative z-1 w-full">
         <div className="mx-auto max-w-[1120px] px-6">
@@ -53,32 +78,7 @@ export function LandingPage() {
             </div>
           </header>
 
-          <div className="relative py-11">
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0"
-              style={{ background: "radial-gradient(66% 58% at 84% 24%, var(--color-ember-wash), transparent 62%)" }}
-            />
-            <div className="relative max-w-[30rem]">
-              <Kicker>Handled overnight</Kicker>
-              <h1 className="mt-3.5 mb-3.5 text-[27px] leading-[1.05] font-bold tracking-[-.045em] text-balance sm:text-[37px] sm:leading-[1.03]">
-                Wake up to a shortlist, <span className="text-ember">not a search.</span>
-              </h1>
-              <p className="mb-5 max-w-[42ch] text-lede text-muted">
-                Set your criteria once. Work Santa checks new postings overnight, filters out everything
-                that is not a fit, and hands you a tailored CV only for the roles worth your time.
-              </p>
-              <div className="flex flex-col gap-2.5 sm:flex-row">
-                <Button href="/register" cap className="max-sm:w-full max-sm:justify-between">
-                  Create account
-                </Button>
-                <Button href={loginUrl} variant="ghost" className="max-sm:w-full max-sm:justify-center">
-                  Sign in with Google
-                </Button>
-              </div>
-              <p className="mt-4 text-meta text-faint">Invite only while in beta. No card required.</p>
-            </div>
-          </div>
+          <Hero />
         </div>
       </section>
 

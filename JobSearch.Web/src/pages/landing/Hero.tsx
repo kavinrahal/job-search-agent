@@ -65,24 +65,19 @@ export function Hero() {
         style={{ background: "radial-gradient(66% 58% at 84% 24%, var(--color-ember-wash), transparent 62%)" }}
       />
       <div className="relative grid gap-8 lg:grid-cols-[1fr_380px] lg:items-center">
-        <div className="max-w-[30rem]">
-          <Kicker className="landing-hero-in" style={{ animationDelay: "50ms" }}>
-            Handled overnight
-          </Kicker>
-          <h1
-            className="landing-hero-in mt-3.5 mb-3.5 text-[27px] leading-[1.05] font-bold tracking-[-.045em] text-balance sm:text-[37px] sm:leading-[1.03]"
-            style={{ animationDelay: "160ms" }}
-          >
+        {/* landing-hero-copy: each direct child floats/fades in on load, staggered by nth-child
+            (landing.css) rather than a per-element inline delay — Kicker doesn't accept a `style`
+            prop, and the whole column reading as one staggered unit is the point anyway. */}
+        <div className="landing-hero-copy max-w-[30rem]">
+          <Kicker>Handled overnight</Kicker>
+          <h1 className="mt-3.5 mb-3.5 text-[27px] leading-[1.05] font-bold tracking-[-.045em] text-balance sm:text-[37px] sm:leading-[1.03]">
             Wake up to a shortlist, <span className="landing-accent">not a search.</span>
           </h1>
-          <p className="landing-hero-in mb-5 max-w-[42ch] text-lede text-muted" style={{ animationDelay: "270ms" }}>
+          <p className="mb-5 max-w-[42ch] text-lede text-muted">
             Set your criteria once. Work Santa checks new postings overnight, filters out everything
             that is not a fit, and hands you a tailored CV only for the roles worth your time.
           </p>
-          <div
-            className="landing-hero-in flex flex-col gap-2.5 sm:flex-row"
-            style={{ animationDelay: "380ms" }}
-          >
+          <div className="flex flex-col gap-2.5 sm:flex-row">
             <Button href="/register" cap className="will-change-transform max-sm:w-full max-sm:justify-between" {...magneticHoverProps()}>
               Create account
             </Button>
@@ -95,9 +90,7 @@ export function Hero() {
               Sign in with Google
             </Button>
           </div>
-          <p className="landing-hero-in mt-4 text-meta text-faint" style={{ animationDelay: "480ms" }}>
-            Invite only while in beta. No card required.
-          </p>
+          <p className="mt-4 text-meta text-faint">Invite only while in beta. No card required.</p>
         </div>
         <div ref={panelRef} className="landing-hero-panel">
           <LiveDiscoveryDemo />

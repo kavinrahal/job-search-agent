@@ -17,12 +17,15 @@ export interface RevealProps {
   /** Stagger delay in ms for a group of siblings revealing in sequence. */
   delayMs?: number;
   className?: string;
+  /** The element Reveal itself renders as, e.g. "li" so it stays a valid direct child of a <ul>
+   * instead of wrapping in an extra <div>. Defaults to "div". */
+  as?: "div" | "li";
 }
 
-export function Reveal({ children, delayMs = 0, className }: RevealProps) {
+export function Reveal({ children, delayMs = 0, className, as: Tag = "div" }: RevealProps) {
   const reduced = prefersReducedMotion();
   const [inView, setInView] = useState(reduced);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement & HTMLLIElement>(null);
 
   useEffect(() => {
     if (reduced) return;
@@ -47,7 +50,7 @@ export function Reveal({ children, delayMs = 0, className }: RevealProps) {
   }, [reduced]);
 
   return (
-    <div
+    <Tag
       ref={ref}
       className={cx(
         "transition-[opacity,transform] duration-700 ease-spring motion-reduce:transition-none",
@@ -57,6 +60,6 @@ export function Reveal({ children, delayMs = 0, className }: RevealProps) {
       style={delayMs ? { transitionDelay: `${delayMs}ms` } : undefined}
     >
       {children}
-    </div>
+    </Tag>
   );
 }

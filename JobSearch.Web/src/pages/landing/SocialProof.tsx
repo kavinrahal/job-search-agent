@@ -1,5 +1,6 @@
 import { Badge, Eyebrow, Ledger, LedgerRow, Surface } from "../../ui";
 import { Band } from "./Band";
+import { Reveal } from "./Reveal";
 
 // The "delivered overnight" proof panel, promoted from the hero's side column (prototype section
 // 1) into its own full-width section directly below it. There is no real social proof yet, no
@@ -18,31 +19,33 @@ const PROOF = [
 export function SocialProof() {
   return (
     <Band tone="shell">
-      <Eyebrow>What it actually finds</Eyebrow>
-      <h2 className="mt-2.5 mb-5 max-w-[36ch] text-[20px] leading-[1.15] font-bold tracking-[-.03em] text-balance sm:text-[25px]">
-        A real evaluation, not a keyword match.
-      </h2>
+      <Reveal>
+        <Eyebrow>What it actually finds</Eyebrow>
+        <h2 className="mt-2.5 mb-5 max-w-[36ch] text-[20px] leading-[1.15] font-bold tracking-[-.03em] text-balance sm:text-[25px]">
+          A real evaluation, not a keyword match.
+        </h2>
 
-      <Surface elevation="raised" padding="none" clip>
-        <div className="hairline-b flex items-center justify-between px-3.5 py-2.5">
-          <span className="text-eyebrow text-muted uppercase">Delivered overnight</span>
-          <span className="text-meta text-faint">6:12am</span>
-        </div>
-        <Ledger>
-          {PROOF.map(item => (
-            <LedgerRow
-              key={item.company}
-              tick="done"
-              title={item.company}
-              subtitle={item.role}
-              meta={<Badge variant={item.variant}>{item.badge}</Badge>}
-            />
-          ))}
-        </Ledger>
-      </Surface>
-      <p className="mt-2.5 text-meta text-faint">
-        Example output from a real run. Every posting gets checked and scored before it reaches you.
-      </p>
+        <Surface elevation="raised" padding="none" clip>
+          <div className="hairline-b flex items-center justify-between px-3.5 py-2.5">
+            <span className="text-eyebrow text-muted uppercase">Delivered overnight</span>
+            <span className="text-meta text-faint">6:12am</span>
+          </div>
+          <Ledger>
+            {PROOF.map(item => (
+              <LedgerRow
+                key={item.company}
+                tick="done"
+                title={item.company}
+                subtitle={item.role}
+                meta={<Badge variant={item.variant}>{item.badge}</Badge>}
+              />
+            ))}
+          </Ledger>
+        </Surface>
+        <p className="mt-2.5 text-meta text-faint">
+          Example output from a real run. Every posting gets checked and scored before it reaches you.
+        </p>
+      </Reveal>
     </Band>
   );
 }

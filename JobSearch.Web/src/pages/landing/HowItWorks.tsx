@@ -1,6 +1,7 @@
 import { lazy, Suspense, useRef } from "react";
 import { Eyebrow, Timeline, TimelineItem } from "../../ui";
 import { Band } from "./Band";
+import { Reveal } from "./Reveal";
 
 // First real page usage of Timeline/TimelineItem outside the in-app application history it was
 // built for. Every step uses the "pending" tick: nothing here has happened yet for a first-time
@@ -44,30 +45,32 @@ export function HowItWorks() {
 
   return (
     <Band hairline="t">
-      <Eyebrow>How it works</Eyebrow>
-      <h2 className="mt-2.5 mb-6 max-w-[32ch] text-[20px] leading-[1.15] font-bold tracking-[-.03em] text-balance sm:text-[25px]">
-        Four steps, and three of them run without you.
-      </h2>
+      <Reveal>
+        <Eyebrow>How it works</Eyebrow>
+        <h2 className="mt-2.5 mb-6 max-w-[32ch] text-[20px] leading-[1.15] font-bold tracking-[-.03em] text-balance sm:text-[25px]">
+          Four steps, and three of them run without you.
+        </h2>
 
-      <div ref={timelineRef}>
-        <Timeline className="max-w-[46ch]">
-          {STEPS.map((step, index) => (
-            <TimelineItem
-              key={step.title}
-              state="pending"
-              title={step.title}
-              detail={step.detail}
-              last={index === STEPS.length - 1}
-            />
-          ))}
-        </Timeline>
-      </div>
+        <div ref={timelineRef}>
+          <Timeline className="max-w-[46ch]">
+            {STEPS.map((step, index) => (
+              <TimelineItem
+                key={step.title}
+                state="pending"
+                title={step.title}
+                detail={step.detail}
+                last={index === STEPS.length - 1}
+              />
+            ))}
+          </Timeline>
+        </div>
 
-      {!reduced && (
-        <Suspense fallback={null}>
-          <TimelineDraw containerRef={timelineRef} />
-        </Suspense>
-      )}
+        {!reduced && (
+          <Suspense fallback={null}>
+            <TimelineDraw containerRef={timelineRef} />
+          </Suspense>
+        )}
+      </Reveal>
     </Band>
   );
 }

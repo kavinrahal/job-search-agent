@@ -74,6 +74,7 @@ function pickThree(): Posting[] {
   const pool = [...POSTINGS];
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
+    // eslint-disable-next-line security/detect-object-injection -- i/j are both loop-bounded array indices, not arbitrary input
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   return pool.slice(0, ROWS);
@@ -103,6 +104,7 @@ export function LiveDiscoveryDemo() {
           window.setTimeout(() => {
             setRevealed(prev => {
               const next = [...prev];
+              // eslint-disable-next-line security/detect-object-injection -- i is bounded by ROWS, not arbitrary input
               next[i] = true;
               return next;
             });
@@ -162,6 +164,7 @@ export function LiveDiscoveryDemo() {
               title={posting.company}
               subtitle={posting.role}
               meta={<Badge variant={posting.tier}>{TIER_LABEL[posting.tier]}</Badge>}
+              // eslint-disable-next-line security/detect-object-injection -- i is this array's own map index, not arbitrary input
               loading={!revealed[i]}
             />
           ))}
