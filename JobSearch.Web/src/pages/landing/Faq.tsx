@@ -1,4 +1,5 @@
 import { Accordion, Eyebrow } from "../../ui";
+import { Band } from "./Band";
 
 const ITEMS = [
   {
@@ -28,13 +29,13 @@ const ITEMS = [
 
 export function Faq() {
   return (
-    <section className="hairline-t py-11">
+    <Band tone="shell" hairline="t">
       <Eyebrow>Questions</Eyebrow>
       <h2 className="mt-2.5 mb-5 max-w-[32ch] text-[20px] leading-[1.15] font-bold tracking-[-.03em] text-balance sm:text-[25px]">
         Before you sign up.
       </h2>
 
       <Accordion items={ITEMS} className="max-w-[62ch]" />
-    </section>
+    </Band>
   );
 }

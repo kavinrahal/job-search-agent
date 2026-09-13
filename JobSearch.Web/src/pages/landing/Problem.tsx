@@ -1,4 +1,5 @@
 import { Eyebrow } from "../../ui";
+import { Band } from "./Band";
 
 // Plain text section, no exotic primitive: the point is to name the overhead around a job search
 // before Solution shows how the product removes it.
@@ -11,7 +12,7 @@ const PAIN_POINTS = [
 
 export function Problem() {
   return (
-    <section className="hairline-t py-11">
+    <Band hairline="t">
       <Eyebrow>The problem</Eyebrow>
       <h2 className="mt-2.5 mb-3 max-w-[32ch] text-[20px] leading-[1.15] font-bold tracking-[-.03em] text-balance sm:text-[25px]">
         Job searching eats the time you do not have.
@@ -30,6 +31,6 @@ export function Problem() {
           </li>
         ))}
       </ul>
-    </section>
+    </Band>
   );
 }

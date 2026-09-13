@@ -1,4 +1,5 @@
 import { Eyebrow, Timeline, TimelineItem } from "../../ui";
+import { Band } from "./Band";
 
 // First real page usage of Timeline/TimelineItem outside the in-app application history it was
 // built for. Every step uses the "pending" tick: nothing here has happened yet for a first-time
@@ -25,7 +26,7 @@ const STEPS = [
 
 export function HowItWorks() {
   return (
-    <section className="hairline-t py-11">
+    <Band hairline="t">
       <Eyebrow>How it works</Eyebrow>
       <h2 className="mt-2.5 mb-6 max-w-[32ch] text-[20px] leading-[1.15] font-bold tracking-[-.03em] text-balance sm:text-[25px]">
         Four steps, and three of them run without you.
@@ -42,6 +43,6 @@ export function HowItWorks() {
           />
         ))}
       </Timeline>
-    </section>
+    </Band>
   );
 }

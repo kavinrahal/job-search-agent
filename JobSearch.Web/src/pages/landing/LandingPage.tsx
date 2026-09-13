@@ -19,6 +19,12 @@ import { Cta } from "./Cta";
 // resolve through tokens. `Kicker` appears exactly once on the whole page, here in the hero, and
 // every other section label below uses the quieter `Eyebrow` instead, per Kicker's own
 // once-per-screen convention.
+//
+// Every section below is a full-bleed band (background spans the viewport) with its reading
+// content capped at the same width as the header/hero here — see Band.tsx. The two ambient corner
+// glows stay on this outermost, full-page container rather than per-band: it grows to the height
+// of the whole document, so the top-left one lands behind the hero and the bottom-right one lands
+// behind Cta, the last section, giving CTA its own bookend glow for free.
 
 export function LandingPage() {
   const loginUrl = useLoginUrl();
@@ -29,50 +35,54 @@ export function LandingPage() {
       <div className="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-pill bg-ember/20 blur-3xl" />
       <div className="pointer-events-none absolute -right-32 -bottom-32 h-96 w-96 rounded-pill bg-brass/20 blur-3xl" />
 
-      <div className="relative z-1 mx-auto max-w-[1120px] px-6">
-        <header className="hairline-b flex items-center justify-between gap-4 py-4">
-          <Brand />
-          {/* The two auth buttons collapse below sm. The hero already carries the CTAs there, so
-              the bar stays just the mark and the theme control, matching the prototype's mobile
-              landing which shows no nav buttons at all. */}
-          <div className="flex items-center gap-2.5">
-            <ThemeToggle />
-            <Button href="/signin" variant="ghost" size="sm" className="max-sm:hidden">
-              Sign in
-            </Button>
-            <Button href="/register" cap size="sm" className="max-sm:hidden">
-              Create account
-            </Button>
-          </div>
-        </header>
-
-        <div className="relative py-11">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0"
-            style={{ background: "radial-gradient(66% 58% at 84% 24%, var(--color-ember-wash), transparent 62%)" }}
-          />
-          <div className="relative max-w-[30rem]">
-            <Kicker>Handled overnight</Kicker>
-            <h1 className="mt-3.5 mb-3.5 text-[27px] leading-[1.05] font-bold tracking-[-.045em] text-balance sm:text-[37px] sm:leading-[1.03]">
-              Wake up to a shortlist, <span className="text-ember">not a search.</span>
-            </h1>
-            <p className="mb-5 max-w-[42ch] text-lede text-muted">
-              Set your criteria once. Work Santa checks new postings overnight, filters out everything
-              that is not a fit, and hands you a tailored CV only for the roles worth your time.
-            </p>
-            <div className="flex flex-col gap-2.5 sm:flex-row">
-              <Button href="/register" cap className="max-sm:w-full max-sm:justify-between">
+      <section className="relative z-1 w-full">
+        <div className="mx-auto max-w-[1120px] px-6">
+          <header className="hairline-b flex items-center justify-between gap-4 py-4">
+            <Brand />
+            {/* The two auth buttons collapse below sm. The hero already carries the CTAs there, so
+                the bar stays just the mark and the theme control, matching the prototype's mobile
+                landing which shows no nav buttons at all. */}
+            <div className="flex items-center gap-2.5">
+              <ThemeToggle />
+              <Button href="/signin" variant="ghost" size="sm" className="max-sm:hidden">
+                Sign in
+              </Button>
+              <Button href="/register" cap size="sm" className="max-sm:hidden">
                 Create account
               </Button>
-              <Button href={loginUrl} variant="ghost" className="max-sm:w-full max-sm:justify-center">
-                Sign in with Google
-              </Button>
             </div>
-            <p className="mt-4 text-meta text-faint">Invite only while in beta. No card required.</p>
+          </header>
+
+          <div className="relative py-11">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{ background: "radial-gradient(66% 58% at 84% 24%, var(--color-ember-wash), transparent 62%)" }}
+            />
+            <div className="relative max-w-[30rem]">
+              <Kicker>Handled overnight</Kicker>
+              <h1 className="mt-3.5 mb-3.5 text-[27px] leading-[1.05] font-bold tracking-[-.045em] text-balance sm:text-[37px] sm:leading-[1.03]">
+                Wake up to a shortlist, <span className="text-ember">not a search.</span>
+              </h1>
+              <p className="mb-5 max-w-[42ch] text-lede text-muted">
+                Set your criteria once. Work Santa checks new postings overnight, filters out everything
+                that is not a fit, and hands you a tailored CV only for the roles worth your time.
+              </p>
+              <div className="flex flex-col gap-2.5 sm:flex-row">
+                <Button href="/register" cap className="max-sm:w-full max-sm:justify-between">
+                  Create account
+                </Button>
+                <Button href={loginUrl} variant="ghost" className="max-sm:w-full max-sm:justify-center">
+                  Sign in with Google
+                </Button>
+              </div>
+              <p className="mt-4 text-meta text-faint">Invite only while in beta. No card required.</p>
+            </div>
           </div>
         </div>
+      </section>
 
+      <div className="relative z-1">
         <SocialProof />
         <Problem />
         <Solution />
