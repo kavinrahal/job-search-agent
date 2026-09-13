@@ -5,6 +5,16 @@ version: "2.0"
 profession_category: "Engineering — Software"
 
 # ---------------------------------------------------------------------------
+# TARGET JOB TITLES
+# ---------------------------------------------------------------------------
+target_job_titles: "Software Engineer, Backend Developer, Full Stack Developer"
+# The exact titles searched for automatically (see JobCriteriaEditor.tsx / TargetJobTitles.cs) —
+# required for Tier2 users, gates automatic discovery. evaluate_posting.md's Step 1
+# profession_mismatch check reads this (alongside profession_category and the named skill
+# dimensions) to catch postings in a completely unrelated field, e.g. a paralegal candidate
+# getting served an accountant or developer posting.
+
+# ---------------------------------------------------------------------------
 # EMPLOYMENT TYPE
 # ---------------------------------------------------------------------------
 employment_type_preference: [full_time]

@@ -45,6 +45,24 @@ General rules that apply regardless of profession:
     disqualifier, only explicit exclusion language triggers either one, and the exact triggering
     phrase goes in `sponsorship_evidence`. Do not infer either check's outcome from company size,
     industry, or tone.
+- **Profession/field mismatch:** Applies independently of anything the candidate wrote in their
+  own `hard_disqualifiers` list — virtually no candidate thinks to author "exclude accountant /
+  developer / manager roles" as a disqualifier on their own profile, since it seems too obvious to
+  need stating, so this check exists as a built-in safety net rather than relying on candidates to
+  ask for it. Compare the posting's actual role to the candidate's `target_job_titles` and the
+  general profession context of their criteria (`profession_category`, the named skill
+  dimensions). If the posting is in a **fundamentally different profession/field** — a different
+  broad discipline entirely (e.g. legal vs. accounting vs. software engineering vs. general
+  management vs. hospitality), not merely a different title within the same discipline — record
+  `disqualifier_hit: "profession_mismatch"` and quote the posting's job title or role summary as
+  evidence. Judge at the level of broad discipline, not exact title match: title variations within
+  one discipline (e.g. a "Software Engineer" candidate's `target_job_titles` evaluated against a
+  "Backend Engineer", "Platform Engineer", or "Senior Software Engineer" posting) are NOT a
+  mismatch — those are normal title variation within the same field, so let Step 2's
+  skill-dimension scoring handle the fine-grained relevance judgment instead of discarding here.
+  Keep the same discipline as the other checks in this section: only trigger on a posting that is
+  clearly and obviously a different profession — an ambiguous, generic, or unclear title/
+  description is not enough on its own, and silence or ambiguity must never trigger a discard.
 - **Employment type:** Check the candidate's `employment_type_preference` (e.g. full-time only, or open to contract). Only disqualify on explicit language stating an employment type outside that preference — if employment type is unstated, assume full-time.
 - **Location:** Apply the candidate's location criteria as given — do not assume a specific country or city beyond what's stated there.
 - Any profession-specific disqualifier (e.g. a required primary skill, industry exclusion, seniority match) — apply exactly as the candidate's criteria states it, using their own wording and thresholds, not a generic assumption.
