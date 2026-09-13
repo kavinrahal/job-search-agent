@@ -100,4 +100,23 @@ public class PostingEvaluatorParsingTests
         // (if badly) answered the field.
         Assert.Null(result.SourceUrl);
     }
+
+    // disqualifier_hit has no enum constraint in the tool schema (see PostingEvaluator's
+    // InputSchema) — it's a free-form id string, so a new hard-disqualifier id added in
+    // evaluate_posting.md (like the profession_mismatch check added for the wrong-profession
+    // bug) needs no schema or parsing change. This just pins that assumption down.
+    [Fact]
+    public void ParseEvaluation_ProfessionMismatchDisqualifier_ParsesThrough()
+    {
+        var input = Input(new()
+        {
+            ["recommendation"] = "discard",
+            ["disqualifier_hit"] = "profession_mismatch",
+        });
+
+        var result = PostingEvaluator.ParseEvaluation(input, fallbackSourceUrl: null);
+
+        Assert.Equal("discard", result.Recommendation);
+        Assert.Equal("profession_mismatch", result.DisqualifierHit);
+    }
 }
