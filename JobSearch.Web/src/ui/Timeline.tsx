@@ -28,7 +28,16 @@ export interface TimelineItemProps {
 export function TimelineItem({ state, title, detail, meta, last = false, className }: TimelineItemProps) {
   return (
     <li className={cx("relative grid grid-cols-[15px_1fr_auto] items-start gap-[11px]", !last && "pb-[13px]", className)}>
-      {!last && <span aria-hidden="true" className="absolute top-4 bottom-0 left-[7px] w-px bg-hair" />}
+      {/* data-timeline-connector: a stable hook for the landing page's scroll-driven line-draw
+          animation (see pages/landing/TimelineDraw.tsx) to target without coupling this shared
+          component to that one placement. Inert here — no behavior or styling depends on it. */}
+      {!last && (
+        <span
+          aria-hidden="true"
+          data-timeline-connector="true"
+          className="absolute top-4 bottom-0 left-[7px] w-px bg-hair"
+        />
+      )}
       <StatusTick state={state} size="sm" className="relative z-1" />
       <div className="min-w-0">
         <p className="m-0 text-control font-[650] text-ink">{title}</p>
