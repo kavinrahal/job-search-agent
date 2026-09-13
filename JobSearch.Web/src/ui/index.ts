@@ -41,6 +41,8 @@ export { Sparkline } from "./Sparkline";
 export type { SparklineProps } from "./Sparkline";
 
 // Layer 2, composites
+export { Accordion } from "./Accordion";
+export type { AccordionItemData, AccordionProps } from "./Accordion";
 export { Ledger, LedgerGroup, LedgerRow } from "./Ledger";
 export type { LedgerRowProps } from "./Ledger";
 export { FeaturePanel } from "./FeaturePanel";
