@@ -7,7 +7,7 @@ import { ResumeIntakePage } from "./pages/ResumeIntakePage";
 import { ResumeBuilderPage } from "./pages/ResumeBuilderPage";
 import { JobCriteriaPage } from "./pages/JobCriteriaPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { LandingPage } from "./pages/LandingPage";
+import { LandingPage } from "./pages/landing/LandingPage";
 import { GeneratePage } from "./pages/GeneratePage";
 import { SupportPage } from "./pages/SupportPage";
 import { HelpPage } from "./pages/HelpPage";
