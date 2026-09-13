@@ -57,14 +57,21 @@ export function Hero() {
   }, []);
 
   return (
-    <div ref={heroRef} className="relative py-11">
+    // Full-bleed decorative layer (constellation + ember wash) spans the viewport, while the copy
+    // and panel stay capped at the page's reading width — the same split every Band section uses.
+    // The outer wrapper is what LandingPage no longer caps, so these decorations reach both edges;
+    // `overflow-hidden` clips them (and the panel's 3D tilt) to the viewport.
+    <div className="relative w-full overflow-hidden">
       <HeroConstellation />
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0"
         style={{ background: "radial-gradient(66% 58% at 84% 24%, var(--color-ember-wash), transparent 62%)" }}
       />
-      <div className="relative grid gap-8 lg:grid-cols-[1fr_380px] lg:items-center">
+      <div
+        ref={heroRef}
+        className="relative mx-auto grid max-w-[1120px] gap-8 px-6 py-11 lg:grid-cols-[1fr_380px] lg:items-center"
+      >
         {/* landing-hero-copy: each direct child floats/fades in on load, staggered by nth-child
             (landing.css) rather than a per-element inline delay — Kicker doesn't accept a `style`
             prop, and the whole column reading as one staggered unit is the point anyway. */}
