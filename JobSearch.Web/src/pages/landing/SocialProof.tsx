@@ -1,9 +1,13 @@
 import { Badge, Eyebrow, Ledger, LedgerRow, Surface } from "../../ui";
+import { Band } from "./Band";
 
 // The "delivered overnight" proof panel, promoted from the hero's side column (prototype section
 // 1) into its own full-width section directly below it. There is no real social proof yet, no
 // testimonials and no user counts, so this stays honest about what it is: a sample of real
 // evaluation output, not a dressed-up customer quote.
+//
+// Sits on a `shell` band so its background reads as a distinct step down from the hero's `bg`
+// immediately above it — the colour change is the separator here, no hairline needed.
 
 const PROOF = [
   { company: "Victorian Government", role: "Senior Developer", badge: "Strong" as const, variant: "strong" as const },
@@ -13,7 +17,7 @@ const PROOF = [
 
 export function SocialProof() {
   return (
-    <section className="py-11">
+    <Band tone="shell">
       <Eyebrow>What it actually finds</Eyebrow>
       <h2 className="mt-2.5 mb-5 max-w-[36ch] text-[20px] leading-[1.15] font-bold tracking-[-.03em] text-balance sm:text-[25px]">
         A real evaluation, not a keyword match.
@@ -39,6 +43,6 @@ export function SocialProof() {
       <p className="mt-2.5 text-meta text-faint">
         Example output from a real run. Every posting gets checked and scored before it reaches you.
       </p>
-    </section>
+    </Band>
   );
 }
