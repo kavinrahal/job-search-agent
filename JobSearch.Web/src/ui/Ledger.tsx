@@ -29,12 +29,19 @@ export interface LedgerRowProps {
   subtitle?: string;
   /** Badges, dates. Never shrinks — it is the fixed edge the truncation is measured against. */
   meta?: ReactNode;
+  /**
+   * Renders the row as a skeleton in place of `title`/`subtitle`/`meta`/tick, for a row whose real
+   * content hasn't resolved yet (the landing page's live-discovery demo, e.g.) rather than being
+   * absent. `title`/`subtitle` are still required so the row's grid shape doesn't shift once it
+   * resolves; they just aren't shown while loading.
+   */
+  loading?: boolean;
   href?: string;
   onClick?: () => void;
   className?: string;
 }
 
-export function LedgerRow({ tick, tickIcon, title, subtitle, meta, href, onClick, className }: LedgerRowProps) {
+export function LedgerRow({ tick, tickIcon, title, subtitle, meta, loading = false, href, onClick, className }: LedgerRowProps) {
   const classes = cx(
     // `[[data-ledger-row]+&]` gives the hairline only to a row that directly follows another row,
     // so the first row under a group heading does not get a stray rule above it.
@@ -44,16 +51,32 @@ export function LedgerRow({ tick, tickIcon, title, subtitle, meta, href, onClick
     className,
   );
 
+  // Tick and meta fade/scale out rather than disappearing outright, so the grid columns hold
+  // their width through the loading -> resolved transition instead of jumping.
+  const fadeForLoading = "transition-[opacity,transform] duration-300 ease-spring motion-reduce:transition-none";
+
   const content = (
     <>
-      {tickIcon ?? (tick && <StatusTick state={tick} />)}
+      <span className={cx(fadeForLoading, loading && "scale-[.6] opacity-0")}>{tickIcon ?? (tick && <StatusTick state={tick} />)}</span>
       {/* min-w-0 is the entire reason the row truncates instead of blowing out the grid: without
           it a grid item's default min-width:auto refuses to shrink below its content. */}
       <span className="min-w-0">
-        <span className="block truncate text-body font-[650] tracking-[-.012em] text-ink">{title}</span>
-        {subtitle && <span className="block truncate text-caption text-muted">{subtitle}</span>}
+        {loading ? (
+          <>
+            {/* Reuses Skeleton's own opacity-pulse convention rather than a bespoke shimmer, so a
+                loading ledger row still reads as "the same kind of loading" as everywhere else in
+                the app. */}
+            <span aria-hidden="true" className="surface-sunk block h-[9px] w-[58%] rounded-mark motion-safe:animate-slate-pulse motion-reduce:animate-none" />
+            <span aria-hidden="true" className="surface-sunk mt-[5px] block h-[9px] w-[78%] rounded-mark motion-safe:animate-slate-pulse motion-reduce:animate-none" />
+          </>
+        ) : (
+          <>
+            <span className="block truncate text-body font-[650] tracking-[-.012em] text-ink">{title}</span>
+            {subtitle && <span className="block truncate text-caption text-muted">{subtitle}</span>}
+          </>
+        )}
       </span>
-      <span className="flex flex-none items-center gap-2">{meta}</span>
+      <span className={cx("flex flex-none items-center gap-2", fadeForLoading, loading && "scale-[.6] opacity-0")}>{meta}</span>
     </>
   );
 

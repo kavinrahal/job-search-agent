@@ -4,7 +4,10 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 
 // Prototype: the How It Works timeline's connecting rule "draws in" (grows from 0 to full
-// length) as each step scrolls into view, one step at a time rather than all together.
+// length) as each step scrolls into view, one step at a time rather than all together. Extended
+// per the reviewed mockup with two more pieces the first prototype pass didn't have yet: a small
+// glowing pulse that travels down each connector right after it draws, and a 3D flip-in on every
+// step's dot instead of a plain pop.
 //
 // This whole module only exists behind the dynamic import in HowItWorks.tsx, so GSAP +
 // ScrollTrigger ship as their own chunk that loads for a landing page visit and never for the
@@ -19,6 +22,8 @@ import { useGSAP } from "@gsap/react";
 gsap.registerPlugin(ScrollTrigger);
 
 const CONNECTOR_SELECTOR = "[data-timeline-connector]";
+const PULSE_SELECTOR = "[data-timeline-pulse]";
+const DOT_SELECTOR = "[data-timeline-dot]";
 
 export interface TimelineDrawProps {
   /** The element wrapping the Timeline whose connectors should animate in on scroll. */
@@ -30,6 +35,21 @@ export function TimelineDraw({ containerRef }: TimelineDrawProps) {
     () => {
       const container = containerRef.current;
       if (!container) return;
+
+      // Every step's dot flips in with a 3D rotate as it scrolls into view, including the last
+      // step, which has no connector to draw — so this iterates dots independently of connectors
+      // rather than piggybacking on the connector loop below.
+      container.querySelectorAll<HTMLElement>(DOT_SELECTOR).forEach(dot => {
+        const item = dot.closest("li");
+        gsap.set(dot, { transformPerspective: 600, scale: 0, rotateY: 90 });
+        gsap.to(dot, {
+          scale: 1,
+          rotateY: 0,
+          duration: 0.5,
+          ease: "back.out(1.7)",
+          scrollTrigger: { trigger: item ?? dot, start: "top 82%" },
+        });
+      });
 
       const connectors = container.querySelectorAll<HTMLElement>(CONNECTOR_SELECTOR);
       connectors.forEach(connector => {
@@ -49,6 +69,24 @@ export function TimelineDraw({ containerRef }: TimelineDrawProps) {
             // elsewhere on this page never re-animates a stat the reader has already seen.
           },
         });
+
+        // A small pulse travels the length of the connector right after it draws in, reading as
+        // the line "delivering" something down to the next step. Same trigger/start as the
+        // connector's own draw so the two stay visually paired.
+        const pulse = connector.querySelector<HTMLElement>(PULSE_SELECTOR);
+        if (!pulse) return;
+        gsap.fromTo(
+          pulse,
+          { top: "0%", opacity: 1 },
+          {
+            top: "100%",
+            opacity: 0,
+            duration: 1.1,
+            delay: 0.05,
+            ease: "power1.out",
+            scrollTrigger: { trigger: item ?? connector, start: "top 78%" },
+          },
+        );
       });
     },
     { scope: containerRef as RefObject<HTMLElement>, dependencies: [] },
