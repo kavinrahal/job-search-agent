@@ -1,0 +1,157 @@
+/* Landing-page-only ambient motion: gradient text, glow drift, the CTA mesh, and the hero live
+ * indicator pulse. Kept out of the design system's tokens.css (which documents primitives every
+ * page can use) since none of this is meant to be reached for outside this one page. Plain CSS
+ * rather than Tailwind's `@theme` `--animate-*` mechanism, for the same reason: these keyframes
+ * have exactly one caller each.
+ *
+ * Every animation here has a `prefers-reduced-motion: reduce` override below. JS-driven effects
+ * (the hero tilt, magnetic buttons, canvas constellation, scan/reveal cycle) check the same media
+ * query themselves before attaching, so this file only needs to cover CSS `animation`s.
+ */
+
+.landing-accent {
+  background: linear-gradient(100deg, var(--color-ember), var(--color-brass), var(--color-ember));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: landing-gradient-shift 4s linear infinite;
+}
+@keyframes landing-gradient-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.landing-glow-1 {
+  animation: landing-drift-1 14s ease-in-out infinite;
+}
+.landing-glow-2 {
+  animation: landing-drift-2 16s ease-in-out infinite;
+}
+@keyframes landing-drift-1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(40px, 30px) scale(1.15);
+  }
+}
+@keyframes landing-drift-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-30px, -40px) scale(1.12);
+  }
+}
+
+/* Hero copy/panel entrance. `forwards` holds the end state in the animation cascade layer, which
+ * is why the tilt handler (Hero.tsx) has to explicitly pin opacity/transform and clear `animation`
+ * on `animationend` before it can drive its own inline transform — clearing `animation` alone
+ * would drop back to this rule's `opacity: 0` at rest. */
+.landing-hero-in {
+  opacity: 0;
+  animation: landing-float-up 0.8s var(--ease-spring) forwards;
+}
+.landing-hero-panel {
+  opacity: 0;
+  animation: landing-float-up 0.9s var(--ease-spring) forwards;
+  animation-delay: 0.3s;
+}
+@keyframes landing-float-up {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.7);
+  }
+}
+
+.landing-cta-mesh {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 45% at 20% 30%, color-mix(in srgb, var(--color-ember) 45%, transparent), transparent 70%),
+    radial-gradient(32% 40% at 80% 70%, color-mix(in srgb, var(--color-brass) 40%, transparent), transparent 70%),
+    radial-gradient(30% 35% at 50% 90%, color-mix(in srgb, var(--color-pos) 25%, transparent), transparent 70%);
+  filter: blur(60px);
+  animation: landing-mesh-drift 10s ease-in-out infinite alternate;
+}
+@keyframes landing-mesh-drift {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  100% {
+    transform: translate(-3%, 3%) rotate(6deg) scale(1.08);
+  }
+}
+
+.landing-cta-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 520px;
+  height: 520px;
+  margin: -260px 0 0 -260px;
+  border-radius: 50%;
+  background: var(--color-ember);
+  filter: blur(90px);
+  opacity: 0.16;
+  animation: landing-cta-glow-pulse 4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes landing-cta-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.16;
+  }
+  50% {
+    opacity: 0.32;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-accent {
+    animation: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    color: var(--color-ember);
+    background: none;
+  }
+  .landing-glow-1,
+  .landing-glow-2 {
+    animation: none;
+  }
+  .landing-hero-in,
+  .landing-hero-panel {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+  .landing-cta-mesh,
+  .landing-cta-glow {
+    animation: none;
+  }
+}
