@@ -61,6 +61,8 @@ export function LandingPage() {
       <div ref={glow2Ref} className="landing-glow-2 pointer-events-none absolute -right-32 -bottom-32 h-96 w-96 rounded-pill bg-brass/20 blur-3xl" />
 
       <section className="relative z-1 w-full">
+        {/* Only the header stays capped here; Hero manages its own full-bleed decorations and caps
+            its own copy/panel (see Hero.tsx), so it sits outside this reading-width wrapper. */}
         <div className="mx-auto max-w-[1120px] px-6">
           <header className="hairline-b flex items-center justify-between gap-4 py-4">
             <Brand />
@@ -77,9 +79,9 @@ export function LandingPage() {
               </Button>
             </div>
           </header>
-
-          <Hero />
         </div>
+
+        <Hero />
       </section>
 
       <div className="relative z-1">

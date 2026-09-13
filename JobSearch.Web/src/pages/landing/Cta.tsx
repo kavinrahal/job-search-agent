@@ -17,9 +17,16 @@ export function Cta() {
   const loginUrl = useLoginUrl();
 
   return (
-    <Band hairline="t" className="relative overflow-hidden text-center">
-      <div aria-hidden="true" className="landing-cta-mesh" />
-      <div aria-hidden="true" className="landing-cta-glow" />
+    <Band
+      hairline="t"
+      className="text-center"
+      bleed={
+        <>
+          <div aria-hidden="true" className="landing-cta-mesh" />
+          <div aria-hidden="true" className="landing-cta-glow" />
+        </>
+      }
+    >
       <Reveal className="relative">
         <h2 className="mx-auto mb-2.5 max-w-[26ch] text-[22px] leading-[1.1] font-bold tracking-[-.03em] text-balance sm:text-[28px]">
           Stop trading your evenings for job boards.
