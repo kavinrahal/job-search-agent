@@ -1,9 +1,20 @@
+import { lazy, Suspense, useRef } from "react";
 import { Eyebrow, Timeline, TimelineItem } from "../../ui";
 import { Band } from "./Band";
 
 // First real page usage of Timeline/TimelineItem outside the in-app application history it was
 // built for. Every step uses the "pending" tick: nothing here has happened yet for a first-time
 // visitor, it is a sequence being previewed, not a status being reported.
+
+// Prototype scroll animation, lazy-loaded so GSAP + ScrollTrigger (see TimelineDraw.tsx) load as
+// their own chunk only for a landing page visit, never as part of the main app bundle the
+// authenticated dashboard ships. See TimelineDraw.tsx for why this uses a transform rather than
+// DrawSVG, and why it draws in one step at a time.
+const TimelineDraw = lazy(() => import("./TimelineDraw").then(m => ({ default: m.TimelineDraw })));
+
+function prefersReducedMotion(): boolean {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 const STEPS = [
   {
@@ -25,6 +36,12 @@ const STEPS = [
 ];
 
 export function HowItWorks() {
+  const timelineRef = useRef<HTMLDivElement>(null);
+  // Computed once per render, same as CountUp's own reduced-motion check elsewhere on this page —
+  // a reader with the setting on never triggers the dynamic import at all, and the timeline
+  // simply renders its normal, fully-drawn end state with no animation layered on top.
+  const reduced = prefersReducedMotion();
+
   return (
     <Band hairline="t">
       <Eyebrow>How it works</Eyebrow>
@@ -32,17 +49,25 @@ export function HowItWorks() {
         Four steps, and three of them run without you.
       </h2>
 
-      <Timeline className="max-w-[46ch]">
-        {STEPS.map((step, index) => (
-          <TimelineItem
-            key={step.title}
-            state="pending"
-            title={step.title}
-            detail={step.detail}
-            last={index === STEPS.length - 1}
-          />
-        ))}
-      </Timeline>
+      <div ref={timelineRef}>
+        <Timeline className="max-w-[46ch]">
+          {STEPS.map((step, index) => (
+            <TimelineItem
+              key={step.title}
+              state="pending"
+              title={step.title}
+              detail={step.detail}
+              last={index === STEPS.length - 1}
+            />
+          ))}
+        </Timeline>
+      </div>
+
+      {!reduced && (
+        <Suspense fallback={null}>
+          <TimelineDraw containerRef={timelineRef} />
+        </Suspense>
+      )}
     </Band>
   );
 }
