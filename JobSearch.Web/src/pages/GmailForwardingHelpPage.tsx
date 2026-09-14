@@ -23,7 +23,9 @@ interface StepDef {
   number: number;
   title: string;
   description: string;
-  imageAlt: string;
+  /** Omit for a step with nothing worth screenshotting — e.g. this app's own UI, which the
+   * user is already looking at, rather than an unfamiliar third-party screen to navigate. */
+  imageAlt?: string;
 }
 
 const STEPS: StepDef[] = [
@@ -63,7 +65,9 @@ const STEPS: StepDef[] = [
       // into the one real remaining action (checking status) rather than spending a whole step
       // narrating an invisible, automatic one.
       'Give it a few seconds — WorkSanta confirms the address automatically as soon as Gmail\'s verification email arrives, no action needed from you. Then click "Check status" below and WorkSanta takes it from there — no filter to set up yourself.',
-    imageAlt: "WorkSanta's Sources page showing forwarding confirmed",
+    // No screenshot: this step points at WorkSanta's own status button just below, which the
+    // user is already looking at on this page — unlike steps 1-4, there's no unfamiliar
+    // third-party UI here for a screenshot to help navigate.
   },
 ];
 
@@ -120,12 +124,14 @@ export function GmailForwardingHelpPage({ hideHeader = false }: { hideHeader?: b
               <StatusTick state="pending" number={step.number} size="lg" />
               <p className="m-0 text-body font-[650] text-ink">{step.title}</p>
             </div>
-            <p className="mb-3 text-body text-muted">{step.description}</p>
-            <ScreenshotSlot
-              src={`/images/help/gmail-forwarding-step-${step.number}.png`}
-              alt={step.imageAlt}
-              placeholderLabel={`step ${step.number} — ${step.imageAlt}`}
-            />
+            <p className={step.imageAlt ? "mb-3 text-body text-muted" : "m-0 text-body text-muted"}>{step.description}</p>
+            {step.imageAlt && (
+              <ScreenshotSlot
+                src={`/images/help/gmail-forwarding-step-${step.number}.png`}
+                alt={step.imageAlt}
+                placeholderLabel={`step ${step.number} — ${step.imageAlt}`}
+              />
+            )}
           </Surface>
         ))}
       </div>
