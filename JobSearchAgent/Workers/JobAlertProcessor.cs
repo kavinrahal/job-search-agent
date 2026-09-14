@@ -29,6 +29,19 @@ public class JobAlertProcessor
         @"https?://au\.jora\.com/job/([A-Za-z0-9_-]+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Indeed's job identifier is the "jk" query param — a 16-char hex string — not a path
+    // segment like Seek/LinkedIn/Jora use. Alert-email links land on several different paths
+    // (/viewjob, /rc/clk, /rc/clk/dl, /pagead/clk) depending on whether it's a direct link or
+    // a click-tracking redirect, so this deliberately doesn't anchor on one path — it just
+    // requires an indeed.com URL whose query string carries jk=<16 hex chars>, matched via a
+    // lazy "anything up to [?&]jk=" span so jk can appear in any position in the query string.
+    // Same "loose on purpose" tradeoff ExtractSearchContext below already makes for messy
+    // real-world email markup. jk is stable across both the direct and tracking-redirect
+    // forms, so no separate redirect-unwrapping step is needed — extracting the param is enough.
+    private static readonly Regex IndeedPattern = new(
+        @"https?://(?:[a-z]{2,3}\.)?indeed\.com/[^\s""'<>]*?[?&]jk=([0-9a-f]{16})",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private readonly AppDbContext _db;
     private readonly JobPostingFetcher _fetcher;
     private readonly PostingEvaluator _evaluator;
@@ -66,6 +79,8 @@ public class JobAlertProcessor
                 urls.TryAdd($"https://www.linkedin.com/jobs/view/{m.Groups[1].Value}", "linkedin_alert");
             foreach (Match m in JoraPattern.Matches(bodyText))
                 urls.TryAdd($"https://au.jora.com/job/{m.Groups[1].Value}", "jora_alert");
+            foreach (Match m in IndeedPattern.Matches(bodyText))
+                urls.TryAdd($"https://au.indeed.com/viewjob?jk={m.Groups[1].Value.ToLowerInvariant()}", "indeed_alert");
         }
         return urls;
     }
@@ -97,6 +112,8 @@ public class JobAlertProcessor
                 fallbackContext.TryAdd($"https://www.linkedin.com/jobs/view/{m.Groups[1].Value}", bodyText);
             foreach (Match m in JoraPattern.Matches(bodyText))
                 fallbackContext.TryAdd($"https://au.jora.com/job/{m.Groups[1].Value}", bodyText);
+            foreach (Match m in IndeedPattern.Matches(bodyText))
+                fallbackContext.TryAdd($"https://au.indeed.com/viewjob?jk={m.Groups[1].Value.ToLowerInvariant()}", bodyText);
         }
 
         // Deduplicate against already-stored postings. "Seen" = successfully evaluated, OR

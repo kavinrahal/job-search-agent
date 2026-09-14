@@ -2,9 +2,9 @@ namespace JobSearch.Data;
 
 // Discovery source catalog for the Tier 2 "choose your sources" step. Automatic sources are
 // fetched directly, no user setup. Alert sources need a job-alert email from that platform
-// forwarded in (Gmail filter + SendGrid pipe — separate tickets). Indeed is listed for
-// selection but has no fetcher/parser wired up yet; selecting it records intent without
-// changing behavior until one is built.
+// forwarded in (Gmail filter + SendGrid pipe — separate tickets). Indeed's alert emails are
+// parsed by JobAlertProcessor.IndeedPattern (extracts the "jk" job-key query param), same as
+// Seek/LinkedIn/Jora.
 //
 // Jooble was removed (never had a fetcher/parser — selecting it was a permanent no-op) rather
 // than implemented, since nothing else in the codebase depended on it (checked: no fetcher, no
