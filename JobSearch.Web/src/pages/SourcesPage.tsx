@@ -189,7 +189,14 @@ function GmailTrackingModeSection({ sources }: { sources: SourcesResponse }) {
 
 export function SourcesPage({ hideHeader = false, onboarding = false }: { hideHeader?: boolean; onboarding?: boolean } = {}) {
   const { data, loading: loadingSources } = useSources();
-  const [selected, setSelected] = useSyncedState<SourcesResponse, string[]>(data, [], d => d.enabled);
+  // Onboarding defaults to everything selected (opt-out, not opt-in) — only on a genuinely
+  // first visit (nothing saved yet). A user re-opening this step after already saving a subset
+  // sees their own saved choice, not a reset back to "everything".
+  const [selected, setSelected] = useSyncedState<SourcesResponse, string[]>(
+    data,
+    [],
+    d => (onboarding && d.enabled.length === 0 ? d.catalog.map(c => c.key) : d.enabled),
+  );
   const [saved, setSaved] = useState(false);
   const { execute, loading: saving, error } = useUpdateSources();
   const [searchParams] = useSearchParams();
