@@ -55,6 +55,51 @@ public class JobAlertProcessorTests
         Assert.Equal("jora_alert", result["https://au.jora.com/job/AbC123-xyz_9"]);
     }
 
+    // TC04b — Indeed direct /viewjob link (the plain, non-tracking form).
+    // Fixture based on the real Indeed job-key format confirmed via public examples
+    // (e.g. indeed.com/viewjob?jk=61c98a0aa32a191b) — a 16-char lowercase hex "jk" id.
+    // See JobAlertProcessor.IndeedPattern's comment for why the path isn't anchored.
+    [Fact]
+    public void ExtractJobUrls_IndeedViewJobLink_ExtractedWithCorrectSource()
+    {
+        var email = Make.Email(bodyText: "Apply now: https://au.indeed.com/viewjob?jk=61c98a0aa32a191b");
+
+        var result = JobAlertProcessor.ExtractJobUrls([email]);
+
+        Assert.True(result.ContainsKey("https://au.indeed.com/viewjob?jk=61c98a0aa32a191b"));
+        Assert.Equal("indeed_alert", result["https://au.indeed.com/viewjob?jk=61c98a0aa32a191b"]);
+    }
+
+    // TC04c — Indeed click-tracking redirect link ("/rc/clk?jk=...&bb=...&fccid=...&vjs=3") —
+    // the form Indeed's own alert/notification emails commonly use for click attribution.
+    // The jk param isn't first in the query string here, which is exactly what the lazy
+    // "[^\s\"'<>]*?[?&]jk=" span in IndeedPattern exists to handle.
+    // Silent failure: an anchored-to-path-start regex would miss this real alert-email form.
+    [Fact]
+    public void ExtractJobUrls_IndeedTrackingRedirectLink_NormalisedToDirectViewJobUrl()
+    {
+        var email = Make.Email(bodyText:
+            "Software Engineer at ACME — https://www.indeed.com/rc/clk?jk=9cf2bb43317d3751&bb=abc123&fccid=xyz&vjs=3");
+
+        var result = JobAlertProcessor.ExtractJobUrls([email]);
+
+        Assert.True(result.ContainsKey("https://au.indeed.com/viewjob?jk=9cf2bb43317d3751"));
+        Assert.Equal("indeed_alert", result["https://au.indeed.com/viewjob?jk=9cf2bb43317d3751"]);
+    }
+
+    // TC04d — Uppercase-hex jk (defensive — real observed examples are lowercase, but the
+    // regex is case-insensitive) normalises to a lowercase key so it dedupes correctly
+    // against a lowercase variant of the same job.
+    [Fact]
+    public void ExtractJobUrls_IndeedUppercaseJk_NormalisedToLowercase()
+    {
+        var email = Make.Email(bodyText: "https://au.indeed.com/viewjob?jk=9AE0338B0E17F89F");
+
+        var result = JobAlertProcessor.ExtractJobUrls([email]);
+
+        Assert.True(result.ContainsKey("https://au.indeed.com/viewjob?jk=9ae0338b0e17f89f"));
+    }
+
     // TC05 — Same URL appearing in two separate emails deduplicates to one entry
     // Silent failure: if TryAdd is replaced with indexer assignment, last-wins overwrites source label.
     [Fact]
