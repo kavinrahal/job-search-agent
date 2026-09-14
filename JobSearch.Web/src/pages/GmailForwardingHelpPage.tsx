@@ -23,7 +23,7 @@ interface StepDef {
   number: number;
   title: string;
   description: string;
-  imageAlt: string;
+  imageAlt?: string;
 }
 
 const STEPS: StepDef[] = [
@@ -56,16 +56,18 @@ const STEPS: StepDef[] = [
   },
   {
     number: 5,
-    title: "Confirm the address from your inbox",
+    title: "Nothing to do here — WorkSanta confirms it for you",
     description:
-      'Gmail sends a confirmation email to the new address titled "Gmail Forwarding Confirmation - Receive Emails from ...". Open it and click the verification link inside. (If Gmail\'s dialog asks for a confirmation code instead of showing a link, the same email contains that code — copy it back into the dialog.)',
-    imageAlt: "The Gmail Forwarding Confirmation email with its verification link",
+      'Gmail sends a confirmation email to the address you just added, titled "Gmail Forwarding Confirmation - Receive Emails from ...". That address is WorkSanta\'s own inbox, not yours, so there is no email for you to check and no link for you to click here — WorkSanta detects that message the moment it arrives and confirms it automatically, usually within a few seconds.',
+    // No screenshot: nothing happens in Gmail's UI at this step for the user to see, and there's
+    // no WorkSanta-side confirmation email/code to show either — it's server-side and invisible
+    // by design, so a "here's what you'd see" image would just be misleading.
   },
   {
     number: 6,
     title: "Come back here and check status",
     description:
-      'Once confirmed, come back to this page and click "Check status" below. WorkSanta takes it from there automatically — no filter to set up yourself.',
+      'Give it a few seconds, then click "Check status" below. Once it flips to confirmed, WorkSanta takes it from there automatically — no filter to set up yourself.',
     imageAlt: "WorkSanta's Sources page showing forwarding confirmed",
   },
 ];
@@ -123,12 +125,14 @@ export function GmailForwardingHelpPage({ hideHeader = false }: { hideHeader?: b
               <StatusTick state="pending" number={step.number} size="lg" />
               <p className="m-0 text-body font-[650] text-ink">{step.title}</p>
             </div>
-            <p className="mb-3 text-body text-muted">{step.description}</p>
-            <ScreenshotSlot
-              src={`/images/help/gmail-forwarding-step-${step.number}.png`}
-              alt={step.imageAlt}
-              placeholderLabel={`step ${step.number} — ${step.imageAlt}`}
-            />
+            <p className={step.imageAlt ? "mb-3 text-body text-muted" : "m-0 text-body text-muted"}>{step.description}</p>
+            {step.imageAlt && (
+              <ScreenshotSlot
+                src={`/images/help/gmail-forwarding-step-${step.number}.png`}
+                alt={step.imageAlt}
+                placeholderLabel={`step ${step.number} — ${step.imageAlt}`}
+              />
+            )}
           </Surface>
         ))}
       </div>
