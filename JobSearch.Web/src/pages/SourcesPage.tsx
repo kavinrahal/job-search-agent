@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useSources, useUpdateSources, useUpdateGmailTrackingMode, useGmailForwardingStatus } from "../hooks/useSources";
 import { useSyncedState } from "../hooks/useSyncedState";
 import { gmailOAuthStartUrl } from "../api";
@@ -58,7 +58,11 @@ function GmailForwardingSetup({ trackingMode }: { trackingMode: "full" | "filter
           Gmail requires you to add this yourself. In Gmail, go to Settings → Forwarding and
           POP/IMAP → Add a forwarding address, paste the address below, then confirm it via
           the email Gmail sends you. Once confirmed, the app automatically installs a filter
-          that forwards matching job alerts here, no manual filter setup needed.
+          that forwards matching job alerts here, no manual filter setup needed.{" "}
+          <Link to="/sources/gmail-forwarding-help" className="font-[650] text-ember hover:text-ember-hi">
+            Show me how, step by step
+          </Link>
+          .
         </p>
       )}
       {status && (

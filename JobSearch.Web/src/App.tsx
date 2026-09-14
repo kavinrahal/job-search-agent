@@ -12,6 +12,7 @@ import { GeneratePage } from "./pages/GeneratePage";
 import { SupportPage } from "./pages/SupportPage";
 import { HelpPage } from "./pages/HelpPage";
 import { SourcesPage } from "./pages/SourcesPage";
+import { GmailForwardingHelpPage } from "./pages/GmailForwardingHelpPage";
 import { OnboardingCvPage } from "./pages/onboarding/OnboardingCvPage";
 import { OnboardingCriteriaPage } from "./pages/onboarding/OnboardingCriteriaPage";
 import { OnboardingSourcesPage } from "./pages/onboarding/OnboardingSourcesPage";
@@ -276,6 +277,18 @@ function PageBody({ me }: { me: Me }) {
             element={
               <SettingsShell activeKey="sources" title="Choose your sources" tagline="Tell us where to look, and how you want applications tracked.">
                 <SourcesPage hideHeader />
+              </SettingsShell>
+            }
+          />
+          {/* The illustrated walkthrough for the one manual step Gmail forwarding needs — linked
+              from GmailForwardingSetup's "Show me how, step by step". Kept under SettingsShell
+              with the same activeKey as /sources so the sub-nav still reads as "you're in
+              Sources", rather than introducing a standalone page with no wayfinding. */}
+          <Route
+            path="/sources/gmail-forwarding-help"
+            element={
+              <SettingsShell activeKey="sources" title="Set up Gmail forwarding" tagline="Step by step, with screenshots.">
+                <GmailForwardingHelpPage hideHeader />
               </SettingsShell>
             }
           />
