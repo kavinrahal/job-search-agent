@@ -6,4 +6,5 @@
   <Project Path="JobSearch.Data/JobSearch.Data.csproj" />
   <Project Path="JobSearchAgent.Tests/JobSearchAgent.Tests.csproj" />
   <Project Path="JobSearchAgent/JobSearchAgent.csproj" />
+  <Project Path="PostingEvaluatorBenchmark/PostingEvaluatorBenchmark.csproj" />
 </Solution>
