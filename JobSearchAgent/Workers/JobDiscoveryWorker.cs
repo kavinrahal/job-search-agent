@@ -29,6 +29,7 @@ public class JobDiscoveryWorker
     private readonly AppDbContext _db;
     private readonly IEnumerable<IJobFetcher> _fetchers;
     private readonly JobPostingFetcher _pageFetcher;
+    private readonly PostingPreFilterAgent _preFilter;
     private readonly PostingEvaluator _evaluator;
     private readonly SendGridEmailService? _emailer;
 
@@ -36,12 +37,14 @@ public class JobDiscoveryWorker
         AppDbContext db,
         IEnumerable<IJobFetcher> fetchers,
         JobPostingFetcher pageFetcher,
+        PostingPreFilterAgent preFilter,
         PostingEvaluator evaluator,
         SendGridEmailService? emailer = null)
     {
         _db = db;
         _fetchers = fetchers;
         _pageFetcher = pageFetcher;
+        _preFilter = preFilter;
         _evaluator = evaluator;
         _emailer = emailer;
     }
@@ -128,32 +131,52 @@ public class JobDiscoveryWorker
                 {
                     postingText = item.ToPostingText();
                 }
-                var eval = await _evaluator.EvaluateAsync(profile, postingText, item.Url);
-
-                record.Company = eval.Company;
-                record.Title = string.IsNullOrEmpty(eval.RoleTitle) ? item.Title : eval.RoleTitle;
-                // Kept so one-tap CV/cover-letter generation doesn't have to re-fetch a page
-                // that may well be unfetchable by then — see DiscoveredPosting.PostingText.
-                record.PostingText = postingText;
-                record.Recommendation = eval.Recommendation;
-                record.EvaluationJson = JsonSerializer.Serialize(eval);
-                record.DisqualifierHit = eval.DisqualifierHit;
-                record.EvaluatedAt = DateTime.UtcNow;
-                record.FailureCount = 0;
-                await _db.SaveChangesAsync();
-
-                evaluated++;
-                Console.WriteLine($"    => {eval.Recommendation} | {eval.Company}");
-
-                bool isMatch = eval.Recommendation is "strong_match" or "good_match";
-
-                if (_emailer is not null && user is not null && isMatch && !record.EmailNotificationSent)
+                // Cheap gate in front of the full evaluator — see PostingPreFilterAgent. Real
+                // production data showed 89.2% of postings that reached the full Sonnet
+                // evaluation just ended up hard-disqualified anyway, so most of that spend is
+                // wasted. If the narrow pre-filter finds one of the four hard disqualifiers,
+                // record the discard and skip the expensive evaluator call entirely.
+                var preFilterResult = await _preFilter.PreFilterAsync(profile, postingText, item.Url);
+                if (preFilterResult.DisqualifierHit is not null)
                 {
-                    var (subject, body) = EvalFormatter.FormatPlainTextEmail(eval);
-                    await _emailer.SendAsync(user.Email, subject, body);
-                    record.EmailNotificationSent = true;
+                    record.Recommendation = "discard";
+                    record.DisqualifierHit = preFilterResult.DisqualifierHit;
+                    record.EvaluatedAt = DateTime.UtcNow;
+                    record.FailureCount = 0;
                     await _db.SaveChangesAsync();
-                    notified++;
+
+                    evaluated++;
+                    Console.WriteLine($"    => discard (pre-filter: {preFilterResult.DisqualifierHit})");
+                }
+                else
+                {
+                    var eval = await _evaluator.EvaluateAsync(profile, postingText, item.Url);
+
+                    record.Company = eval.Company;
+                    record.Title = string.IsNullOrEmpty(eval.RoleTitle) ? item.Title : eval.RoleTitle;
+                    // Kept so one-tap CV/cover-letter generation doesn't have to re-fetch a page
+                    // that may well be unfetchable by then — see DiscoveredPosting.PostingText.
+                    record.PostingText = postingText;
+                    record.Recommendation = eval.Recommendation;
+                    record.EvaluationJson = JsonSerializer.Serialize(eval);
+                    record.DisqualifierHit = eval.DisqualifierHit;
+                    record.EvaluatedAt = DateTime.UtcNow;
+                    record.FailureCount = 0;
+                    await _db.SaveChangesAsync();
+
+                    evaluated++;
+                    Console.WriteLine($"    => {eval.Recommendation} | {eval.Company}");
+
+                    bool isMatch = eval.Recommendation is "strong_match" or "good_match";
+
+                    if (_emailer is not null && user is not null && isMatch && !record.EmailNotificationSent)
+                    {
+                        var (subject, body) = EvalFormatter.FormatPlainTextEmail(eval);
+                        await _emailer.SendAsync(user.Email, subject, body);
+                        record.EmailNotificationSent = true;
+                        await _db.SaveChangesAsync();
+                        notified++;
+                    }
                 }
             }
             catch (Exception ex)

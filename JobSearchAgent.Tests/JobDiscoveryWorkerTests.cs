@@ -320,6 +320,54 @@ public class JobDiscoveryWorkerTests
         Assert.Equal(0, db.DiscoveredPostings.Single(d => d.Url == item.Url).FailureCount);
     }
 
+    // =========================================================================
+    // Pre-filter gate (PostingPreFilterAgent)
+    // =========================================================================
+
+    // TC11 — Pre-filter finds a disqualifier → record is discarded and the full evaluator is
+    // never called at all. This is the entire cost-savings mechanism, so pin it down directly.
+    [Fact]
+    public async Task RunAsync_PreFilterFindsDisqualifier_DiscardsWithoutCallingEvaluator()
+    {
+        var db = Db.Fresh();
+        var item = FeedItem();
+        int evalCount = 0;
+        var worker = MakeWorker(db,
+            fetchers: [new FakeFetcher([item])],
+            preFilter: new FakePreFilter(_ => new PostingPreFilterResult { DisqualifierHit = "sponsorship", Evidence = "no visa sponsorship offered" }),
+            evaluator: new FakeEval(_ => { evalCount++; return StubEval("weak_match"); }));
+
+        var (_, evaluated, notified) = await worker.RunAsync();
+
+        Assert.Equal(0, evalCount); // the expensive evaluator must never be reached
+        Assert.Equal(1, evaluated);
+        Assert.Equal(0, notified);
+        var record = db.DiscoveredPostings.Single(d => d.Url == item.Url);
+        Assert.Equal("discard", record.Recommendation);
+        Assert.Equal("sponsorship", record.DisqualifierHit);
+        Assert.NotNull(record.EvaluatedAt);
+        Assert.Null(record.EvaluationJson); // no full evaluation ran, so there's nothing to store
+    }
+
+    // TC12 — Pre-filter finds nothing → falls through to the full evaluator exactly as before.
+    [Fact]
+    public async Task RunAsync_PreFilterFindsNothing_FallsThroughToFullEvaluator()
+    {
+        var db = Db.Fresh();
+        var item = FeedItem();
+        int evalCount = 0;
+        var worker = MakeWorker(db,
+            fetchers: [new FakeFetcher([item])],
+            preFilter: new FakePreFilter(_ => new PostingPreFilterResult()),
+            evaluator: new FakeEval(_ => { evalCount++; return StubEval("good_match"); }));
+
+        await worker.RunAsync();
+
+        Assert.Equal(1, evalCount);
+        var record = db.DiscoveredPostings.Single(d => d.Url == item.Url);
+        Assert.Equal("good_match", record.Recommendation);
+    }
+
     // TC10 — strong_match with an emailer configured → EmailNotificationSent=true, notified=1
     [Fact]
     public async Task RunAsync_StrongMatchWithEmailer_EmailNotificationSent()
@@ -378,11 +426,15 @@ public class JobDiscoveryWorkerTests
         AppDbContext db,
         IEnumerable<IJobFetcher>? fetchers = null,
         JobPostingFetcher? pageFetcher = null,
+        PostingPreFilterAgent? preFilter = null,
         PostingEvaluator? evaluator = null,
         SendGridEmailService? emailer = null) =>
         new(db,
             fetchers   ?? [],
             pageFetcher ?? new FakePageFetcher(_ => "page text"),
+            // Defaults to "nothing disqualified" so existing tests exercise the full evaluator
+            // path unchanged — tests that care about the pre-filter pass their own FakePreFilter.
+            preFilter  ?? new FakePreFilter(_ => new PostingPreFilterResult()),
             evaluator  ?? new FakeEval(_ => StubEval("weak_match")),
             emailer);
 
@@ -403,6 +455,14 @@ public class JobDiscoveryWorkerTests
         private readonly Func<string, PostingEvaluation> _fn;
         public FakeEval(Func<string, PostingEvaluation> fn) : base() => _fn = fn;
         public override Task<PostingEvaluation> EvaluateAsync(UserProfile profile, string postingText, string? sourceUrl = null)
+            => Task.FromResult(_fn(postingText));
+    }
+
+    private sealed class FakePreFilter : PostingPreFilterAgent
+    {
+        private readonly Func<string, PostingPreFilterResult> _fn;
+        public FakePreFilter(Func<string, PostingPreFilterResult> fn) : base() => _fn = fn;
+        public override Task<PostingPreFilterResult> PreFilterAsync(UserProfile profile, string postingText, string? sourceUrl = null)
             => Task.FromResult(_fn(postingText));
     }
 }
