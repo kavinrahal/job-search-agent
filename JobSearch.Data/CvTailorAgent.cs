@@ -17,9 +17,20 @@ namespace JobSearch.Data;
 public class CvTailorAgent
 {
     private readonly AnthropicClient _client;
-    // Same model as before the rearchitecture (see the historical Sonnet->Opus revert note this
-    // replaced) — not revisited here, this change is about output shape, not model choice.
-    private const string OpusModel = "claude-opus-4-8";
+    // Switched from Opus to Sonnet 5 on the strength of a live regression eval
+    // (CvTailorAgentModelEvalTests): Sonnet ran the full fixture set — including the edge cases
+    // (unicode/international formatting, employment gaps, career changer, unusual sections) — with
+    // zero truncation, zero malformed tool-use, all required fields populated, and per-fixture
+    // quality that held up against the Opus baseline. This reverses the earlier Sonnet->Opus
+    // revert now that the delta-shaped tool-use output (not one free-text call) keeps each call's
+    // output small. Watch production for a max_tokens stop_reason before trusting it further.
+    private const string SonnetModel = "claude-sonnet-5";
+    // Overridable via the constructor, defaulting to SonnetModel — exists so a regression eval can
+    // exercise this agent's real call shape against a different model (e.g. the Opus baseline)
+    // without a second copy of this class. See CvTailorAgentModelEvalTests. Every call site below
+    // reads _model, never the SonnetModel constant directly, so an override actually takes effect
+    // everywhere (GenerateAsync's 3 tool-use calls and ReviseAsync).
+    private readonly string _model;
     private readonly string _skillText;
     private readonly string _skillVersion;
     private readonly ClaudeUsageLogger? _usageLogger;
@@ -52,12 +63,15 @@ public class CvTailorAgent
     // specific posting. internal, not private, so ResumeOverrideSchemaTests can assert on it.
     internal const string ExtraAchievementsNote = "Only if a bullet with no BACKGROUND source already exists verbatim in CURRENT RESUME for this role/project — copy it exactly, unchanged. Never invent, paraphrase, or add new content here; leave empty otherwise.";
 
-    public CvTailorAgent(string apiKey, ClaudeUsageLogger? usageLogger = null)
+    // model: test-only override (see _model above); every production call site omits it and
+    // gets SonnetModel.
+    public CvTailorAgent(string apiKey, ClaudeUsageLogger? usageLogger = null, string? model = null)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("tailor_cv.md");
         _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
+        _model = model ?? SonnetModel;
 
         _summarySkillsTool = new Tool
         {
@@ -211,6 +225,21 @@ public class CvTailorAgent
     public async Task<string> GenerateAsync(UserProfile profile, UserResume resume, string postingText, string evaluationJson)
     {
         var background = BackgroundYamlParser.Parse(profile.Background);
+        var (summarySkills, experience, projects) = await GenerateRawAsync(background, profile, resume, postingText, evaluationJson);
+
+        return ApplyDeltaAndRender(background, resume, summarySkills, experience, projects);
+    }
+
+    // Split out from GenerateAsync so a regression eval (CvTailorAgentModelEvalTests) can inspect
+    // each of the 3 parallel tool-use calls' raw output independently — near-empty/single-word
+    // field values, an experience_overrides entry with a suspiciously short text_override, etc. —
+    // instead of only the final merged, rendered document, where one thin call's content could be
+    // masked by the other two. internal, not private, same rationale as ApplyDeltaAndRender/
+    // BuildSystemPrompt above. Takes background pre-parsed for the same reason BuildSystemPrompt
+    // does (GenerateAsync needs the parsed value again afterward for the render).
+    internal async Task<(IReadOnlyDictionary<string, JsonElement> SummarySkills, IReadOnlyDictionary<string, JsonElement> Experience, IReadOnlyDictionary<string, JsonElement> Projects)> GenerateRawAsync(
+        BackgroundData background, UserProfile profile, UserResume resume, string postingText, string evaluationJson)
+    {
         var systemPrompt = BuildSystemPrompt(background, profile.Background, resume, includeContactInfo: false);
         var userContent = BuildInitialUserContent(postingText, evaluationJson);
 
@@ -219,7 +248,7 @@ public class CvTailorAgent
         var projectsTask = CallAsync(profile.UserId, systemPrompt, userContent, _projectsTool, ProjectsMaxTokens);
         await Task.WhenAll(summarySkillsTask, experienceTask, projectsTask);
 
-        return ApplyDeltaAndRender(background, resume, summarySkillsTask.Result, experienceTask.Result, projectsTask.Result);
+        return (summarySkillsTask.Result, experienceTask.Result, projectsTask.Result);
     }
 
     // Split out from GenerateAsync so the delta-combination logic is testable without a live API
@@ -251,7 +280,7 @@ public class CvTailorAgent
         var background = BackgroundYamlParser.Parse(profile.Background);
         var response = await _client.Messages.Create(new MessageCreateParams
         {
-            Model = OpusModel,
+            Model = _model,
             MaxTokens = 4000,
             System = new List<TextBlockParam>
             {
@@ -261,7 +290,7 @@ public class CvTailorAgent
         });
 
         if (_usageLogger is not null)
-            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CvTailorAgent, OpusModel, response.Usage, _skillVersion);
+            await _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.CvTailorAgent, _model, response.Usage, _skillVersion);
 
         return RestoreContactLine(ExtractText(response.Content), background.Personal);
     }
@@ -271,7 +300,7 @@ public class CvTailorAgent
             _client,
             buildRequest: messages => new MessageCreateParams
             {
-                Model = OpusModel,
+                Model = _model,
                 MaxTokens = maxTokens,
                 System = new List<TextBlockParam>
                 {
@@ -286,7 +315,7 @@ public class CvTailorAgent
             parse: input => input,
             missingToolUseMessage: $"CV tailoring did not return a tool use block for \"{tool.Name}\".",
             logLabel: nameof(CvTailorAgent),
-            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(userId, ClaudeAgentName.CvTailorAgent, OpusModel, usage, _skillVersion));
+            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(userId, ClaudeAgentName.CvTailorAgent, _model, usage, _skillVersion));
 
     private static string ExtractText(IReadOnlyList<ContentBlock> blocks)
     {
