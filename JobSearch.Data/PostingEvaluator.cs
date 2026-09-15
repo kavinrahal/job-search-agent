@@ -8,18 +8,28 @@ public class PostingEvaluator
 {
     private readonly AnthropicClient _client;
     private const string SonnetModel = "claude-sonnet-5";
+    // Overridable via the constructor, defaulting to SonnetModel — exists so a benchmark/eval
+    // harness can exercise this agent's real call shape (schema, prompt assembly, retry, parsing)
+    // against a different model (e.g. Opus, Haiku) without a second copy of this class. See
+    // PostingEvaluatorBenchmark. Same pattern as CvTailorAgent's _model override. Every call site
+    // below reads _model, never the SonnetModel constant directly, so an override actually takes
+    // effect everywhere (both the MessageCreateParams.Model and the usage-log Model).
+    private readonly string _model;
 
     private readonly string _skillText;
     private readonly string _skillVersion;
     private readonly Tool _tool;
     private readonly ClaudeUsageLogger? _usageLogger;
 
-    public PostingEvaluator(string apiKey, ClaudeUsageLogger? usageLogger = null)
+    // model: test-only override (see _model above); every production call site omits it and
+    // gets SonnetModel.
+    public PostingEvaluator(string apiKey, ClaudeUsageLogger? usageLogger = null, string? model = null)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("evaluate_posting.md");
         _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
+        _model = model ?? SonnetModel;
 
         _tool = new Tool
         {
@@ -66,7 +76,7 @@ public class PostingEvaluator
         };
     }
 
-    protected PostingEvaluator() { _client = null!; _skillText = ""; _skillVersion = ""; _tool = null!; _usageLogger = null; }
+    protected PostingEvaluator() { _client = null!; _model = ""; _skillText = ""; _skillVersion = ""; _tool = null!; _usageLogger = null; }
 
     // Per-call, not per-instance — see CvTailorAgent.BuildSystemPrompt for why.
     private string BuildSystemPrompt(UserProfile profile) => $"""
@@ -86,7 +96,7 @@ public class PostingEvaluator
             _client,
             buildRequest: messages => new MessageCreateParams
             {
-                Model = SonnetModel,
+                Model = _model,
                 MaxTokens = 1024,
                 // This is classification-shaped (fixed recommendation tier + enum fields) and would
                 // otherwise get ClaudeTemperature.Classification, but claude-sonnet-5 is one of the
@@ -110,7 +120,7 @@ public class PostingEvaluator
             parse: input => ParseEvaluation(input, sourceUrl),
             missingToolUseMessage: "Evaluator did not return a tool use block.",
             logLabel: nameof(PostingEvaluator),
-            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.PostingEvaluator, SonnetModel, usage, _skillVersion));
+            onUsage: _usageLogger is null ? null : usage => _usageLogger.LogAsync(profile.UserId, ClaudeAgentName.PostingEvaluator, _model, usage, _skillVersion));
     }
 
     // Split out from EvaluateAsync so the tool-input-to-DTO mapping (including the literal-"null"

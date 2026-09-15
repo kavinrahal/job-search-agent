@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Standalone runnable console tool: benchmarks PostingEvaluator's real production call path
+    (via a narrow, additive, test-only model-override constructor — see PostingEvaluator.cs)
+    across Claude model tiers (Sonnet 5 / Opus 4.8 / Haiku 4.5 today; OpenAI/Gemini adapters are
+    a documented extension point, not yet implemented — see Providers/IEvaluationProvider.cs)
+    against a synthetic, ground-truth-labeled fixture set. Prints a cost/accuracy comparison
+    table. See README section in JobSearchAgent.Tests/PostingEvaluatorBenchmarkTests.cs for the
+    gated contract-test entry point, and Program.cs's header comment for how to run this live.
+
+    A separate project (not folded into JobSearchAgent.Tests) because it's a runnable tool with
+    its own Main, not just test assertions — Program.cs is the actual deliverable the repo owner
+    runs to get the comparison table (see task brief). JobSearchAgent.Tests references it as a
+    library for the structural/no-op-without-a-key test coverage, matching this repo's existing
+    contract-test gating convention (see CvTailorAgentModelEvalTests, EmailClassifierEvalTests).
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>PostingEvaluatorBenchmark</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- In-memory only: the benchmark's usage capture reuses ClaudeUsageLogger/AppDbContext
+         (see Providers/ClaudeEvaluationProvider.cs) purely to read real token-usage numbers back
+         out of the same real Usage object production logging already captures — no Postgres
+         connection, no production data, nothing written to disk. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JobSearch.Data\JobSearch.Data.csproj" />
+  </ItemGroup>
+
+</Project>

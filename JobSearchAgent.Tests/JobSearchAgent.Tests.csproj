@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\JobSearchAgent\JobSearchAgent.csproj" />
     <ProjectReference Include="..\JobSearch.Data\JobSearch.Data.csproj" />
+    <ProjectReference Include="..\PostingEvaluatorBenchmark\PostingEvaluatorBenchmark.csproj" />
   </ItemGroup>
 
   <ItemGroup>
