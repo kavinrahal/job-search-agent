@@ -17,13 +17,18 @@ namespace JobSearch.Data;
 public class CvTailorAgent
 {
     private readonly AnthropicClient _client;
-    // Same model as before the rearchitecture (see the historical Sonnet->Opus revert note this
-    // replaced) — not revisited here, this change is about output shape, not model choice.
-    private const string OpusModel = "claude-opus-4-8";
-    // Overridable via the constructor, defaulting to OpusModel — exists so a regression eval can
-    // exercise this agent's real call shape against a different model (e.g. Sonnet) without a
-    // second copy of this class. See CvTailorAgentModelEvalTests. Every call site below reads
-    // _model, never the OpusModel constant directly, so an override actually takes effect
+    // Switched from Opus to Sonnet 5 on the strength of a live regression eval
+    // (CvTailorAgentModelEvalTests): Sonnet ran the full fixture set — including the edge cases
+    // (unicode/international formatting, employment gaps, career changer, unusual sections) — with
+    // zero truncation, zero malformed tool-use, all required fields populated, and per-fixture
+    // quality that held up against the Opus baseline. This reverses the earlier Sonnet->Opus
+    // revert now that the delta-shaped tool-use output (not one free-text call) keeps each call's
+    // output small. Watch production for a max_tokens stop_reason before trusting it further.
+    private const string SonnetModel = "claude-sonnet-5";
+    // Overridable via the constructor, defaulting to SonnetModel — exists so a regression eval can
+    // exercise this agent's real call shape against a different model (e.g. the Opus baseline)
+    // without a second copy of this class. See CvTailorAgentModelEvalTests. Every call site below
+    // reads _model, never the SonnetModel constant directly, so an override actually takes effect
     // everywhere (GenerateAsync's 3 tool-use calls and ReviseAsync).
     private readonly string _model;
     private readonly string _skillText;
@@ -59,14 +64,14 @@ public class CvTailorAgent
     internal const string ExtraAchievementsNote = "Only if a bullet with no BACKGROUND source already exists verbatim in CURRENT RESUME for this role/project — copy it exactly, unchanged. Never invent, paraphrase, or add new content here; leave empty otherwise.";
 
     // model: test-only override (see _model above); every production call site omits it and
-    // gets OpusModel.
+    // gets SonnetModel.
     public CvTailorAgent(string apiKey, ClaudeUsageLogger? usageLogger = null, string? model = null)
     {
         _client = new AnthropicClient { ApiKey = apiKey };
         _skillText = SkillLoader.Load("tailor_cv.md");
         _skillVersion = SkillLoader.Version(_skillText);
         _usageLogger = usageLogger;
-        _model = model ?? OpusModel;
+        _model = model ?? SonnetModel;
 
         _summarySkillsTool = new Tool
         {

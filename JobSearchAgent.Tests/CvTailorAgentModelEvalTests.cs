@@ -49,10 +49,11 @@ public class CvTailorAgentModelEvalTests
 {
     private static string? ApiKey => Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
 
+    // The Opus baseline this eval compares against, exercised via CvTailorAgent's model override.
+    // No longer the production default: on the strength of this eval CvTailorAgent switched its
+    // SonnetModel constant to claude-sonnet-5 (see that constant's comment and PR #142).
     private const string OpusModelId = "claude-opus-4-8";
-    // Mirrors the literal used in the 2026-08-19 incident and its revert (see CvTailorAgent's and
-    // CoverLetterAgent's model-constant comments) -- not a production constant, since this eval is
-    // the only place in the codebase that currently needs to name Sonnet 5 by id.
+    // Matches CvTailorAgent's production SonnetModel constant; exercised here as the default path.
     private const string SonnetModelId = "claude-sonnet-5";
 
     // A required field is "near-empty" below this length/word count -- calibrated well under any
