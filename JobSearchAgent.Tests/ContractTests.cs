@@ -51,6 +51,223 @@ public class ContractTests
     }
 
     // =========================================================================
+    // PostingPreFilterAgent
+    // =========================================================================
+
+    // Verifies structural contract: a posting with an explicit sponsorship exclusion is flagged
+    // with a valid disqualifier id and non-empty quoted evidence.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task PostingPreFilterAgent_ExplicitSponsorshipExclusion_FlagsDisqualifier()
+    {
+        if (ApiKey is null) return;
+
+        const string posting = """
+            Company: Acme Software
+            Role: Software Engineer
+            Location: Melbourne, VIC (hybrid)
+            Description: Build backend services for our payments platform.
+            Stack: C#, .NET 8, Azure, PostgreSQL, React.
+            Note: We are unable to offer visa sponsorship for this role. Applicants must have full working rights in Australia.
+            """;
+
+        var agent = new PostingPreFilterAgent(ApiKey);
+        var result = await agent.PreFilterAsync(Make.OwnerProfile(), posting, "https://example.com/job/2");
+
+        Assert.Equal("sponsorship", result.DisqualifierHit);
+        Assert.False(string.IsNullOrWhiteSpace(result.Evidence));
+    }
+
+    // Verifies structural contract: a clean posting with no disqualifier trigger comes back with
+    // both fields unset, and any value that is set is a valid enum id.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task PostingPreFilterAgent_CleanPosting_ReturnsValidStructuredOutput()
+    {
+        if (ApiKey is null) return;
+
+        var agent = new PostingPreFilterAgent(ApiKey);
+        var result = await agent.PreFilterAsync(Make.OwnerProfile(), SamplePosting, "https://example.com/job/1");
+
+        if (result.DisqualifierHit is not null)
+        {
+            Assert.Contains(result.DisqualifierHit, new List<string> { "sponsorship", "php_primary", "gambling", "solo_engineer" });
+        }
+        else
+        {
+            Assert.Null(result.Evidence);
+        }
+    }
+
+    // =========================================================================
+    // PostingPreFilterAgent — regression cases from the production eval suite
+    //
+    // These pin down specific failure modes a live eval run against real production postings
+    // (see the PR description for the full methodology and numbers) found in claude-haiku-4-5's
+    // behavior on this prompt, each fixed by either tightening prefilter_posting.md or — for the
+    // php_primary case, where prompt tightening alone plateaued after several iterations — a
+    // deterministic code-level guard in PostingPreFilterAgent.RejectUnsupportedPhpPrimary. Kept
+    // as contract tests (real API calls) rather than unit tests because the failure mode is a
+    // model behavior, not a parsing bug — a prompt or model regression here needs a live call to
+    // catch. Make.OwnerProfile() loads the checked-in context/job_criteria.yaml fixture, whose
+    // sponsorship.candidate_status is explicitly non-citizen/non-PR with no current work visa
+    // (candidate_status.citizen_or_permanent_resident: false, has_current_work_visa: false) —
+    // real signal is expected to still apply to this fixture.
+    // =========================================================================
+
+    // The exact real-world failure this regresses: the model repeatedly flagged php_primary on
+    // Java/Python postings with reasoning like "the primary backend is Java, not C#/.NET" — a
+    // stack-preference judgment call that belongs to the full evaluator, not this narrow check.
+    [Theory]
+    [Trait("Category", "contract")]
+    [InlineData("Company: Acme\nRole: Core Java Developer\nDescription: Build backend services in Java and Spring Boot.")]
+    [InlineData("Company: Acme\nRole: Fullstack Developer (Python/React)\nDescription: Backend in Python/Django, frontend in React.")]
+    public async Task PostingPreFilterAgent_NonPhpBackend_NeverFlagsPhpPrimary(string posting)
+    {
+        if (ApiKey is null) return;
+
+        var agent = new PostingPreFilterAgent(ApiKey);
+        var result = await agent.PreFilterAsync(Make.OwnerProfile(), posting, "https://example.com/job/3");
+
+        Assert.NotEqual("php_primary", result.DisqualifierHit);
+    }
+
+    // A posting whose backend genuinely is PHP must still be caught — the guard above must not
+    // overcorrect into suppressing every php_primary hit.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task PostingPreFilterAgent_ActualPhpBackend_FlagsPhpPrimary()
+    {
+        if (ApiKey is null) return;
+
+        const string posting = """
+            Company: Acme Software
+            Role: Backend Developer
+            Description: Build and maintain our e-commerce platform.
+            Stack: PHP 8, Laravel, MySQL.
+            """;
+
+        var agent = new PostingPreFilterAgent(ApiKey);
+        var result = await agent.PreFilterAsync(Make.OwnerProfile(), posting, "https://example.com/job/4");
+
+        Assert.Equal("php_primary", result.DisqualifierHit);
+    }
+
+    // Regresses a real miss: the model flagged "gambling" on a hedge fund / quantitative trading
+    // firm ("systematic hedge fund that combines quantitative research... to trade FX and
+    // futures markets") — financial risk-taking isn't gambling.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task PostingPreFilterAgent_HedgeFund_DoesNotFlagGambling()
+    {
+        if (ApiKey is null) return;
+
+        const string posting = """
+            Company: Acme Capital
+            Role: Quantitative Software Engineer
+            Description: Join our systematic hedge fund that combines quantitative research,
+            machine learning, and sophisticated software engineering to trade FX and futures markets.
+            Stack: C#, .NET, Python.
+            """;
+
+        var agent = new PostingPreFilterAgent(ApiKey);
+        var result = await agent.PreFilterAsync(Make.OwnerProfile(), posting, "https://example.com/job/5");
+
+        Assert.NotEqual("gambling", result.DisqualifierHit);
+    }
+
+    // A company whose core business genuinely is gambling must still be caught.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task PostingPreFilterAgent_OnlineCasino_FlagsGambling()
+    {
+        if (ApiKey is null) return;
+
+        const string posting = """
+            Company: Acme Bet
+            Role: Backend Engineer
+            Description: We operate a leading online casino and sports betting platform. Build
+            the backend systems powering our real-money wagering products.
+            Stack: C#, .NET, Azure.
+            """;
+
+        var agent = new PostingPreFilterAgent(ApiKey);
+        var result = await agent.PreFilterAsync(Make.OwnerProfile(), posting, "https://example.com/job/6");
+
+        Assert.Equal("gambling", result.DisqualifierHit);
+    }
+
+    // Regresses a real miss: the model flagged "solo_engineer" on a sales role ("this is a sales
+    // role... not an engineering position") — using it as a catch-all for "wrong role type"
+    // rather than the narrow "you'd be the only engineer" meaning.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task PostingPreFilterAgent_SalesRole_DoesNotFlagSoloEngineer()
+    {
+        if (ApiKey is null) return;
+
+        const string posting = """
+            Company: Acme Data
+            Role: Sales Specialist Account Executive
+            Description: Drive new business for our data platform. Own the full sales cycle from
+            prospecting through close, working closely with our solutions engineering team.
+            """;
+
+        var agent = new PostingPreFilterAgent(ApiKey);
+        var result = await agent.PreFilterAsync(Make.OwnerProfile(), posting, "https://example.com/job/7");
+
+        Assert.NotEqual("solo_engineer", result.DisqualifierHit);
+    }
+
+    // A posting that genuinely states the candidate would be the only engineer must still be
+    // caught.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task PostingPreFilterAgent_ExplicitSoloEngineerLanguage_FlagsSoloEngineer()
+    {
+        if (ApiKey is null) return;
+
+        const string posting = """
+            Company: Acme Startup
+            Role: Founding Software Engineer
+            Description: You will be our sole engineer — there is no other technical person at
+            the company today, and you'll own the entire stack end to end.
+            Stack: C#, .NET, React.
+            """;
+
+        var agent = new PostingPreFilterAgent(ApiKey);
+        var result = await agent.PreFilterAsync(Make.OwnerProfile(), posting, "https://example.com/job/8");
+
+        Assert.Equal("solo_engineer", result.DisqualifierHit);
+    }
+
+    // Sponsorship must be gated on the candidate's own citizen/PR status, not the posting alone.
+    // A citizen/PR candidate is never affected by "no sponsorship" or "citizens only" language.
+    [Fact]
+    [Trait("Category", "contract")]
+    public async Task PostingPreFilterAgent_SponsorshipExclusion_CitizenCandidate_DoesNotFlag()
+    {
+        if (ApiKey is null) return;
+
+        var profile = Make.OwnerProfile();
+        profile.JobCriteria = profile.JobCriteria.Replace(
+            "citizen_or_permanent_resident: false",
+            "citizen_or_permanent_resident: true");
+
+        const string posting = """
+            Company: Acme Software
+            Role: Software Engineer
+            Description: Build backend services.
+            Note: No visa sponsorship offered. Must have full working rights in Australia.
+            """;
+
+        var agent = new PostingPreFilterAgent(ApiKey);
+        var result = await agent.PreFilterAsync(profile, posting, "https://example.com/job/9");
+
+        Assert.Null(result.DisqualifierHit);
+    }
+
+    // =========================================================================
     // EmailClassifier
     // =========================================================================
 

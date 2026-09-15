@@ -396,7 +396,8 @@ async Task<(int Discovered, int Evaluated, int Notified)> RunDiscoveryForUserAsy
     }
 
     var discovery = new JobDiscoveryWorker(
-        userDb, fetchers, new JobPostingFetcher(), new PostingEvaluator(apiKey, usageLogger), emailer);
+        userDb, fetchers, new JobPostingFetcher(), new PostingPreFilterAgent(apiKey, usageLogger),
+        new PostingEvaluator(apiKey, usageLogger), emailer);
     return await discovery.RunAsync();
 }
 
